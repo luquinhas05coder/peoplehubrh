@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "server"
+		},
+		{
+			"path": "node_modules"
+		},
+		{
+			"path": "dist"
+		},
+		{
+			"path": "src"
+		},
+		{
+			"path": "public"
+		}
+	]
+}
