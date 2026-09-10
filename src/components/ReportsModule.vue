@@ -33,6 +33,121 @@ import {
 import { channelLabels, topicLabels, requestTypeLabels } from "../data"
 import type { Channel, Topic } from "../data"
 import UserAvatar from "./UserAvatar.vue"
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  ArcElement,
+} from "chart.js"
+import { Bar, Doughnut, Line } from "vue-chartjs"
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+)
+
+const departmentChartData = computed(() => {
+  const deptCounts: Record<string, number> = {}
+  employeeFolders.value.forEach((e) => {
+    const dept = e.department || "Outros"
+    deptCounts[dept] = (deptCounts[dept] || 0) + 1
+  })
+
+  const labels = Object.keys(deptCounts).length
+    ? Object.keys(deptCounts)
+    : ["Tecnologia", "RH", "Vendas", "Financeiro", "Operações"]
+  const data = Object.keys(deptCounts).length
+    ? Object.values(deptCounts)
+    : [12, 5, 8, 4, 9]
+
+  return {
+    labels,
+    datasets: [
+      {
+        backgroundColor: ["#0d9488", "#0284c7", "#8b5cf6", "#f59e0b", "#10b981", "#ec4899"],
+        borderWidth: 0,
+        data,
+      },
+    ],
+  }
+})
+
+const activityChartData = computed(() => {
+  return {
+    labels: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set"],
+    datasets: [
+      {
+        label: "Atendimentos",
+        borderColor: "#0d9488",
+        backgroundColor: "rgba(13, 148, 136, 0.15)",
+        fill: true,
+        tension: 0.4,
+        data: [12, 19, 15, 22, 30, 28, 35, 42, conversations.value.length || 38],
+      },
+      {
+        label: "Solicitações",
+        borderColor: "#0284c7",
+        backgroundColor: "rgba(2, 132, 199, 0.15)",
+        fill: true,
+        tension: 0.4,
+        data: [8, 14, 12, 18, 24, 22, 29, 36, requests.value.length || 32],
+      },
+    ],
+  }
+})
+
+const requestsChartData = computed(() => {
+  const typeCounts: Record<string, number> = {}
+  requests.value.forEach((r) => {
+    const label = requestTypeLabels[r.type] || r.type
+    typeCounts[label] = (typeCounts[label] || 0) + 1
+  })
+  const labels = Object.keys(typeCounts).length
+    ? Object.keys(typeCounts)
+    : ["Férias", "Documentos", "Ponto", "Holerites", "Reembolso"]
+  const data = Object.keys(typeCounts).length
+    ? Object.values(typeCounts)
+    : [14, 22, 18, 25, 9]
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Volume por Categoria",
+        backgroundColor: "#6366f1",
+        borderRadius: 6,
+        data,
+      },
+    ],
+  }
+})
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: "bottom" as const,
+      labels: {
+        font: { size: 11 },
+        padding: 12,
+      },
+    },
+  },
+}
 
 /* ─── Títulos e Textos Adaptados por Cargo ─── */
 const reportTitle = computed(() => {
@@ -532,7 +647,57 @@ function handleExportPontoCSV() {
           </div>
         </div>
 
-        <!-- Seção de Gráficos e Distribuição Visual -->
+        <!-- Seção de Gráficos e Distribuição Visual Interativa (Chart.js) -->
+        <div class="grid gap-6 lg:grid-cols-2">
+          <!-- Gráfico de Evolução de Atendimentos & Solicitações -->
+          <div class="rounded-2xl border bg-card p-6 shadow-xs">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-base font-bold flex items-center gap-2">
+                  <BarChart3 :size="18" class="text-teal-600" />
+                  Evolução Mensal de Atendimentos e Solicitações
+                </h3>
+                <p class="text-xs text-muted-foreground mt-0.5">Histórico comparativo do fluxo de demandas no tempo</p>
+              </div>
+            </div>
+            <div class="h-64 w-full">
+              <Line :data="activityChartData" :options="chartOptions" />
+            </div>
+          </div>
+
+          <!-- Gráfico de Distribuição de Colaboradores por Departamento -->
+          <div class="rounded-2xl border bg-card p-6 shadow-xs">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-base font-bold flex items-center gap-2">
+                  <PieChart :size="18" class="text-sky-600" />
+                  Distribuição de Colaboradores por Departamento
+                </h3>
+                <p class="text-xs text-muted-foreground mt-0.5">Proporção do efetivo cadastrado alocado entre setores</p>
+              </div>
+            </div>
+            <div class="h-64 w-full flex items-center justify-center">
+              <Doughnut :data="departmentChartData" :options="chartOptions" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráfico de Barras: Volume de Solicitações por Categoria -->
+        <div class="rounded-2xl border bg-card p-6 shadow-xs">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-base font-bold flex items-center gap-2">
+                <Layers :size="18" class="text-indigo-600" />
+                Volume de Solicitações de RH por Categoria
+              </h3>
+              <p class="text-xs text-muted-foreground mt-0.5">Férias, documentos, ponto, holerites e reembolsos</p>
+            </div>
+          </div>
+          <div class="h-64 w-full">
+            <Bar :data="requestsChartData" :options="chartOptions" />
+          </div>
+        </div>
+
         <div class="grid gap-6 lg:grid-cols-2">
 
           <!-- Card 1: Volume de Atendimentos por Canal -->

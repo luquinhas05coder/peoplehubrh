@@ -13,7 +13,8 @@ import {
   Inbox,
 } from "lucide-vue-next"
 import { conversations, totalUnread, activeTab, currentUser, userPermissions, userRoleType } from "../store"
-import { computed, ref } from "vue"
+import { computed, ref, onMounted, watch } from "vue"
+import { useRouter, useRoute } from "vue-router"
 import EmployeesModule from "./EmployeesModule.vue"
 import RequestsModule from "./RequestsModule.vue"
 import DocumentsModule from "./DocumentsModule.vue"
@@ -101,11 +102,37 @@ const modules = [
   },
 ]
 
+const router = useRouter()
+const route = useRoute()
+
+onMounted(() => {
+  if (route?.meta?.tab) {
+    activeTab.value = route.meta.tab as string
+  }
+})
+
+watch(() => route.path, () => {
+  if (route?.meta?.tab) {
+    activeTab.value = route.meta.tab as string
+  }
+})
+
 function onModuleClick(mod: typeof modules[0]) {
   if (mod.key === "chat") {
     emit("open-chat")
   } else {
     activeTab.value = mod.key
+    const routeMap: Record<string, string> = {
+      home: "/home",
+      people: "/colaboradores",
+      requests: "/solicitacoes",
+      docs: "/documentos",
+      reports: "/relatorios",
+      onboarding: "/onboarding",
+    }
+    if (routeMap[mod.key] && router) {
+      router.push(routeMap[mod.key])
+    }
     if (mod.key !== "people" && mod.key !== "requests" && mod.key !== "docs" && mod.key !== "reports" && mod.key !== "onboarding") {
       showToast(`Módulo "${mod.title}" selecionado`)
     }

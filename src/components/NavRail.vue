@@ -20,20 +20,28 @@ const showSettingsModal = ref(false)
 const showHelpModal = ref(false)
 const showProfileModal = ref(false)
 
+import { useRouter } from "vue-router"
+
+const router = useRouter()
+
 const items = computed(() => {
   const list = [
-    { key: "home", icon: Home, label: "Início", allowed: true },
-    { key: "people", icon: Users, label: "Colaboradores", allowed: userPermissions.value.canManagePeople },
-    { key: "requests", icon: CalendarCheck, label: "Solicitações", allowed: true },
-    { key: "docs", icon: FileText, label: "Documentos", allowed: userPermissions.value.canManageDocs },
-    { key: "reports", icon: BarChart3, label: "Relatórios", allowed: userPermissions.value.canViewReports },
-    { key: "onboarding", icon: GraduationCap, label: "Onboarding", allowed: true },
+    { key: "home", icon: Home, label: "Início", path: "/home", allowed: true },
+    { key: "people", icon: Users, label: "Colaboradores", path: "/colaboradores", allowed: userPermissions.value.canManagePeople },
+    { key: "requests", icon: CalendarCheck, label: "Solicitações", path: "/solicitacoes", allowed: true },
+    { key: "docs", icon: FileText, label: "Documentos", path: "/documentos", allowed: userPermissions.value.canManageDocs },
+    { key: "reports", icon: BarChart3, label: "Relatórios", path: "/relatorios", allowed: userPermissions.value.canViewReports },
+    { key: "onboarding", icon: GraduationCap, label: "Onboarding", path: "/onboarding", allowed: true },
   ]
   return list.filter((i) => i.allowed)
 })
 
 function handleNavClick(key: string) {
   activeTab.value = key
+  const target = items.value.find((i) => i.key === key)
+  if (target?.path && router) {
+    router.push(target.path)
+  }
   if (key === "home") {
     emit("go-home")
   }
