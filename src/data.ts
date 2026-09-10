@@ -286,56 +286,7 @@ export const requestStatusLabels: Record<RequestStatus, string> = {
   recusado: "Recusado",
 }
 
-export const initialRequests: RequestItem[] = [
-  {
-    id: "REQ-2026-001",
-    protocol: "REQ-2026-001",
-    employeeName: "Gabriel Santos",
-    employeeInitials: "GS",
-    employeeRole: "Desenvolvedor de Software",
-    department: "Tecnologia",
-    type: "documento",
-    title: "Declaração de Vínculo Empregatício",
-    description: "Solicito declaração de vínculo empregatício atualizada para comprovação de renda em instituição financeira.",
-    status: "aprovado",
-    priority: "media",
-    createdAt: "10/08/2026",
-    reviewedBy: "Mariana Alcantara",
-    reviewNote: "Solicitação aprovada e declaração emitida com sucesso no acervo de documentos.",
-  },
-  {
-    id: "REQ-2026-002",
-    protocol: "REQ-2026-002",
-    employeeName: "Gabriel Santos",
-    employeeInitials: "GS",
-    employeeRole: "Desenvolvedor de Software",
-    department: "Tecnologia",
-    type: "contracheque",
-    title: "Emissão de Contra-Cheque 08/2026",
-    description: "Solicito a emissão do meu demonstrativo de pagamento referente à competência de Agosto de 2026.",
-    status: "aprovado",
-    priority: "media",
-    createdAt: "01/09/2026",
-    reviewedBy: "Carlos Eduardo Souza",
-    reviewNote: "Holerite processado e disponibilizado para consulta.",
-  },
-  {
-    id: "REQ-2026-003",
-    protocol: "REQ-2026-003",
-    employeeName: "Gabriel Santos",
-    employeeInitials: "GS",
-    employeeRole: "Desenvolvedor de Software",
-    department: "Tecnologia",
-    type: "ferias",
-    title: "Solicitação de Programação de Férias",
-    description: "Gostaria de solicitar o agendamento de 15 dias de férias para o período de 15/10/2026 a 30/10/2026.",
-    startDate: "15/10/2026",
-    endDate: "30/10/2026",
-    status: "pendente",
-    priority: "media",
-    createdAt: "05/09/2026",
-  },
-]
+export const initialRequests: RequestItem[] = []
 
 /* ─── Tipos e Dados do Módulo de Documentos ──────────────── */
 
@@ -425,56 +376,7 @@ export const initialDocumentTemplates: DocumentTemplate[] = [
   },
 ]
 
-export const initialSystemDocuments: SystemDocument[] = [
-  {
-    id: "doc-sys-101",
-    code: "DOC-2026-001",
-    title: "Declaração de Vínculo Empregatício",
-    category: "declaracoes",
-    employeeName: "Gabriel Santos",
-    employeeInitials: "GS",
-    employeeRole: "Desenvolvedor de Software",
-    department: "Tecnologia",
-    fileType: "PDF",
-    fileSize: "1.4 MB",
-    generatedAt: "10/08/2026",
-    generatedBy: "Mariana Alcantara",
-    signStatus: "assinado",
-    contentSnippet: "Declaramos para os devidos fins que o(a) colaborador(a) Gabriel Santos exerce o cargo de Desenvolvedor de Software com vínculo empregatício CLT ativo.",
-  },
-  {
-    id: "doc-sys-102",
-    code: "DOC-2026-002",
-    title: "Comprovante de Rendimentos & IRPF 2026",
-    category: "declaracoes",
-    employeeName: "Gabriel Santos",
-    employeeInitials: "GS",
-    employeeRole: "Desenvolvedor de Software",
-    department: "Tecnologia",
-    fileType: "PDF",
-    fileSize: "1.1 MB",
-    generatedAt: "15/02/2026",
-    generatedBy: "Carlos Eduardo Souza",
-    signStatus: "assinado",
-    contentSnippet: "Informe de rendimentos brutos, tributáveis e de retenção de imposto de renda retido na fonte referente ao exercício anual.",
-  },
-  {
-    id: "doc-sys-103",
-    code: "DOC-2026-003",
-    title: "Termo de Confidencialidade e Uso de Equipamentos (LGPD)",
-    category: "politicas",
-    employeeName: "Gabriel Santos",
-    employeeInitials: "GS",
-    employeeRole: "Desenvolvedor de Software",
-    department: "Tecnologia",
-    fileType: "PDF",
-    fileSize: "2.1 MB",
-    generatedAt: "01/02/2025",
-    generatedBy: "Lucas Mendes",
-    signStatus: "assinado",
-    contentSnippet: "Termo de responsabilidade e segurança da informação referente ao uso de equipamentos corporativos e proteção de dados.",
-  },
-]
+export const initialSystemDocuments: SystemDocument[] = []
 
 /* ─── Tipos e Dados do Módulo de Onboarding ──────────────── */
 

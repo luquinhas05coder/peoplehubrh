@@ -17,9 +17,9 @@ const emit = defineEmits<{
 const isColaborador = computed(() => userPermissions.value.isColaborador || props.isDocumentOnly)
 
 const selectedEmployeeId = ref(employeeFolders.value[0]?.id || "")
-const customEmployeeName = ref(currentUser.value?.name || "Gabriel Santos")
-const customEmployeeRole = ref(currentUser.value?.role || "Desenvolvedor de Software")
-const customDepartment = ref(currentUser.value?.department || "Tecnologia")
+const customEmployeeName = ref(currentUser.value?.name || "")
+const customEmployeeRole = ref(currentUser.value?.role || "")
+const customDepartment = ref(currentUser.value?.department || "")
 
 const type = ref<RequestType>("documento")
 const title = ref("")

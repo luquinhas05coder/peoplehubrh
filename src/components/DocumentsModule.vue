@@ -218,7 +218,7 @@ const filteredDocs = computed(() => {
   return systemDocuments.value.filter((d) => {
     // Se for colaborador, exibe apenas os documentos emitidos para ele ou gerais da empresa
     if (userPermissions.value.isColaborador) {
-      const colabName = (currentUser.value?.name || "Gabriel Santos").toLowerCase()
+      const colabName = (currentUser.value?.name || "").toLowerCase()
       const docName = (d.employeeName || "").toLowerCase()
       const isMine =
         docName.includes(colabName) ||
