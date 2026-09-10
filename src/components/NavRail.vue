@@ -108,7 +108,7 @@ function handleNavClick(key: string) {
       v-for="item in items"
       :key="item.key"
       class="group relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors"
-      :class="activeTab === item.key
+      :class="(activeTab === item.key || (item.key === 'people' && activeTab === 'colaboradores') || (item.key === 'requests' && activeTab === 'solicitacoes') || (item.key === 'docs' && activeTab === 'documentos') || (item.key === 'reports' && activeTab === 'relatorios'))
         ? 'bg-muted text-foreground font-bold'
         : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
       :aria-label="item.label"

@@ -184,10 +184,10 @@ const visibleModules = computed(() => {
 
 <template>
   <!-- Módulos Específicos -->
-  <EmployeesModule v-if="activeTab === 'people'" />
-  <RequestsModule v-else-if="activeTab === 'requests'" />
-  <DocumentsModule v-else-if="activeTab === 'docs'" />
-  <ReportsModule v-else-if="activeTab === 'reports'" />
+  <EmployeesModule v-if="activeTab === 'people' || activeTab === 'colaboradores'" />
+  <RequestsModule v-else-if="activeTab === 'requests' || activeTab === 'solicitacoes'" />
+  <DocumentsModule v-else-if="activeTab === 'docs' || activeTab === 'documentos'" />
+  <ReportsModule v-else-if="activeTab === 'reports' || activeTab === 'relatorios'" />
   <OnboardingModule v-else-if="activeTab === 'onboarding'" />
 
   <!-- Workspace Padrão / Dashboard Inicial -->
@@ -227,30 +227,7 @@ const visibleModules = computed(() => {
     </header>
 
     <div class="mx-auto w-full max-w-6xl px-5 py-6 sm:px-8">
-      <!-- Visão do Módulo Ativo (para outros módulos genéricos) -->
-      <section v-if="activeTab !== 'home' && activeTab !== 'chat'" class="mb-6 rounded-2xl border bg-card p-6 shadow-sm">
-        <div class="flex items-center justify-between">
-          <h2 class="text-xl font-bold capitalize">Módulo: {{ activeTab }}</h2>
-          <button
-            class="rounded-lg border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
-            @click="activeTab = 'home'"
-          >
-            Voltar ao Início
-          </button>
-        </div>
-        <p class="mt-2 text-sm text-muted-foreground">
-          Gestão centralizada de {{ activeTab }} com relatórios e indicadores sincronizados com a central de atendimento omnichannel.
-        </p>
-        <div class="mt-4 flex gap-3">
-          <button
-            class="flex items-center gap-2 rounded-xl py-2 px-4 text-sm font-semibold text-primary-foreground shadow"
-            style="background-color: var(--color-primary)"
-            @click="emit('open-chat')"
-          >
-            <MessagesSquare :size="18" /> Ver Atendimentos do Módulo
-          </button>
-        </div>
-      </section>
+
 
       <!-- Indicadores -->
       <section aria-label="Indicadores de atendimento">
