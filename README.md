@@ -3,9 +3,9 @@
 # 🏢 PeopleHub RH — Sistema Integrado de Gestão & Atendimento de RH
 
   <p align="center">
-    <b>Plataforma Omnichannel e Hub Completo de Gestão de Recursos Humanos</b>
+    <b>Plataforma Omnichannel e Hub Completo de Gestão de Recursos Humanos & Departamento Pessoal</b>
     <br />
-    Atendimento a Colaboradores • Onboarding • Holerites em PDF • Solicitações • 2FA & Segurança
+    Atendimento Imediato a Colaboradores • Gestão de Escalas & Contratos • Onboarding • Holerites em PDF • Solicitações • 2FA & Segurança
   </p>
 
   <p align="center">
@@ -23,47 +23,73 @@
 
 ## 📌 Sobre o Projeto
 
-O **PeopleHub RH** é uma solução completa e moderna desenvolvida para transformar a comunicação e a gestão de pessoas nas empresas. Combinando um **Chat Omnichannel centralizado** com **módulos completos de gestão de RH**, o sistema automatiza processos como envio de holerites, controle de onboarding, aprovação de solicitações (férias, reembolsos, ajustes de ponto) e emissão de documentos.
+O **PeopleHub RH** é uma solução completa e moderna desenvolvida para transformar a comunicação e a gestão de pessoas nas empresas brasileiras. Combinando um **Chat Omnichannel com atendimento direto** e **módulos avançados de gestão de RH & DP**, a plataforma automatiza processos essenciais:
+- Rotulagem e enquadramento de **Tipos de Contratos** e **Escalas de Trabalho** conforme a CLT.
+- Simulador e **Editor Interativo de Grade Semanal** com cálculo de horas.
+- Atendimento direto e ágil a colaboradores no **Chat Interno** sem burocracia de formulários.
+- Emissão e envio de **Holerites / Contracheques em PDF**, **Folhas de Ponto** e **Declarações**.
+- Gestão completa de **Onboarding**, **Solicitações** (Férias, Reembolso, Ajustes) e segurança com **2FA/TOTP**.
 
 ---
 
 ## ✨ Principais Funcionalidades
 
-### 💬 1. Atendimento Omnichannel de RH
-* **Central de Atendimento**: Atendimento em tempo real a colaboradores através de múltiplos canais.
-* **Envio Direto de Documentos**: Geração e envio instantâneo de **Holerites**, **Folhas de Ponto** e **Declarações** no próprio chat.
-* **Painel de Detalhes**: Visualização rápida da ficha do funcionário, solicitações abertas e histórico de atendimentos durante a conversa.
+### 💬 1. Atendimento Ágil & Chat Interno de RH
+* **Início Direto em 1 Clique**: Inicie chamados e atendimentos instantâneos com colaboradores sem exibir modais complexos de formulário — o chat é aberto de imediato pronto para a equipe de RH atender.
+* **Atendimento Omnichannel**: Suporte a múltiplos canais de comunicação com histórico centralizado.
+* **Envio Direto de Documentos**: Geração e envio instantâneo de **Holerites**, **Folhas de Ponto** e **Declarações** dentro da própria conversa.
+* **Painel de Detalhes em Tempo Real**: Visualização rápida da ficha cadastral do colaborador, solicitações abertas e histórico durante o atendimento.
 
-### 👥 2. Gestão de Colaboradores & CBO
-* **Cadastro Completo**: Prontuário digital, dados contratuais, bancários, dependentes e contatos de emergência.
-* **Integração CBO**: Busca e validação com a tabela oficial de **Classificação Brasileira de Ocupações**.
-* **Pasta Digital do Funcionário**: Armazenamento e consulta centralizada de documentos trabalhistas.
+### ⏱️ 2. Sistema de Escalas de Trabalho & Tipos de Contrato
+* **Tipos de Contratos Regulamentados**:
+  * **Prazo Indeterminado**: Vínculo contínuo padrão CLT com garantias completas, FGTS e aviso prévio.
+  * **Prazo Determinado**: Contrato pré-fixado para projetos ou substituições (limite de 2 anos - Art. 445 CLT).
+  * **Experiência**: Período probatório e de adaptação com limite estrito de 90 dias.
+  * **Trabalho Intermitente**: Prestação não contínua com convocação prévia (Art. 452-A da CLT).
+  * **Prestação de Serviços (PJ)**: Contratação empresarial B2B via Pessoa Jurídica e emissão de NF.
+* **Sistemas de Escalas no Brasil**:
+  * **Escala 5x2**: 5 dias de trabalho e 2 dias de folga (jornada padrão de 8h48 ou 8h diárias para 44h semanais).
+  * **Escala 6x1**: 6 dias de expediente por 1 dia de DSR (varejo, hotelaria e comércio).
+  * **Escala 12x36**: 12 horas consecutivas de trabalho com 36 horas ininterruptas de descanso (Art. 59-A CLT).
+  * **Escala 4x3**: Modelo inovador de semana de 4 dias com 3 folgas consecutivas.
+* **Simulador & Editor de Grade Semanal**:
+  * Edição interativa de cada dia da semana (Segunda a Domingo).
+  * Configuração de **Horário de Entrada**, **Horário de Saída** e **Intervalo Intrajornada** (1h, 1h12, 1h30, 2h, 30m ou sem intervalo).
+  * Presets rápidos em 1 clique (`08:00 - 17:00`, `08:00 - 17:48`, `09:00 - 18:00`, `12h`, `Noturno`, etc.).
+  * **Replicar Seg ➔ Sex** com 1 clique para preenchimento ágil da semana útil.
+  * Cálculo dinâmico em tempo real da carga horária líquida semanal com verificação de conformidade ao teto constitucional de 44h da CLT.
+* **Filtros Rápidos no Módulo de Colaboradores**: Filtre a equipe por tipo de contrato e por escala em modo Grade (*Cards*) ou *Tabela*.
 
-### 🚀 3. Onboarding & Offboarding
-* **Trilhas de Integração Customizadas**: Criação de fluxos de integração segmentados por cargo/departamento.
-* **Acompanhamento de Progresso**: Checklists dinâmicos, envio de documentos de contratação e validação pela equipe de RH.
+### 👥 3. Gestão de Colaboradores & CBO Oficial
+* **Prontuário Digital Completo**: Matrícula, dados contratuais, regime de trabalho, endereço com busca automática ViaCEP e remuneração.
+* **Integração CBO ConectaGov**: Pesquisa em tempo real de ocupações oficiais com código e título formal do Ministério do Trabalho.
+* **Pasta Digital do Funcionário**: Arquivamento e consulta de contratos, atestados, recibos e documentos admissionais.
 
-### 📋 4. Gestão de Solicitações & Requerimentos
-* Fluxos estruturados de aprovação para:
-  * 🌴 **Férias e Folgas**
-  * 💸 **Reembolso de Despesas**
-  * ⏰ **Ajustes de Ponto / Horas Extras**
-  * 📝 **Alterações Cadastrais e Declarações**
+### 🚀 4. Onboarding & Trilhas de Integração
+* **Trilhas Segmentadas**: Criação e gestão de trilhas por departamento (Engenharia, Vendas, Marketing, Geral).
+* **Checklists Interativos**: Controle de etapas de documentação, liberação de TI, treinamentos e acompanhamento com mentores/buddies.
 
-### 📄 5. Emissão de Documentos e Holerites (PDF)
-* **Gerador de Holerites/Contracheques**: Cálculo de proventos, descontos (INSS, IRRF) e geração em PDF via `pdfkit` / `jspdf`.
-* **Emissão de Comprovantes**: Envio automatizado em lote ou individual.
+### 📋 5. Gestão de Solicitações & Requerimentos
+* Fluxos estruturados de aprovação com status dinâmicos (Pendente, Em Análise, Aprovado, Recusado):
+  * 🌴 **Férias e Licenças**
+  * 💸 **Reembolso de Despesas Corporativas**
+  * ⏰ **Ajustes de Ponto Eletrônico e Horas Extras**
+  * 📝 **Declarações e Alterações Cadastrais**
 
-### 📊 6. Relatórios & Dashboards Analytics
-* Indicadores visuais de métricas de RH:
+### 📄 6. Emissão de Documentos e Holerites (PDF)
+* **Cálculo Automático de Folha**: Proventos, horas extras, descontos progressivos de INSS e IRRF conforme tabelas vigentes.
+* **Exportação em PDF**: Emissão profissional de contracheques e folhas de ponto eletrônico prontas para impressão ou envio.
+
+### 📊 7. Relatórios & Dashboards Analytics
+* Gráficos interativos com métricas vitais de RH:
   * Taxa de Turnover e Absenteísmo.
-  * Acompanhamento de Onboardings em andamento.
-  * Volume de solicitações e tempo médio de atendimento.
+  * Distribuição de colaboradores por escala e regime de contratação.
+  * Acompanhamento de solicitações e tempo médio de resolução.
 
-### 🔐 7. Segurança & Autenticação Forte (2FA / MFA)
-* **Autenticação JWT**: Controle de sessão seguro.
-* **Segurança 2FA/TOTP**: Suporte a autenticação em dois fatores com **QR Code** (compatível com Google Authenticator, Authy, etc.).
-* **Backend de Segurança em Python**: Microserviço dedicado em **FastAPI** para gestão de tokens e 2FA.
+### 🔐 8. Segurança & Autenticação Forte (2FA / MFA)
+* **Autenticação JWT & RBAC**: Perfis de acesso para RH, DP, TI e Colaborador.
+* **Segurança 2FA/TOTP**: Suporte a segundo fator de autenticação via **QR Code** (Google Authenticator, Authy, Microsoft Authenticator).
+* **Microserviço FastAPI**: Módulo Python dedicado para criptografia, segredos TOTP e tokens seguros.
 
 ---
 
@@ -72,18 +98,18 @@ O **PeopleHub RH** é uma solução completa e moderna desenvolvida para transfo
 ```
 peoplehubrh/
 ├── 🌐 Frontend (Vue 3 + Vite + TypeScript + Tailwind CSS)
-├── 🟢 Backend Node.js (Express + TypeScript + SQL.js / PDFKit + Swagger)
+├── 🟢 Backend Node.js (Express 5 + TypeScript + SQLite / SQL.js + Swagger)
 └── 🐍 Backend Python (FastAPI + SQLAlchemy + PyOTP + PyJWT)
 ```
 
 | Camada | Tecnologia | Descrição |
 | :--- | :--- | :--- |
-| **Frontend** | Vue 3 (Composition API) | UI reativa, moderna e responsiva |
-| **Build & Tooling** | Vite + TypeScript | Compilação ultra-rápida e tipagem estática |
-| **Estilização** | Tailwind CSS v4 + Lucide Icons | Design moderno e ícones minimalistas |
-| **Backend Principal** | Node.js + Express 5 | API RESTful para RH, rotas, Swagger UI e emissão de PDFs |
-| **Microserviço 2FA** | Python 3 + FastAPI | Módulo de autenticação avançada e QR Code TOTP |
-| **Banco de Dados** | SQLite / SQL.js + SQLAlchemy | Persistência leve e performática |
+| **Frontend** | Vue 3 (Composition API) + Vue Router + Pinia | UI reativa, modular, dashboards e gestão de estado |
+| **Build & Tooling** | Vite + TypeScript | Compilação veloz e tipagem estática rigorosa |
+| **Estilização** | Tailwind CSS v4 + Lucide Icons | Design refinado, temas e componentes acessíveis |
+| **Backend Principal** | Node.js + Express 5 | API RESTful para RH, persistência SQLite e Swagger UI |
+| **Microserviço 2FA** | Python 3 + FastAPI | Módulo de autenticação forte e geração de QR Code TOTP |
+| **Banco de Dados** | SQLite / SQL.js + Migrações Automáticas | Persistência local robusta e sem dependências externas pesadas |
 
 ---
 
@@ -92,21 +118,21 @@ peoplehubrh/
 ### Pré-requisitos
 * **Node.js** (v18+)
 * **npm** ou **pnpm**
-* **Python** (v3.10+) *(para o microserviço 2FA)*
+* **Python** (v3.10+) *(opcional, para o microserviço 2FA)*
 
 ---
 
 ### 1️⃣ Clonar o Repositório
 ```bash
-git clone https://github.com/lucasmouraosilva2005-cell/peoplehubrh.git
+git clone https://github.com/luquinhas05coder/peoplehubrh.git
 cd chat-de-rh1808
 ```
 
 ---
 
-### 2️⃣ Configurar o Frontend e Backend Node.js
+### 2️⃣ Instalar Dependências e Configurar o Ambiente
 
-Instale as dependências raiz e do backend:
+Instale as dependências da raiz e do backend Node.js:
 ```bash
 npm install
 cd backend
@@ -114,14 +140,29 @@ npm install
 cd ..
 ```
 
-Configure o arquivo de ambiente do backend (`backend/.env`):
+*(Opcional)* Configure o arquivo de ambiente do backend:
 ```bash
 cp backend/.env.example backend/.env
 ```
 
 ---
 
-### 3️⃣ Configurar o Backend Python (Opcional - para 2FA)
+### 3️⃣ Iniciar a Aplicação (Frontend + Backend)
+
+Execute o comando unificado que inicia o servidor backend e o servidor Vite:
+```bash
+npm run dev
+```
+
+A aplicação estará acessível em:
+* 🖥️ **Aplicação Web (Frontend)**: `http://localhost:5173`
+* 🔌 **API REST Node.js**: `http://localhost:3000` (ou `3001`)
+* 📄 **Documentação Swagger**: `http://localhost:3000/api-docs`
+
+---
+
+### 4️⃣ Microserviço Python de 2FA (Opcional)
+Caso queira executar o serviço dedicado de autenticação em dois fatores:
 ```bash
 cd python_backend
 python -m venv venv
@@ -136,47 +177,34 @@ python main.py
 
 ---
 
-### 4️⃣ Iniciar a Aplicação (Modo de Desenvolvimento)
-
-Execute o comando unificado (Frontend + Backend Node.js):
-```bash
-npm run dev
-```
-
-A aplicação estará acessível em:
-* 🖥️ **Frontend App**: `http://localhost:5173`
-* 🔌 **Backend Node.js API**: `http://localhost:3001`
-* 📄 **Documentação Swagger API**: `http://localhost:3001/api-docs`
-
----
-
 ## 📁 Estrutura de Diretórios
 
 ```
 chat-de-rh1808/
 ├── 📂 src/                          # Código Fonte do Frontend (Vue 3)
-│   ├── 📂 components/               # Componentes Vue (Módulos de RH, Chat, Modais)
-│   ├── 📂 utils/                    # Utilitários (cálculos de folha, formatadores)
-│   ├── 📄 App.vue                   # Componente Raiz
-│   ├── 📄 store.ts                  # Gerenciamento de Estado Reativo
-│   └── 📄 main.ts                   # Ponto de Entrada Vue
+│   ├── 📂 components/               # Módulos de RH, Chat, EscalaContratoCard, Modais
+│   ├── 📂 stores/                   # Stores do Pinia (auth, etc.)
+│   ├── 📂 router/                   # Rotas de navegação do Vue Router
+│   ├── 📂 utils/                    # Utilitários e regras de folha de pagamento (CLT)
+│   ├── 📄 App.vue                   # Componente Raiz da Aplicação
+│   ├── 📄 data.ts                   # Tipos e definições de contratos, escalas e dados
+│   ├── 📄 store.ts                  # Gerenciamento de Estado Reativo Global
+│   └── 📄 main.ts                   # Inicialização da aplicação Vue
 ├── 📂 backend/                      # Backend Node.js / Express API
 │   ├── 📂 src/
-│   │   ├── 📂 routes/               # Rotas REST (Auth, Colaboradores, Onboarding, PDFs)
-│   │   ├── 📂 db/                   # Configuração e Inicialização do Banco de Dados
-│   │   └── 📄 swagger.ts            # Configuração do Swagger UI
+│   │   ├── 📂 routes/               # Rotas REST (Colaboradores, Conversas, Onboarding, etc.)
+│   │   ├── 📂 db/                   # Inicialização do banco SQLite e migrações
+│   │   └── 📄 swagger.ts            # Swagger UI e documentação interativa
+│   └── 📄 peoplehub.db              # Banco de dados SQLite persistido
 ├── 📂 python_backend/               # Microserviço Python / FastAPI (2FA & Auth)
-│   ├── 📄 main.py                   # Servidor FastAPI
-│   ├── 📄 routes_2fa.py             # Rotas de Autenticação TOTP / QR Code
-│   └── 📄 models.py                 # Modelos SQLAlchemy
-└── 📄 README.md                     # Documentação do Projeto
+└── 📄 README.md                     # Documentação Oficial do Projeto
 ```
 
 ---
 
 ## 🛡️ Licença
 
-Este projeto é privado e de uso corporativo exclusivo. Todos os direitos reservados.
+Este projeto é desenvolvido para fins corporativos e educacionais. Todos os direitos reservados.
 
 ---
 
