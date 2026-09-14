@@ -22,10 +22,10 @@ import {
   resolveConversation,
   reopenConversation,
   userRoleType,
+  startDirectChatForAttendance,
 } from "../store"
 import ChannelBadge from "./ChannelBadge.vue"
 import UserAvatar from "./UserAvatar.vue"
-import NewConversationModal from "./NewConversationModal.vue"
 
 defineProps<{
   activeId: string
@@ -40,10 +40,16 @@ function handleSelect(id: string) {
   emit("select", id)
 }
 
+async function handleStartChat() {
+  const newConv = await startDirectChatForAttendance()
+  if (newConv) {
+    emit("select", newConv.id)
+  }
+}
+
 const search = ref("")
 const showFilters = ref(false)
 const activeTopic = ref<Topic | "todos">("todos")
-const showNewModal = ref(false)
 
 const chatTitle = computed(() => {
   if (userRoleType.value === "colaborador") return "Atendimento & Suporte"
@@ -132,9 +138,9 @@ const statusStyles: Record<Conversation["status"], { bg: string; text: string; l
         <button
           class="flex h-9 w-9 items-center justify-center rounded-lg text-primary-foreground transition-opacity hover:opacity-90 active:scale-95 cursor-pointer shadow-sm"
           style="background-color: var(--color-primary)"
-          aria-label="Nova conversa interna"
-          title="Iniciar nova conversa interna"
-          @click="showNewModal = true"
+          aria-label="Iniciar chat de atendimento"
+          title="Iniciar chat para atendimento do RH"
+          @click="handleStartChat"
         >
           <PenSquare :size="18" />
         </button>
@@ -331,8 +337,6 @@ const statusStyles: Record<Conversation["status"], { bg: string; text: string; l
       </li>
     </ul>
 
-    <!-- Modal Nova Conversa Interna -->
-    <NewConversationModal v-if="showNewModal" @close="showNewModal = false" />
 
     <!-- MODAL DE CONFIRMAÇÃO DE EXCLUSÃO -->
     <div

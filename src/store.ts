@@ -439,10 +439,10 @@ export async function createConversation(payload: {
     messages: [
       {
         id: "msg-1",
-        direction: "out",
+        direction: "in",
         text: payload.initialMessage,
         time: timeStr,
-        status: "enviado",
+        status: "entregue",
       },
     ],
   }
@@ -472,6 +472,116 @@ export async function createConversation(payload: {
   } catch (_e) {}
 
   showToast(`Atendimento iniciado com ${payload.name}`, "success")
+}
+
+export async function startDirectChatForAttendance(): Promise<Conversation> {
+  const now = new Date()
+  const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+
+  let colabName = "Colaborador em Atendimento"
+  let colabInitials = "CA"
+  let colabRole = "Colaborador"
+  let colabDept = "Atendimento Geral"
+  let colabEmail = "colaborador@empresa.com"
+  let colabPhone = "+55 11 98765-4321"
+
+  if (currentUser.value && currentUser.value.roleType === "colaborador") {
+    colabName = currentUser.value.name
+    colabInitials = currentUser.value.initials || "GS"
+    colabRole = currentUser.value.role || "Colaborador"
+    colabDept = currentUser.value.department || "Tecnologia"
+    colabEmail = currentUser.value.email || "colaborador@peoplehub.com.br"
+  } else if (employeeFolders.value.length > 0) {
+    const existingOpenNames = new Set(
+      conversations.value.filter((c) => c.status === "aberto").map((c) => c.name)
+    )
+    const candidate =
+      employeeFolders.value.find((e) => !existingOpenNames.has(e.name)) ||
+      employeeFolders.value[conversations.value.length % employeeFolders.value.length]
+
+    if (candidate) {
+      colabName = candidate.name
+      colabInitials = candidate.initials
+      colabRole = candidate.role
+      colabDept = candidate.department
+      colabEmail = candidate.email || `${candidate.name.toLowerCase().replace(/\s+/g, ".")}@empresa.com`
+      colabPhone = candidate.phone || "+55 11 99999-0000"
+    }
+  }
+
+  const sampleMessages = [
+    "Olá! Gostaria de falar com o RH para tirar uma dúvida.",
+    "Olá! Preciso de orientações sobre o meu espelho de ponto deste mês.",
+    "Oi, equipe de RH! Gostaria de informações sobre o saldo de minhas férias.",
+    "Olá! Gostaria de uma informação sobre benefícios corporativos.",
+    "Olá, pessoal do RH! Preciso de uma declaração de vínculo empregatício.",
+  ]
+  const initialMessage = sampleMessages[conversations.value.length % sampleMessages.length]
+
+  const id = "conv-" + Date.now()
+  const newConv: Conversation = {
+    id,
+    name: colabName,
+    initials: colabInitials.toUpperCase(),
+    channel: "interno",
+    topic: "geral",
+    role: colabRole,
+    department: colabDept,
+    lastMessage: initialMessage,
+    time: timeStr,
+    unread: 1,
+    online: true,
+    status: "aberto",
+    priority: "media",
+    pinned: false,
+    snoozedUntil: null,
+    assignedTo: "Aguardando RH",
+    contact: {
+      email: colabEmail,
+      phone: colabPhone,
+      location: "São Paulo, SP",
+      tenure: "Ativo",
+      manager: "Gestão RH",
+    },
+    messages: [
+      {
+        id: "msg-" + Date.now(),
+        direction: "in",
+        text: initialMessage,
+        time: timeStr,
+        status: "entregue",
+      },
+    ],
+  }
+
+  conversations.value.unshift(newConv)
+  activeId.value = id
+  chatOpen.value = true
+
+  try {
+    const res = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: colabName,
+        channel: "interno",
+        topic: "geral",
+        role: colabRole,
+        department: colabDept,
+        initialMessage,
+        assignedTo: "Aguardando RH",
+        contact: { email: colabEmail, phone: colabPhone },
+      }),
+    })
+    const data = await res.json()
+    if (data.ok && data.id) {
+      newConv.id = data.id
+      activeId.value = data.id
+    }
+  } catch (_e) {}
+
+  showToast(`Chat com ${colabName} iniciado! O RH já pode atender.`, "success")
+  return newConv
 }
 
 export async function setStatus(conversationId: string, status: "aberto" | "pendente" | "resolvido") {

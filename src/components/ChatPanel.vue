@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue"
-import { Minus, X, MessagesSquare } from "lucide-vue-next"
-import { activeId, activeConversation, totalUnread, selectConversation } from "../store"
+import { Minus, X, MessagesSquare, PenSquare } from "lucide-vue-next"
+import { activeId, activeConversation, totalUnread, selectConversation, startDirectChatForAttendance } from "../store"
 import ConversationList from "./ConversationList.vue"
 import ChatWindow from "./ChatWindow.vue"
 import DetailsPanel from "./DetailsPanel.vue"
@@ -21,6 +21,13 @@ function onSelectConversation(id: string) {
   selectConversation(id)
   mobileView.value = "chat"
   showDetails.value = false
+}
+
+async function handleStartChat() {
+  const newConv = await startDirectChatForAttendance()
+  if (newConv) {
+    onSelectConversation(newConv.id)
+  }
 }
 </script>
 
@@ -106,11 +113,20 @@ function onSelectConversation(id: string) {
             @toggle-info="showDetails = true"
           />
           <div v-else class="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground">
-            <MessagesSquare :size="48" class="mb-3 opacity-40" />
-            <p class="font-medium text-foreground">Nenhuma conversa ativa no momento</p>
+            <MessagesSquare :size="48" class="mb-3 opacity-40 text-primary" />
+            <p class="font-medium text-foreground text-base">Nenhum atendimento em andamento</p>
             <p class="mt-1 text-sm max-w-sm">
-              Clique no botão de nova conversa no canto superior para iniciar um chat interno com qualquer colaborador da empresa.
+              Inicie um chat interno diretamente para que a equipe de RH possa realizar o atendimento do colaborador.
             </p>
+            <button
+              type="button"
+              class="mt-4 px-4 py-2 rounded-xl text-xs font-bold text-primary-foreground shadow-sm transition-all hover:opacity-90 active:scale-95 flex items-center gap-2 cursor-pointer"
+              style="background-color: var(--color-primary)"
+              @click="handleStartChat"
+            >
+              <PenSquare :size="15" />
+              <span>Iniciar Chat para Atendimento</span>
+            </button>
           </div>
         </div>
 
