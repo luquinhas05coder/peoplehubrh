@@ -140,6 +140,266 @@ export interface EmployeeDocument {
   uploadedBy: string
 }
 
+/* ─── Tipos e Modelos de Contratos de Trabalho (Legislação Brasileira) ─── */
+export type ContractType =
+  | "prazo_indeterminado"
+  | "prazo_determinado"
+  | "experiencia"
+  | "trabalho_intermitente"
+  | "pj"
+
+export interface ContractTypeMeta {
+  id: ContractType
+  label: string
+  short: string
+  description: string
+  legalBasis: string
+  tagColor: string
+  tagBg: string
+  badgeColor: string
+  badgeBg: string
+  borderStyle: string
+  features: string[]
+}
+
+export const contractTypeConfigs: Record<ContractType, ContractTypeMeta> = {
+  prazo_indeterminado: {
+    id: "prazo_indeterminado",
+    label: "Prazo Indeterminado",
+    short: "CLT Indeterminado",
+    description: "Modelo tradicional de contratação CLT, com vínculo contínuo sem data final prefixada.",
+    legalBasis: "Art. 442 e 452 da CLT",
+    tagColor: "text-emerald-700",
+    tagBg: "bg-emerald-50",
+    badgeColor: "text-emerald-800",
+    badgeBg: "bg-emerald-500/15",
+    borderStyle: "border-emerald-500/30",
+    features: [
+      "Aviso prévio proporcional (Lei 12.506/11)",
+      "Multa rescisória de 40% do FGTS",
+      "Garantias e estabilidades convencionais",
+      "Férias anuais e 13º salário integral",
+    ],
+  },
+  prazo_determinado: {
+    id: "prazo_determinado",
+    label: "Prazo Determinado",
+    short: "CLT Determinado",
+    description: "Contrato com termo prefixado ou condicionado a serviço específico (máximo de 2 anos).",
+    legalBasis: "Art. 443 da CLT",
+    tagColor: "text-amber-700",
+    tagBg: "bg-amber-50",
+    badgeColor: "text-amber-800",
+    badgeBg: "bg-amber-500/15",
+    borderStyle: "border-amber-500/30",
+    features: [
+      "Duração máxima legal de até 2 anos",
+      "Permite até 1 prorrogação no período",
+      "Sem aviso prévio no término regular",
+      "Indenização do art. 479 em rescisão antecipada",
+    ],
+  },
+  experiencia: {
+    id: "experiencia",
+    label: "Experiência",
+    short: "Contrato de Experiência",
+    description: "Espécie de prazo determinado para avaliação probatória mútua, limitado a até 90 dias.",
+    legalBasis: "Art. 445 e 451 da CLT",
+    tagColor: "text-purple-700",
+    tagBg: "bg-purple-50",
+    badgeColor: "text-purple-800",
+    badgeBg: "bg-purple-500/15",
+    borderStyle: "border-purple-500/30",
+    features: [
+      "Prazo máximo estrito de até 90 dias",
+      "Geralmente fracionado (45+45 ou 30+60 dias)",
+      "Converte-se em prazo indeterminado se ultrapassar",
+      "Sem multa de 40% no encerramento natural",
+    ],
+  },
+  trabalho_intermitente: {
+    id: "trabalho_intermitente",
+    label: "Trabalho Intermitente",
+    short: "Intermitente CLT",
+    description: "Prestação não contínua com subordinação, alternando períodos de trabalho e inatividade.",
+    legalBasis: "Art. 452-A da CLT (Lei 13.467/17)",
+    tagColor: "text-cyan-700",
+    tagBg: "bg-cyan-50",
+    badgeColor: "text-cyan-800",
+    badgeBg: "bg-cyan-500/15",
+    borderStyle: "border-cyan-500/30",
+    features: [
+      "Convocação prévia com mín. 3 dias de antecedência",
+      "Aceite ou recusa em até 1 dia útil",
+      "Pagamento imediato ao fim de cada prestação",
+      "DSR, férias e 13º proporcionais pagos no período",
+    ],
+  },
+  pj: {
+    id: "pj",
+    label: "Prestação de Serviços (PJ)",
+    short: "Prestação de Serviços (PJ)",
+    description: "Contratação empresarial B2B via Pessoa Jurídica, com emissão de nota fiscal e sem subordinação.",
+    legalBasis: "Código Civil & Lei 13.467/17",
+    tagColor: "text-indigo-700",
+    tagBg: "bg-indigo-50",
+    badgeColor: "text-indigo-800",
+    badgeBg: "bg-indigo-500/15",
+    borderStyle: "border-indigo-500/30",
+    features: [
+      "Relação estritamente civil/comercial (B2B)",
+      "Emissão obrigatória de Nota Fiscal de Serviços",
+      "Sem subordinação hierárquica ou controle de jornada rígido",
+      "Pagamento mediante fatura ou medição de entregáveis",
+    ],
+  },
+}
+
+/* ─── Tipos e Modelos de Escalas de Trabalho (Sistemas no Brasil) ─── */
+export type WorkSchedule =
+  | "escala_5x2"
+  | "escala_6x1"
+  | "escala_12x36"
+  | "escala_4x3"
+
+export interface WeeklyScheduleItem {
+  day: "Seg" | "Ter" | "Qua" | "Qui" | "Sex" | "Sáb" | "Dom"
+  fullName: string
+  isWorkDay: boolean
+  hours: string
+  shift: string
+  entryTime?: string
+  exitTime?: string
+  breakDuration?: string
+}
+
+export interface WorkScheduleMeta {
+  id: WorkSchedule
+  label: string
+  short: string
+  description: string
+  legalBasis: string
+  weeklyHours: string
+  dailyWorkload: string
+  dsrRule: string
+  badgeColor: string
+  badgeBg: string
+  borderStyle: string
+  schedulePattern: WeeklyScheduleItem[]
+  highlights: string[]
+}
+
+export const workScheduleConfigs: Record<WorkSchedule, WorkScheduleMeta> = {
+  escala_5x2: {
+    id: "escala_5x2",
+    label: "Escala 5x2",
+    short: "5x2 (Seg-Sex)",
+    description: "5 dias trabalhados com 2 dias de folga semanal consecutiva (sábado e domingo).",
+    legalBasis: "Art. 58 e 59 da CLT",
+    weeklyHours: "44h semanais (ou 40h)",
+    dailyWorkload: "8h48/dia (ou 8h/dia)",
+    dsrRule: "2 dias de descanso (Sábado e Domingo)",
+    badgeColor: "text-teal-800",
+    badgeBg: "bg-teal-500/15",
+    borderStyle: "border-teal-500/30",
+    schedulePattern: [
+      { day: "Seg", fullName: "Segunda-feira", isWorkDay: true, hours: "08:00 - 17:48", shift: "8h48 trab. (1h int.)" },
+      { day: "Ter", fullName: "Terça-feira", isWorkDay: true, hours: "08:00 - 17:48", shift: "8h48 trab. (1h int.)" },
+      { day: "Qua", fullName: "Quarta-feira", isWorkDay: true, hours: "08:00 - 17:48", shift: "8h48 trab. (1h int.)" },
+      { day: "Qui", fullName: "Quinta-feira", isWorkDay: true, hours: "08:00 - 17:48", shift: "8h48 trab. (1h int.)" },
+      { day: "Sex", fullName: "Sexta-feira", isWorkDay: true, hours: "08:00 - 17:48", shift: "8h48 trab. (1h int.)" },
+      { day: "Sáb", fullName: "Sábado", isWorkDay: false, hours: "Folga", shift: "Descanso compensatório" },
+      { day: "Dom", fullName: "Domingo", isWorkDay: false, hours: "Folga (DSR)", shift: "Descanso Semanal Remunerado" },
+    ],
+    highlights: [
+      "Jornada mais adotada em escritórios, tecnologia e serviços administrativos",
+      "Compensação das 4h de sábado durante a semana (48min diários adicionais)",
+      "Descanso continuado de 48 horas aos fins de semana",
+    ],
+  },
+  escala_6x1: {
+    id: "escala_6x1",
+    label: "Escala 6x1",
+    short: "6x1 (Comércio / Varejo)",
+    description: "6 dias trabalhados com 1 dia de folga na semana, comum em comércio, hotelaria e serviços.",
+    legalBasis: "Art. 67 da CLT e Lei 605/49",
+    weeklyHours: "44h semanais",
+    dailyWorkload: "7h20/dia (ou 8h Seg-Sex + 4h Sáb)",
+    dsrRule: "1 dia de descanso semanal (DSR preferencialmente ao domingo)",
+    badgeColor: "text-blue-800",
+    badgeBg: "bg-blue-500/15",
+    borderStyle: "border-blue-500/30",
+    schedulePattern: [
+      { day: "Seg", fullName: "Segunda-feira", isWorkDay: true, hours: "08:00 - 16:20", shift: "7h20 trab. (1h int.)" },
+      { day: "Ter", fullName: "Terça-feira", isWorkDay: true, hours: "08:00 - 16:20", shift: "7h20 trab. (1h int.)" },
+      { day: "Qua", fullName: "Quarta-feira", isWorkDay: true, hours: "08:00 - 16:20", shift: "7h20 trab. (1h int.)" },
+      { day: "Qui", fullName: "Quinta-feira", isWorkDay: true, hours: "08:00 - 16:20", shift: "7h20 trab. (1h int.)" },
+      { day: "Sex", fullName: "Sexta-feira", isWorkDay: true, hours: "08:00 - 16:20", shift: "7h20 trab. (1h int.)" },
+      { day: "Sáb", fullName: "Sábado", isWorkDay: true, hours: "08:00 - 16:20", shift: "7h20 trab. (1h int.)" },
+      { day: "Dom", fullName: "Domingo", isWorkDay: false, hours: "Folga (DSR)", shift: "Descanso Semanal Remunerado" },
+    ],
+    highlights: [
+      "Ampla utilização em comércio, varejo, restaurantes e hospitais",
+      "Exigência de pelo menos 1 domingo de folga a cada 3 a 7 semanas (CLT / Lei do Comércio)",
+      "Intervalo mínimo interjornada de 11h consecutivas entre cada expediente",
+    ],
+  },
+  escala_12x36: {
+    id: "escala_12x36",
+    label: "Escala 12x36",
+    short: "12x36 (Plantão)",
+    description: "12 horas ininterruptas de trabalho seguidas de 36 horas ininterruptas de folga/descanso.",
+    legalBasis: "Art. 59-A da CLT (Reforma Trabalhista)",
+    weeklyHours: "36h a 42h (média variável)",
+    dailyWorkload: "12h por turno de plantão",
+    dsrRule: "36 horas de descanso ininterrupto entre plantões",
+    badgeColor: "text-amber-800",
+    badgeBg: "bg-amber-500/15",
+    borderStyle: "border-amber-500/30",
+    schedulePattern: [
+      { day: "Seg", fullName: "Segunda-feira", isWorkDay: true, hours: "07:00 - 19:00", shift: "Plantão 12h (1h int.)" },
+      { day: "Ter", fullName: "Terça-feira", isWorkDay: false, hours: "Descanso 36h", shift: "Folga ininterrupta" },
+      { day: "Qua", fullName: "Quarta-feira", isWorkDay: true, hours: "07:00 - 19:00", shift: "Plantão 12h (1h int.)" },
+      { day: "Qui", fullName: "Quinta-feira", isWorkDay: false, hours: "Descanso 36h", shift: "Folga ininterrupta" },
+      { day: "Sex", fullName: "Sexta-feira", isWorkDay: true, hours: "07:00 - 19:00", shift: "Plantão 12h (1h int.)" },
+      { day: "Sáb", fullName: "Sábado", isWorkDay: false, hours: "Descanso 36h", shift: "Folga ininterrupta" },
+      { day: "Dom", fullName: "Domingo", isWorkDay: true, hours: "07:00 - 19:00", shift: "Plantão 12h (1h int.)" },
+    ],
+    highlights: [
+      "Autorizado por acordo individual escrito, convenção ou acordo coletivo",
+      "DSR e feriados trabalhados já são compensados pelas 36h de folga (Súmula 444 TST / Art. 59-A)",
+      "Intervalo intrajornada obrigatório de 1h (pode ser indenizado se houver previsão em acordo)",
+    ],
+  },
+  escala_4x3: {
+    id: "escala_4x3",
+    label: "Escala 4x3",
+    short: "4x3 (Semana de 4 dias)",
+    description: "4 dias de trabalho por 3 dias de descanso consecutivo (semana de 4 dias / modelo flexível).",
+    legalBasis: "Acordo Coletivo / Convenção Coletiva (Art. 59 da CLT)",
+    weeklyHours: "32h a 36h semanais (ou 40h com 10h/dia)",
+    dailyWorkload: "8h a 9h/dia",
+    dsrRule: "3 dias de folga na semana (Sexta, Sábado e Domingo)",
+    badgeColor: "text-emerald-800",
+    badgeBg: "bg-emerald-500/15",
+    borderStyle: "border-emerald-500/30",
+    schedulePattern: [
+      { day: "Seg", fullName: "Segunda-feira", isWorkDay: true, hours: "08:00 - 17:00", shift: "8h trab. (1h int.)" },
+      { day: "Ter", fullName: "Terça-feira", isWorkDay: true, hours: "08:00 - 17:00", shift: "8h trab. (1h int.)" },
+      { day: "Qua", fullName: "Quarta-feira", isWorkDay: true, hours: "08:00 - 17:00", shift: "8h trab. (1h int.)" },
+      { day: "Qui", fullName: "Quinta-feira", isWorkDay: true, hours: "08:00 - 17:00", shift: "8h trab. (1h int.)" },
+      { day: "Sex", fullName: "Sexta-feira", isWorkDay: false, hours: "Folga Flex", shift: "Descanso corporativo (4-Day Week)" },
+      { day: "Sáb", fullName: "Sábado", isWorkDay: false, hours: "Folga", shift: "Descanso de fim de semana" },
+      { day: "Dom", fullName: "Domingo", isWorkDay: false, hours: "Folga (DSR)", shift: "Descanso Semanal Remunerado" },
+    ],
+    highlights: [
+      "Modelo global de alta produtividade e retenção de talentos (4 Day Week Global)",
+      "Proporciona 3 dias de descanso consecutivo para recarga física e mental",
+      "Formalizado via acordo de compensação de horas ou política corporativa de redução de jornada sem redução salarial",
+    ],
+  },
+}
+
 export interface EmployeeFolder {
   id: string
   name: string
@@ -167,6 +427,9 @@ export interface EmployeeFolder {
   cbo?: string
   cboTitle?: string
   salary?: string
+  contractType?: ContractType
+  workSchedule?: WorkSchedule
+  customSchedulePattern?: WeeklyScheduleItem[]
 }
 
 import type { HoleriteCalculado } from "./utils/payroll"
@@ -241,7 +504,137 @@ export interface PontoPunchReceipt {
   location: string
 }
 
-export const initialEmployeeFolders: EmployeeFolder[] = []
+export const initialEmployeeFolders: EmployeeFolder[] = [
+  {
+    id: "emp-101",
+    name: "Gabriel Santos",
+    initials: "GS",
+    cpf: "123.456.789-00",
+    registration: "101",
+    role: "Desenvolvedor de Software Pleno",
+    department: "Tecnologia",
+    email: "gabriel.santos@empresa.com",
+    phone: "(11) 98765-4321",
+    location: "São Paulo, SP",
+    tenure: "2 anos",
+    manager: "Mariana Alcantara",
+    admissionDate: "01/02/2024",
+    status: "ativo",
+    salary: "R$ 7.800,00",
+    cbo: "2124-05",
+    cboTitle: "Analista de desenvolvimento de sistemas",
+    contractType: "prazo_indeterminado",
+    workSchedule: "escala_5x2",
+    documents: [
+      { id: "d1", name: "Contrato_Trabalho_CLT_Assinado.pdf", category: "contratos", fileType: "PDF", size: "2.4 MB", uploadedAt: "01/02/2024", uploadedBy: "Mariana Alcantara" },
+      { id: "d2", name: "RG_CPF_CNH_Digital.pdf", category: "pessoais", fileType: "PDF", size: "1.1 MB", uploadedAt: "01/02/2024", uploadedBy: "Gabriel Santos" },
+      { id: "d3", name: "ASO_Admissional_Apto.pdf", category: "exames", fileType: "PDF", size: "640 KB", uploadedAt: "28/01/2024", uploadedBy: "Médico do Trabalho" },
+    ],
+    notes: "Contrato padrão CLT por prazo indeterminado. Jornada híbrida 5x2 (3 dias remoto / 2 dias presencial).",
+  },
+  {
+    id: "emp-102",
+    name: "Beatriz Lima",
+    initials: "BL",
+    cpf: "234.567.890-11",
+    registration: "102",
+    role: "Analista de Suporte e Monitoramento NOC",
+    department: "Tecnologia",
+    email: "beatriz.lima@empresa.com",
+    phone: "(11) 97654-3210",
+    location: "São Paulo, SP",
+    tenure: "2 meses",
+    manager: "Lucas Mendes",
+    admissionDate: "15/07/2026",
+    status: "ativo",
+    salary: "R$ 4.800,00",
+    cbo: "3172-10",
+    cboTitle: "Técnico de suporte ao usuário de tecnologia da informação",
+    contractType: "experiencia",
+    workSchedule: "escala_12x36",
+    documents: [
+      { id: "d4", name: "Contrato_Experiencia_45dias.pdf", category: "contratos", fileType: "PDF", size: "1.8 MB", uploadedAt: "15/07/2026", uploadedBy: "Carlos Eduardo Souza" },
+      { id: "d5", name: "Acordo_Plantao_12x36_Escrito.pdf", category: "contratos", fileType: "PDF", size: "850 KB", uploadedAt: "15/07/2026", uploadedBy: "Carlos Eduardo Souza" },
+    ],
+    notes: "Em período de experiência probatória (primeiro ciclo de 45 dias). Atua em regime de plantão escala 12x36 para suporte ininterrupto de infraestrutura.",
+  },
+  {
+    id: "emp-103",
+    name: "Rodrigo Silveira",
+    initials: "RS",
+    cpf: "345.678.901-22",
+    registration: "103",
+    role: "Consultor Especialista Cloud & DevOps",
+    department: "Tecnologia",
+    email: "rodrigo.silveira@empresa.com",
+    phone: "(11) 96543-2109",
+    location: "Campinas, SP",
+    tenure: "1 ano",
+    manager: "Lucas Mendes",
+    admissionDate: "10/08/2025",
+    status: "ativo",
+    salary: "R$ 14.500,00",
+    cbo: "2124-20",
+    cboTitle: "Especialista em infraestrutura ágil e nuvem",
+    contractType: "pj",
+    workSchedule: "escala_4x3",
+    documents: [
+      { id: "d6", name: "Contrato_Prestacao_Servicos_PJ.pdf", category: "contratos", fileType: "PDF", size: "3.1 MB", uploadedAt: "10/08/2025", uploadedBy: "Jurídico PeopleHub" },
+      { id: "d7", name: "Comprovante_CNPJ_Cartao_Mei_Me.pdf", category: "contratos", fileType: "PDF", size: "420 KB", uploadedAt: "10/08/2025", uploadedBy: "Rodrigo Silveira" },
+    ],
+    notes: "Prestação de serviços B2B via Pessoa Jurídica (PJ). Acordo de disponibilidade em escala flexível de 4 dias (4x3 / 4-Day Work Week).",
+  },
+  {
+    id: "emp-104",
+    name: "Camila Vasconcelos",
+    initials: "CV",
+    cpf: "456.789.012-33",
+    registration: "104",
+    role: "Especialista de Relacionamento e Atendimento",
+    department: "Vendas",
+    email: "camila.vasconcelos@empresa.com",
+    phone: "(11) 95432-1098",
+    location: "São Paulo, SP",
+    tenure: "6 meses",
+    manager: "Mariana Alcantara",
+    admissionDate: "01/03/2026",
+    status: "ativo",
+    salary: "R$ 3.900,00",
+    cbo: "4110-10",
+    cboTitle: "Assistente administrativo e de relacionamento",
+    contractType: "trabalho_intermitente",
+    workSchedule: "escala_6x1",
+    documents: [
+      { id: "d8", name: "Contrato_Trabalho_Intermitente_Art452A.pdf", category: "contratos", fileType: "PDF", size: "2.1 MB", uploadedAt: "01/03/2026", uploadedBy: "Carlos Eduardo Souza" },
+    ],
+    notes: "Contrato de trabalho intermitente conforme art. 452-A da CLT. Convocada em períodos de pico promocional na escala 6x1 no comércio/varejo.",
+  },
+  {
+    id: "emp-105",
+    name: "Carlos Eduardo Souza",
+    initials: "CS",
+    cpf: "567.890.123-44",
+    registration: "105",
+    role: "Especialista em DP & Folha de Pagamento",
+    department: "Recursos Humanos",
+    email: "dp@peoplehub.com.br",
+    phone: "(11) 94321-0987",
+    location: "São Paulo, SP",
+    tenure: "3 anos",
+    manager: "Mariana Alcantara",
+    admissionDate: "10/01/2023",
+    status: "ativo",
+    salary: "R$ 8.200,00",
+    cbo: "2524-05",
+    cboTitle: "Analista de recursos humanos / DP",
+    contractType: "prazo_determinado",
+    workSchedule: "escala_5x2",
+    documents: [
+      { id: "d9", name: "Contrato_Prazo_Determinado_Projeto.pdf", category: "contratos", fileType: "PDF", size: "2.3 MB", uploadedAt: "10/01/2023", uploadedBy: "Mariana Alcantara" },
+    ],
+    notes: "Contrato por prazo determinado de 2 anos para implantação do novo ERP e sistema de folha, prorrogado dentro do limite legal do art. 443 da CLT.",
+  },
+]
 
 /* ─── Tipos e Dados do Módulo de Solicitações de RH ───────── */
 

@@ -23,8 +23,11 @@ import {
   Award,
   X,
   DollarSign,
+  FileCheck2,
+  CalendarClock,
 } from "lucide-vue-next"
-import type { EmployeeFolder } from "../data"
+import type { EmployeeFolder, ContractType, WorkSchedule } from "../data"
+import { contractTypeConfigs, workScheduleConfigs } from "../data"
 import { createEmployeeFolder, updateEmployeeFolder, employeeFolders } from "../store"
 import { searchCBO, fetchCBORelacaoTrabalhistaByCPF, type CBOItem } from "../cboData"
 
@@ -89,6 +92,12 @@ const department = ref(props.folderToEdit?.department || "Recursos Humanos")
 const admissionDate = ref(toDateInputValue(props.folderToEdit?.admissionDate))
 const salary = ref(props.folderToEdit?.salary || "R$ 6.500,00")
 const manager = ref(props.folderToEdit?.manager || "Gestão RH")
+const contractType = ref<ContractType>(
+  props.folderToEdit?.contractType || "prazo_indeterminado"
+)
+const workSchedule = ref<WorkSchedule>(
+  props.folderToEdit?.workSchedule || "escala_5x2"
+)
 const status = ref<"ativo" | "ferias" | "afastado">(
   props.folderToEdit?.status === "desligado" ? "ativo" : props.folderToEdit?.status || "ativo"
 )
@@ -439,6 +448,8 @@ async function submit() {
       cbo: cbo.value,
       cboTitle: cboTitle.value,
       salary: salary.value.trim() || "R$ 6.500,00",
+      contractType: contractType.value,
+      workSchedule: workSchedule.value,
     })
 
     emit("updated", props.folderToEdit.id)
@@ -468,6 +479,8 @@ async function submit() {
       cbo: cbo.value,
       cboTitle: cboTitle.value,
       salary: salary.value.trim() || "R$ 6.500,00",
+      contractType: contractType.value,
+      workSchedule: workSchedule.value,
     })
 
     emit("created", created.id)
@@ -874,6 +887,60 @@ async function submit() {
               <option value="ferias">Em Férias</option>
               <option value="afastado">Afastado</option>
             </select>
+          </div>
+
+          <!-- Tipo de Contrato de Trabalho -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Tipo de Contrato <span class="text-red-500">*</span>
+              </label>
+              <span class="text-[10px] text-teal-700 font-semibold font-mono">
+                {{ contractTypeConfigs[contractType]?.short }}
+              </span>
+            </div>
+            <div class="relative">
+              <FileCheck2 :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <select
+                v-model="contractType"
+                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all font-medium"
+                style="--tw-ring-color: var(--color-ring)"
+              >
+                <option v-for="(meta, key) in contractTypeConfigs" :key="key" :value="key">
+                  {{ meta.label }}
+                </option>
+              </select>
+            </div>
+            <p class="mt-1 text-[10px] text-muted-foreground truncate" :title="contractTypeConfigs[contractType]?.description">
+              {{ contractTypeConfigs[contractType]?.legalBasis }}
+            </p>
+          </div>
+
+          <!-- Sistema de Escala no Brasil -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Escala de Trabalho <span class="text-red-500">*</span>
+              </label>
+              <span class="text-[10px] text-teal-700 font-semibold font-mono">
+                {{ workScheduleConfigs[workSchedule]?.weeklyHours }}
+              </span>
+            </div>
+            <div class="relative">
+              <CalendarClock :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <select
+                v-model="workSchedule"
+                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all font-medium"
+                style="--tw-ring-color: var(--color-ring)"
+              >
+                <option v-for="(meta, key) in workScheduleConfigs" :key="key" :value="key">
+                  {{ meta.label }} ({{ meta.short }})
+                </option>
+              </select>
+            </div>
+            <p class="mt-1 text-[10px] text-muted-foreground truncate" :title="workScheduleConfigs[workSchedule]?.dsrRule">
+              {{ workScheduleConfigs[workSchedule]?.dsrRule }}
+            </p>
           </div>
         </div>
       </div>

@@ -125,20 +125,32 @@ function runMigrations(): void {
   // Employees
   db.run(`
     CREATE TABLE IF NOT EXISTS employees (
-      id          TEXT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      role        TEXT NOT NULL,
-      department  TEXT NOT NULL,
-      status      TEXT NOT NULL,
-      email       TEXT NOT NULL,
-      phone       TEXT NOT NULL,
-      cpf         TEXT NOT NULL,
-      hireDate    TEXT NOT NULL,
-      salary      TEXT NOT NULL,
-      manager     TEXT NOT NULL,
-      location    TEXT NOT NULL
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      role         TEXT NOT NULL,
+      department   TEXT NOT NULL,
+      status       TEXT NOT NULL,
+      email        TEXT NOT NULL,
+      phone        TEXT NOT NULL,
+      cpf          TEXT NOT NULL,
+      hireDate     TEXT NOT NULL,
+      salary       TEXT NOT NULL,
+      manager      TEXT NOT NULL,
+      location     TEXT NOT NULL,
+      contractType TEXT,
+      workSchedule TEXT,
+      customSchedulePattern TEXT
     );
   `)
+  try {
+    db.run(`ALTER TABLE employees ADD COLUMN contractType TEXT;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE employees ADD COLUMN workSchedule TEXT;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE employees ADD COLUMN customSchedulePattern TEXT;`)
+  } catch (_e) {}
 
   // Requests
   db.run(`

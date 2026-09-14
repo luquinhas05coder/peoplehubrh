@@ -41,6 +41,11 @@ router.get("/", (req: Request, res: Response) => {
     columns.forEach((col, idx) => {
       emp[col] = row[idx]
     })
+    if (emp.customSchedulePattern && typeof emp.customSchedulePattern === "string") {
+      try {
+        emp.customSchedulePattern = JSON.parse(emp.customSchedulePattern)
+      } catch (_e) {}
+    }
     return emp
   })
 
@@ -63,13 +68,18 @@ router.get("/:id", (req: Request, res: Response) => {
   result[0].values[0].forEach((val, idx) => {
     emp[columns[idx]] = val
   })
+  if (emp.customSchedulePattern && typeof emp.customSchedulePattern === "string") {
+    try {
+      emp.customSchedulePattern = JSON.parse(emp.customSchedulePattern)
+    } catch (_e) {}
+  }
 
   res.json({ ok: true, employee: emp })
 })
 
 // POST /api/employees (Criar pasta de colaborador / Novo funcionário)
 router.post("/", (req: Request, res: Response) => {
-  const { name, role, department, email, phone, cpf, hireDate, salary, manager, location } = req.body
+  const { name, role, department, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern } = req.body
 
   if (!name || !role || !department || !email) {
     res.status(400).json({ ok: false, error: "Nome, cargo, departamento e e-mail são obrigatórios." })
@@ -78,10 +88,15 @@ router.post("/", (req: Request, res: Response) => {
 
   const id = `emp_${Date.now()}`
   const db = getDB()
+  const patternJson = customSchedulePattern
+    ? typeof customSchedulePattern === "string"
+      ? customSchedulePattern
+      : JSON.stringify(customSchedulePattern)
+    : null
 
   db.run(
-    `INSERT INTO employees (id, name, role, department, status, email, phone, cpf, hireDate, salary, manager, location)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO employees (id, name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       name,
@@ -95,6 +110,9 @@ router.post("/", (req: Request, res: Response) => {
       salary || "R$ 0,00",
       manager || "Não atribuído",
       location || "São Paulo, SP",
+      contractType || "prazo_indeterminado",
+      workSchedule || "escala_5x2",
+      patternJson,
     ]
   )
 
@@ -117,7 +135,7 @@ router.delete("/:id", (req: Request, res: Response) => {
 // PATCH /api/employees/:id
 router.patch("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
-  const { name, role, department, status, email, phone, cpf, hireDate, salary, manager, location } = req.body
+  const { name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern } = req.body
 
   const db = getDB()
   const fields: string[] = []
@@ -134,6 +152,18 @@ router.patch("/:id", (req: Request, res: Response) => {
   if (salary !== undefined) { fields.push("salary = ?"); params.push(salary) }
   if (manager !== undefined) { fields.push("manager = ?"); params.push(manager) }
   if (location !== undefined) { fields.push("location = ?"); params.push(location) }
+  if (contractType !== undefined) { fields.push("contractType = ?"); params.push(contractType) }
+  if (workSchedule !== undefined) { fields.push("workSchedule = ?"); params.push(workSchedule) }
+  if (customSchedulePattern !== undefined) {
+    fields.push("customSchedulePattern = ?")
+    params.push(
+      customSchedulePattern
+        ? typeof customSchedulePattern === "string"
+          ? customSchedulePattern
+          : JSON.stringify(customSchedulePattern)
+        : null
+    )
+  }
 
   if (fields.length === 0) {
     res.status(400).json({ ok: false, error: "Nenhum campo informado para atualização." })

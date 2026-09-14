@@ -23,6 +23,9 @@ import type {
   TimeRecord,
   FolhaDePontoSnapshot,
   PontoPunchReceipt,
+  ContractType,
+  WorkSchedule,
+  WeeklyScheduleItem,
 } from "./data"
 import { calcularHoleriteCompleto, recalcularHoleriteComRubricas, type HoleriteItem } from "./utils/payroll"
 import {
@@ -33,6 +36,8 @@ import {
   initialSystemDocuments,
   initialOnboardingItems,
   initialOnboardingTracks,
+  contractTypeConfigs,
+  workScheduleConfigs,
 } from "./data"
 
 /* ─── Toast System ────────────────────────────────────────── */
@@ -1125,6 +1130,8 @@ export async function createEmployeeFolder(payload: {
   cbo?: string
   cboTitle?: string
   salary?: string
+  contractType?: ContractType
+  workSchedule?: WorkSchedule
 }): Promise<EmployeeFolder> {
   const id = "f-" + Date.now()
   const loc = payload.location || (payload.city && payload.state ? `${payload.city}, ${payload.state}` : "São Paulo, SP")
@@ -1155,6 +1162,8 @@ export async function createEmployeeFolder(payload: {
     cbo: payload.cbo,
     cboTitle: payload.cboTitle,
     salary: payload.salary || "R$ 6.500,00",
+    contractType: payload.contractType || "prazo_indeterminado",
+    workSchedule: payload.workSchedule || "escala_5x2",
   }
   employeeFolders.value.unshift(newFolder)
   activeFolderId.value = id
@@ -1176,6 +1185,8 @@ export async function createEmployeeFolder(payload: {
         location: payload.location || "São Paulo, SP",
         cbo: payload.cbo,
         cboTitle: payload.cboTitle,
+        contractType: payload.contractType || "prazo_indeterminado",
+        workSchedule: payload.workSchedule || "escala_5x2",
       }),
     })
   } catch (_e) {}
@@ -1248,6 +1259,8 @@ export async function updateEmployeeFolder(
   if (payload.cbo !== undefined) folder.cbo = payload.cbo
   if (payload.cboTitle !== undefined) folder.cboTitle = payload.cboTitle
   if (payload.salary !== undefined) folder.salary = payload.salary
+  if (payload.contractType !== undefined) folder.contractType = payload.contractType
+  if (payload.workSchedule !== undefined) folder.workSchedule = payload.workSchedule
 
   try {
     await fetch(`/api/employees/${folderId}`, {
@@ -1265,11 +1278,46 @@ export async function updateEmployeeFolder(
         location: folder.location,
         cbo: folder.cbo,
         cboTitle: folder.cboTitle,
+        contractType: folder.contractType,
+        workSchedule: folder.workSchedule,
       }),
     })
   } catch (_e) {}
 
   showToast(`Dados de ${folder.name} atualizados com sucesso!`, "success")
+  return folder
+}
+
+export async function updateEmployeeContractAndSchedule(
+  folderId: string,
+  contractType: ContractType,
+  workSchedule: WorkSchedule,
+  customSchedulePattern?: WeeklyScheduleItem[]
+): Promise<EmployeeFolder | null> {
+  const folder = employeeFolders.value.find((f) => f.id === folderId)
+  if (!folder) return null
+
+  folder.contractType = contractType
+  folder.workSchedule = workSchedule
+  if (customSchedulePattern) {
+    folder.customSchedulePattern = customSchedulePattern
+  }
+
+  try {
+    await fetch(`/api/employees/${folderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contractType,
+        workSchedule,
+        customSchedulePattern,
+      }),
+    })
+  } catch (_e) {}
+
+  const ctLabel = contractTypeConfigs[contractType]?.label || contractType
+  const wsLabel = workScheduleConfigs[workSchedule]?.label || workSchedule
+  showToast(`Colaborador atualizado: ${ctLabel} · ${wsLabel}`, "success")
   return folder
 }
 
@@ -1909,6 +1957,13 @@ export async function fetchAllFromBackend(retries = 3) {
             status: (emp.status?.toLowerCase() === "ativo" ? "ativo" : emp.status?.toLowerCase()) || "ativo",
             documents: [],
             notes: "Importado do banco de dados.",
+            contractType: emp.contractType || "prazo_indeterminado",
+            workSchedule: emp.workSchedule || "escala_5x2",
+            customSchedulePattern: emp.customSchedulePattern
+              ? typeof emp.customSchedulePattern === "string"
+                ? JSON.parse(emp.customSchedulePattern)
+                : emp.customSchedulePattern
+              : undefined,
           })
         }
       })

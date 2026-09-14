@@ -23,22 +23,27 @@ import {
   Award,
   Receipt,
   DollarSign,
+  CalendarClock,
+  FileCheck2,
 } from "lucide-vue-next"
 import type { DocCategory, EmployeeFolder } from "../data"
-import { docCategoryLabels } from "../data"
+import { docCategoryLabels, contractTypeConfigs, workScheduleConfigs } from "../data"
 import { employeeFolders, activeFolderId, addDocumentToFolder, deleteDocumentFromFolder, deleteEmployeeFolder, userRoleType, userPermissions } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import NewEmployeeFolderModal from "./NewEmployeeFolderModal.vue"
 import HoleriteCard from "./HoleriteCard.vue"
 import FolhaDePontoCard from "./FolhaDePontoCard.vue"
+import EscalaContratoCard from "./EscalaContratoCard.vue"
 
 const search = ref("")
 const selectedDepartment = ref("todos")
 const selectedStatus = ref("todos")
+const selectedContractType = ref("todos")
+const selectedWorkSchedule = ref("todos")
 const viewMode = ref<"grid" | "table">("grid")
 
 const showNewFolderModal = ref(false)
-const activeFolderViewTab = ref<"ficha" | "holerite" | "ponto">("ficha")
+const activeFolderViewTab = ref<"ficha" | "escala_contrato" | "holerite" | "ponto">("ficha")
 
 /* Títulos adaptados por Cargo */
 const moduleTitle = computed(() => {
@@ -121,6 +126,12 @@ const filteredFolders = computed(() => {
   return employeeFolders.value.filter((f) => {
     const matchesDept = selectedDepartment.value === "todos" || f.department === selectedDepartment.value
     const matchesStatus = selectedStatus.value === "todos" || f.status === selectedStatus.value
+    const matchesContract =
+      selectedContractType.value === "todos" ||
+      (f.contractType || "prazo_indeterminado") === selectedContractType.value
+    const matchesSchedule =
+      selectedWorkSchedule.value === "todos" ||
+      (f.workSchedule || "escala_5x2") === selectedWorkSchedule.value
     const q = search.value.toLowerCase().trim()
     const matchesSearch =
       !q ||
@@ -129,7 +140,7 @@ const filteredFolders = computed(() => {
       f.registration.toLowerCase().includes(q) ||
       f.role.toLowerCase().includes(q) ||
       f.department.toLowerCase().includes(q)
-    return matchesDept && matchesStatus && matchesSearch
+    return matchesDept && matchesStatus && matchesContract && matchesSchedule && matchesSearch
   })
 })
 
@@ -435,6 +446,26 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
               <option value="afastado">Afastados</option>
             </select>
 
+            <select
+              v-model="selectedContractType"
+              class="rounded-xl border bg-background px-3 py-2 text-xs font-medium outline-none shrink-0 cursor-pointer"
+            >
+              <option value="todos">Todos Contratos</option>
+              <option v-for="(cMeta, cKey) in contractTypeConfigs" :key="cKey" :value="cKey">
+                {{ cMeta.label }}
+              </option>
+            </select>
+
+            <select
+              v-model="selectedWorkSchedule"
+              class="rounded-xl border bg-background px-3 py-2 text-xs font-medium outline-none shrink-0 cursor-pointer"
+            >
+              <option value="todos">Todas Escalas</option>
+              <option v-for="(sMeta, sKey) in workScheduleConfigs" :key="sKey" :value="sKey">
+                {{ sMeta.label }}
+              </option>
+            </select>
+
             <div class="flex items-center rounded-xl border bg-background p-1 shrink-0">
               <button
                 class="rounded-lg p-1.5 transition-colors cursor-pointer"
@@ -498,6 +529,18 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 <span v-if="activeFolder.cbo" class="flex items-center gap-1 text-teal-800 font-semibold bg-teal-50 px-2 py-0.5 rounded">
                   <Award :size="13" class="text-teal-700" /> CBO: {{ activeFolder.cbo }}
                 </span>
+                <span
+                  class="flex items-center gap-1 font-semibold px-2 py-0.5 rounded text-xs"
+                  :class="[contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado'].badgeBg, contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado'].badgeColor]"
+                >
+                  <FileCheck2 :size="13" /> {{ contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado'].label }}
+                </span>
+                <span
+                  class="flex items-center gap-1 font-semibold px-2 py-0.5 rounded text-xs"
+                  :class="[workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2'].badgeBg, workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2'].badgeColor]"
+                >
+                  <Clock :size="13" /> {{ workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2'].label }}
+                </span>
                 <span class="flex items-center gap-1"><Clock :size="13" /> Admissão: {{ activeFolder.admissionDate }}</span>
               </div>
             </div>
@@ -525,10 +568,10 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
           </div>
         </div>
 
-        <!-- Sub-navegação da Pasta do Colaborador (Ficha vs Contra-Cheque) -->
-        <div class="flex items-center gap-2 border-b pb-1">
+        <!-- Sub-navegação da Pasta do Colaborador (Ficha vs Escala vs Contra-Cheque vs Ponto) -->
+        <div class="flex items-center gap-2 border-b pb-1 overflow-x-auto scrollbar-thin">
           <button
-            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0"
             :class="activeFolderViewTab === 'ficha' ? 'bg-teal-500/15 text-teal-800 border border-teal-500/30' : 'text-muted-foreground hover:bg-muted'"
             @click="activeFolderViewTab = 'ficha'"
           >
@@ -536,7 +579,16 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
             <span>Ficha & Documentos Digitais</span>
           </button>
           <button
-            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0"
+            :class="activeFolderViewTab === 'escala_contrato' ? 'bg-teal-500/15 text-teal-800 border border-teal-500/30' : 'text-muted-foreground hover:bg-muted'"
+            @click="activeFolderViewTab = 'escala_contrato'"
+          >
+            <CalendarClock :size="15" class="text-teal-600" />
+            <span>Escala & Tipo de Contrato</span>
+            <span class="rounded-full bg-teal-500/20 text-teal-800 text-[10px] font-bold px-2 py-0.2">Jornada & Vínculo</span>
+          </button>
+          <button
+            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0"
             :class="activeFolderViewTab === 'holerite' ? 'bg-teal-500/15 text-teal-800 border border-teal-500/30' : 'text-muted-foreground hover:bg-muted'"
             @click="activeFolderViewTab = 'holerite'"
           >
@@ -545,7 +597,7 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
             <span class="rounded-full bg-emerald-500/20 text-emerald-800 text-[10px] font-bold px-2 py-0.2">Oficial CLT</span>
           </button>
           <button
-            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+            class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0"
             :class="activeFolderViewTab === 'ponto' ? 'bg-teal-500/15 text-teal-800 border border-teal-500/30' : 'text-muted-foreground hover:bg-muted'"
             @click="activeFolderViewTab = 'ponto'"
           >
@@ -555,8 +607,13 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
           </button>
         </div>
 
+        <!-- CONTEÚDO DA ABA: ESCALAS & TIPOS DE CONTRATOS -->
+        <div v-if="activeFolderViewTab === 'escala_contrato'">
+          <EscalaContratoCard :folder="activeFolder" @toast="showToast" />
+        </div>
+
         <!-- CONTEÚDO DA ABA 2: DEMONSTRATIVO DO CONTRA-CHEQUE -->
-        <div v-if="activeFolderViewTab === 'holerite'">
+        <div v-else-if="activeFolderViewTab === 'holerite'">
           <HoleriteCard :folder="activeFolder" @toast="showToast" />
         </div>
 
@@ -579,6 +636,14 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 <li class="flex items-center justify-between border-b pb-2">
                   <span class="text-muted-foreground flex items-center gap-1.5"><Phone :size="14" /> Telefone</span>
                   <span class="font-medium text-foreground">{{ activeFolder.phone }}</span>
+                </li>
+                <li class="flex items-center justify-between border-b pb-2">
+                  <span class="text-muted-foreground flex items-center gap-1.5"><FileCheck2 :size="14" class="text-teal-600" /> Regime Contratual</span>
+                  <span class="font-bold text-teal-800">{{ contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado']?.label }}</span>
+                </li>
+                <li class="flex items-center justify-between border-b pb-2">
+                  <span class="text-muted-foreground flex items-center gap-1.5"><Clock :size="14" class="text-teal-600" /> Escala de Trabalho</span>
+                  <span class="font-bold text-teal-800">{{ workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2']?.label }}</span>
                 </li>
                 <li class="flex items-center justify-between border-b pb-2">
                   <span class="text-muted-foreground flex items-center gap-1.5"><DollarSign :size="14" class="text-teal-600" /> Salário Bruto</span>
@@ -731,6 +796,24 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                   <span class="font-mono text-muted-foreground">{{ folder.registration }}</span>
                 </div>
                 <div class="flex items-center justify-between">
+                  <span class="text-muted-foreground">Contrato:</span>
+                  <span
+                    class="rounded px-1.5 py-0.2 text-[10px] font-bold truncate max-w-[130px]"
+                    :class="[contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeBg, contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeColor]"
+                  >
+                    {{ contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].short }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-muted-foreground">Escala:</span>
+                  <span
+                    class="rounded px-1.5 py-0.2 text-[10px] font-bold"
+                    :class="[workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeBg, workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeColor]"
+                  >
+                    {{ workScheduleConfigs[folder.workSchedule || 'escala_5x2'].label }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between">
                   <span class="text-muted-foreground">Documentos:</span>
                   <span class="flex items-center gap-1 font-bold text-teal-700">
                     <Folder :size="13" /> {{ folder.documents.length }} arquivos
@@ -763,6 +846,7 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 <th class="p-3.5">Colaborador</th>
                 <th class="p-3.5">Matrícula / CPF</th>
                 <th class="p-3.5">Departamento & Cargo</th>
+                <th class="p-3.5">Contrato & Escala</th>
                 <th class="p-3.5">Documentos</th>
                 <th class="p-3.5">Status</th>
                 <th class="p-3.5 text-right">Ação</th>
@@ -791,6 +875,23 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 <td class="p-3.5">
                   <p class="font-medium text-foreground">{{ folder.department }}</p>
                   <p class="text-[11px] text-muted-foreground">{{ folder.role }}</p>
+                </td>
+                <td class="p-3.5">
+                  <div class="space-y-1">
+                    <span
+                      class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
+                      :class="[contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeBg, contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeColor]"
+                    >
+                      <FileCheck2 :size="11" /> {{ contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].short }}
+                    </span>
+                    <br />
+                    <span
+                      class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
+                      :class="[workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeBg, workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeColor]"
+                    >
+                      <Clock :size="11" /> {{ workScheduleConfigs[folder.workSchedule || 'escala_5x2'].label }}
+                    </span>
+                  </div>
                 </td>
                 <td class="p-3.5">
                   <span class="inline-flex items-center gap-1 font-bold text-teal-700 bg-teal-500/10 px-2 py-0.5 rounded-full text-[11px]">
