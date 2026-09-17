@@ -1,12 +1,87 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue"
-import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, Users, BarChart3, MessagesSquare, Folder } from "lucide-vue-next"
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  LogIn,
+  AlertCircle,
+  Users,
+  BarChart3,
+  MessagesSquare,
+  Folder,
+  Sparkles,
+  ShieldCheck,
+  ArrowLeft,
+  Send,
+  CheckCircle2,
+} from "lucide-vue-next"
 import { loginUser, loginAsPreset } from "../store"
 
 const form = reactive({ email: "", password: "" })
 const showPassword = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// Estado para "Esqueci a minha senha"
+const isForgotPasswordOpen = ref(false)
+const forgotEmail = ref("")
+const forgotLoading = ref(false)
+const forgotSuccess = ref<string | null>(null)
+const forgotError = ref<string | null>(null)
+
+function openForgotPassword() {
+  forgotEmail.value = form.email || ""
+  forgotError.value = null
+  forgotSuccess.value = null
+  isForgotPasswordOpen.value = true
+}
+
+function closeForgotPassword() {
+  isForgotPasswordOpen.value = false
+  if (forgotSuccess.value && forgotEmail.value) {
+    form.email = forgotEmail.value
+  }
+  forgotError.value = null
+  forgotSuccess.value = null
+}
+
+async function handleForgotPasswordSubmit() {
+  forgotError.value = null
+  forgotSuccess.value = null
+
+  if (!forgotEmail.value || !forgotEmail.value.trim()) {
+    forgotError.value = "Por favor, digite seu e-mail corporativo cadastrado."
+    return
+  }
+
+  forgotLoading.value = true
+  try {
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: forgotEmail.value.trim() }),
+    })
+    const data = await res.json()
+    forgotLoading.value = false
+
+    if (data.ok) {
+      forgotSuccess.value = data.message || "E-mail de recuperação enviado com sucesso!"
+    } else {
+      forgotError.value = data.error || "Não foi possível enviar o e-mail de recuperação."
+    }
+  } catch (err: any) {
+    forgotLoading.value = false
+    forgotError.value = err?.message || "Erro de conexão ao solicitar recuperação."
+  }
+}
+
+function fillAdminCredentials() {
+  form.email = "admin@empresa.com"
+  form.password = "admin123"
+  error.value = null
+}
 
 async function handleSubmit() {
   error.value = null
@@ -64,7 +139,7 @@ const features = [
         <div class="space-y-6">
           <div class="space-y-3">
             <span class="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur-sm">
-              ✦ Omnichannel · Documentos · Relatórios
+              ✦ Omnichannel · Multi-Empresa · 2FA Seguro
             </span>
             <h1 class="text-4xl font-black leading-tight tracking-tight text-white xl:text-5xl">
               Gestão de Pessoas<br />
@@ -73,7 +148,7 @@ const features = [
               </span>
             </h1>
             <p class="max-w-sm text-sm leading-relaxed text-white/60">
-              Centralize atendimento omnichannel, documentos e dados dos seus colaboradores em uma única plataforma segura.
+              Centralize atendimento omnichannel, colaboradores, documentos e segurança corporativa em uma única plataforma isolada por tenant.
             </p>
           </div>
 
@@ -105,109 +180,234 @@ const features = [
       </div>
     </aside>
 
-    <!-- PAINEL DIREITO — Formulário -->
+    <!-- PAINEL DIREITO — Formulário de Login / Cadastro -->
     <main class="flex flex-1 flex-col items-center justify-center p-6 sm:p-10 overflow-y-auto">
-      <div class="w-full max-w-sm space-y-7">
+      <div class="w-full max-w-sm space-y-6 py-6">
         <!-- Mobile logo -->
         <div class="flex items-center gap-2.5 lg:hidden">
           <span class="flex h-9 w-9 items-center justify-center rounded-xl font-black text-sm text-primary-foreground" style="background: var(--color-primary)">PH</span>
           <span class="font-bold text-foreground">PeopleHub</span>
         </div>
 
-        <!-- Header -->
-        <div class="space-y-1">
-          <h2 class="text-2xl font-black tracking-tight text-foreground">Bem-vindo de volta 👋</h2>
-          <p class="text-sm text-muted-foreground">Acesse sua conta para continuar no PeopleHub</p>
+        <!-- VISÃO DE ESQUECI A SENHA -->
+        <div v-if="isForgotPasswordOpen" class="space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div class="space-y-1">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer mb-2"
+              @click="closeForgotPassword"
+            >
+              <ArrowLeft :size="14" /> Voltar ao Login
+            </button>
+            <h2 class="text-2xl font-black tracking-tight text-foreground">
+              Recuperar Senha 🔑
+            </h2>
+            <p class="text-sm text-muted-foreground">
+              Informe seu e-mail para receber uma nova senha de acesso via nosso servidor de e-mail corporativo.
+            </p>
+          </div>
+
+          <!-- Mensagem de Sucesso -->
+          <div
+            v-if="forgotSuccess"
+            class="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200"
+          >
+            <div class="flex items-start gap-2.5">
+              <CheckCircle2 :size="18" class="text-emerald-600 mt-0.5 shrink-0" />
+              <div class="space-y-1 text-xs">
+                <p class="font-bold text-sm">Instruções enviadas com sucesso!</p>
+                <p class="leading-relaxed">{{ forgotSuccess }}</p>
+                <p class="pt-1 text-emerald-700 dark:text-emerald-300">
+                  Faça login com a senha recebida e defina sua nova senha definitiva no primeiro acesso.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-xs font-bold text-white shadow-sm transition-all hover:opacity-95 cursor-pointer"
+              style="background: linear-gradient(135deg, #0f766e, #0d9488)"
+              @click="closeForgotPassword"
+            >
+              <LogIn :size="15" /> Ir para a Tela de Login
+            </button>
+          </div>
+
+          <!-- Formulário de Envio -->
+          <form v-else class="space-y-4" @submit.prevent="handleForgotPasswordSubmit">
+            <!-- Erro -->
+            <div v-if="forgotError" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              <AlertCircle :size="16" class="shrink-0 text-red-500" />
+              {{ forgotError }}
+            </div>
+
+            <div class="space-y-1.5">
+              <label for="forgot-email" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Seu E-mail Institucional
+              </label>
+              <div class="relative">
+                <Mail :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="forgot-email"
+                  v-model="forgotEmail"
+                  type="email"
+                  required
+                  placeholder="seu.email@empresa.com"
+                  class="w-full rounded-xl border bg-card py-3 pl-10 pr-4 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
+                  style="--tw-ring-color: var(--color-ring)"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              :disabled="forgotLoading"
+              class="relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-3 text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+              style="background: linear-gradient(135deg, #0f766e, #0d9488)"
+            >
+              <span v-if="!forgotLoading" class="flex items-center gap-2">
+                <Send :size="16" /> Enviar Nova Senha por E-mail
+              </span>
+              <span v-else class="flex items-center gap-2">
+                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Disparando e-mail via SMTP...
+              </span>
+            </button>
+          </form>
         </div>
 
-        <!-- Error banner -->
-        <transition
-          enter-active-class="transition-all duration-200"
-          leave-active-class="transition-all duration-200"
-          enter-from-class="opacity-0 -translate-y-1"
-          leave-to-class="opacity-0 -translate-y-1"
-        >
-          <div v-if="error" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <AlertCircle :size="18" class="shrink-0 text-red-500" />
-            {{ error }}
-          </div>
-        </transition>
-
-        <!-- Form -->
-        <form class="space-y-4" @submit.prevent="handleSubmit">
-          <!-- Email -->
-          <div class="space-y-1.5">
-            <label for="login-email" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              E-mail Institucional
-            </label>
-            <div class="relative">
-              <Mail :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="login-email"
-                v-model="form.email"
-                type="email"
-                autocomplete="email"
-                placeholder="seu@empresa.com"
-                class="w-full rounded-xl border bg-card py-3 pl-10 pr-4 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
-                style="--tw-ring-color: var(--color-ring)"
-                :class="error ? 'border-red-300 bg-red-50/30' : ''"
-              />
-            </div>
+        <!-- VISÃO DE LOGIN PADRÃO -->
+        <template v-else>
+          <!-- Header -->
+          <div class="space-y-1">
+            <h2 class="text-2xl font-black tracking-tight text-foreground">
+              Bem-vindo de volta 👋
+            </h2>
+            <p class="text-sm text-muted-foreground">
+              Acesse sua conta para continuar no PeopleHub
+            </p>
           </div>
 
-          <!-- Password -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <label for="login-password" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Senha
-              </label>
-              <button type="button" class="text-xs font-medium text-teal-700 hover:underline">
-                Esqueceu a senha?
-              </button>
-            </div>
-            <div class="relative">
-              <Lock :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="login-password"
-                v-model="form.password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="••••••••"
-                class="w-full rounded-xl border bg-card py-3 pl-10 pr-12 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
-                style="--tw-ring-color: var(--color-ring)"
-                :class="error ? 'border-red-300 bg-red-50/30' : ''"
-              />
-              <button
-                type="button"
-                class="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-                :aria-label="showPassword ? 'Ocultar senha' : 'Mostrar senha'"
-                @click="showPassword = !showPassword"
-              >
-                <EyeOff v-if="showPassword" :size="17" />
-                <Eye v-else :size="17" />
-              </button>
-            </div>
-          </div>
-
-          <!-- Submit button -->
-          <button
-            type="submit"
-            :disabled="loading"
-            class="relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-3 text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60"
-            style="background: linear-gradient(135deg, #0f766e, #0d9488)"
+          <!-- Error banner -->
+          <transition
+            enter-active-class="transition-all duration-200"
+            leave-active-class="transition-all duration-200"
+            enter-from-class="opacity-0 -translate-y-1"
+            leave-to-class="opacity-0 -translate-y-1"
           >
-            <span v-if="!loading" class="flex items-center gap-2">
-              <LogIn :size="18" /> Entrar na Plataforma
-            </span>
-            <span v-else class="flex items-center gap-2">
-              <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-              Verificando credenciais...
-            </span>
-          </button>
-        </form>
+            <div v-if="error" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle :size="18" class="shrink-0 text-red-500" />
+              {{ error }}
+            </div>
+          </transition>
+
+          <!-- Botão de Preenchimento Rápido (Admin) -->
+          <div>
+            <button
+              type="button"
+              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/60 dark:bg-teal-950/20 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-100/60 transition-all cursor-pointer shadow-2xs group"
+              @click="fillAdminCredentials"
+            >
+              <span class="flex items-center gap-2">
+                <Sparkles :size="14" class="text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform" />
+                <span>Login Rápido com <strong>Admin</strong></span>
+              </span>
+              <span class="text-[10px] font-mono opacity-80 group-hover:translate-x-0.5 transition-transform">admin123 ➔</span>
+            </button>
+          </div>
+
+          <!-- FORMULÁRIO DE LOGIN -->
+          <form class="space-y-4" @submit.prevent="handleSubmit">
+            <!-- Email -->
+            <div class="space-y-1.5">
+              <label for="login-email" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                E-mail Institucional
+              </label>
+              <div class="relative">
+                <Mail :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="login-email"
+                  v-model="form.email"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="admin@empresa.com"
+                  required
+                  class="w-full rounded-xl border bg-card py-3 pl-10 pr-4 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
+                  style="--tw-ring-color: var(--color-ring)"
+                  :class="error ? 'border-red-300 bg-red-50/30' : ''"
+                />
+              </div>
+            </div>
+
+            <!-- Password -->
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label for="login-password" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Senha
+                </label>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
+                  @click="openForgotPassword"
+                >
+                  Esqueceu a senha?
+                </button>
+              </div>
+              <div class="relative">
+                <Lock :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="login-password"
+                  v-model="form.password"
+                  :type="showPassword ? 'text' : 'password'"
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                  required
+                  class="w-full rounded-xl border bg-card py-3 pl-10 pr-12 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
+                  style="--tw-ring-color: var(--color-ring)"
+                  :class="error ? 'border-red-300 bg-red-50/30' : ''"
+                />
+                <button
+                  type="button"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+                  :aria-label="showPassword ? 'Ocultar senha' : 'Mostrar senha'"
+                  @click="showPassword = !showPassword"
+                >
+                  <EyeOff v-if="showPassword" :size="17" />
+                  <Eye v-else :size="17" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Submit button -->
+            <button
+              type="submit"
+              :disabled="loading"
+              class="relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-3 text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 hover:-translate-y-0.5 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60 cursor-pointer"
+              style="background: linear-gradient(135deg, #0f766e, #0d9488)"
+            >
+              <span v-if="!loading" class="flex items-center gap-2">
+                <LogIn :size="18" /> Entrar na Plataforma
+              </span>
+              <span v-else class="flex items-center gap-2">
+                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Verificando credenciais...
+              </span>
+            </button>
+          </form>
+        </template>
+
+        <!-- Aviso corporativo: Acesso gerenciado pelo RH -->
+        <div class="rounded-xl border border-teal-500/20 bg-teal-500/5 p-3 text-xs text-teal-800 dark:text-teal-300 flex items-start gap-2.5">
+          <ShieldCheck :size="16" class="shrink-0 text-teal-600 mt-0.5" />
+          <p class="leading-relaxed">
+            <strong>Novo colaborador?</strong> O seu acesso à plataforma e credenciais iniciais são gerados pelo <strong>RH</strong> no momento da criação da sua pasta funcional.
+          </p>
+        </div>
 
         <!-- Acesso Rápido por Perfil (RH, DP, T.I. e Colaborador) -->
         <div class="space-y-3 pt-2">

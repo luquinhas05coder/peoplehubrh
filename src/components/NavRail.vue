@@ -37,6 +37,9 @@ const items = computed(() => {
 })
 
 function handleNavClick(key: string) {
+  if (currentUser.value?.mustChangePassword) {
+    return
+  }
   activeTab.value = key
   const target = items.value.find((i) => i.key === key)
   if (target?.path && router) {
@@ -64,7 +67,7 @@ function handleNavClick(key: string) {
 
     <!-- Badge do Perfil Ativo (RH / DP / TI / COLAB) -->
     <span
-      class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md tracking-wider border shadow-2xs mb-1"
+      class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md tracking-wider border shadow-2xs mb-0.5"
       :class="{
         'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30': userRoleType === 'rh',
         'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30': userRoleType === 'dp',
@@ -75,6 +78,21 @@ function handleNavClick(key: string) {
     >
       {{ userRoleType === 'colaborador' ? 'COLAB' : userRoleType.toUpperCase() }}
     </span>
+
+    <!-- Indicador de Organização / Tenant Ativo -->
+    <div
+      class="group relative flex items-center justify-center cursor-default mb-2"
+      :title="`Organização: ${currentUser?.tenantName || 'PeopleHub Matriz'}`"
+    >
+      <span class="text-[9px] font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/60 max-w-[56px] truncate text-center">
+        🏢 {{ (currentUser?.tenantName || 'Matriz').split(' ')[0] }}
+      </span>
+      <span
+        class="pointer-events-none absolute left-14 z-[60] whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+      >
+        🏢 {{ currentUser?.tenantName || 'PeopleHub Matriz' }}
+      </span>
+    </div>
 
     <!-- Botão dedicado da Central de Atendimento -->
     <button

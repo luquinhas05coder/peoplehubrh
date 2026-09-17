@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue"
-import { ShieldCheck, RefreshCw, ArrowLeft, CheckCircle2, AlertCircle, Lock } from "lucide-vue-next"
+import { ShieldCheck, RefreshCw, ArrowLeft, CheckCircle2, AlertCircle, Lock, Clock } from "lucide-vue-next"
 import { mfaCode, authStep, verifyMfaCode, resendMfaCode } from "../store"
 
 const RESEND_SECONDS = 30
@@ -80,7 +80,7 @@ async function verify() {
   error.value = null
   loading.value = true
 
-  await new Promise((r) => setTimeout(r, 700))
+  await new Promise((r) => setTimeout(r, 400))
   const result = await verifyMfaCode(code)
   loading.value = false
 
@@ -140,8 +140,8 @@ function goBack() {
         </p>
       </div>
 
-      <!-- Demo code hint -->
-      <div class="rounded-2xl border border-teal-200 bg-teal-50 px-5 py-4 flex items-start gap-3">
+      <!-- Demo code hint (se houver código simulado) -->
+      <div v-if="mfaCode" class="rounded-2xl border border-teal-200 bg-teal-50 px-5 py-4 flex items-start gap-3">
         <Lock :size="18" class="shrink-0 mt-0.5 text-teal-600" />
         <div>
           <p class="text-xs font-bold text-teal-800">Código de Verificação (Demo)</p>
@@ -150,6 +150,16 @@ function goBack() {
             {{ codeDisplay }}
           </p>
           <p class="text-[10px] text-teal-500 mt-1">Em produção, este código chegaria via app autenticador ou SMS.</p>
+        </div>
+      </div>
+      <!-- Instrução Google Authenticator / TOTP -->
+      <div v-else class="rounded-2xl border border-teal-200 bg-teal-50 dark:bg-teal-950/30 dark:border-teal-800/50 px-5 py-4 flex items-start gap-3">
+        <ShieldCheck :size="20" class="shrink-0 mt-0.5 text-teal-600 dark:text-teal-400" />
+        <div>
+          <p class="text-xs font-bold text-teal-800 dark:text-teal-200">Google Authenticator / TOTP Ativo</p>
+          <p class="text-xs text-teal-700 dark:text-teal-300 mt-0.5 leading-relaxed">
+            Abra seu aplicativo autenticador no smartphone (Google Authenticator, Authy ou Microsoft Authenticator) e digite o código de 6 dígitos.
+          </p>
         </div>
       </div>
 
@@ -230,6 +240,7 @@ function goBack() {
         </button>
 
         <button
+          v-if="mfaCode"
           type="button"
           :disabled="!canResend"
           class="flex items-center gap-1.5 transition-colors disabled:pointer-events-none"
@@ -238,8 +249,12 @@ function goBack() {
         >
           <RefreshCw :size="14" :class="canResend ? '' : 'opacity-50'" />
           <span v-if="canResend">Reenviar código</span>
-          <span v-else>Reenviar em {{ countdown }}s</span>
+          <span v-else>Aguarde {{ countdown }}s</span>
         </button>
+        <div v-else class="text-[11px] text-muted-foreground flex items-center gap-1">
+          <Clock :size="13" class="text-teal-600 dark:text-teal-400" />
+          <span>Códigos atualizam a cada 30s</span>
+        </div>
       </div>
     </div>
   </div>

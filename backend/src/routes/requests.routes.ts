@@ -1,18 +1,23 @@
 /**
- * routes/requests.routes.ts — Gestão de Solicitações & Chamados de RH
+ * routes/requests.routes.ts — Gestão de Solicitações & Chamados de RH com Multi-Tenancy
  */
 import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
+import { resolveTenant } from "../middleware/auth.js"
 
 const router = Router()
+
+// Aplicar resolução de tenant em todas as rotas de solicitações
+router.use(resolveTenant)
 
 // GET /api/requests
 router.get("/", (req: Request, res: Response) => {
   const { status, type, priority, search } = req.query as Record<string, string>
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  let sql = `SELECT * FROM requests WHERE 1=1`
-  const params: any[] = []
+  let sql = `SELECT * FROM requests WHERE tenant_id = ?`
+  const params: any[] = [tenantId]
 
   if (status) {
     sql += ` AND status = ?`
@@ -62,6 +67,7 @@ router.get("/", (req: Request, res: Response) => {
 // POST /api/requests
 router.post("/", (req: Request, res: Response) => {
   const { type, requester, department, priority, description, details } = req.body
+  const tenantId = req.tenantId || "tenant_default"
 
   if (!type || !requester || !description) {
     res.status(400).json({ ok: false, error: "Tipo, solicitante e descrição são obrigatórios." })
@@ -74,8 +80,8 @@ router.post("/", (req: Request, res: Response) => {
 
   const db = getDB()
   db.run(
-    `INSERT INTO requests (id, type, requester, department, date, status, priority, description, details_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO requests (id, type, requester, department, date, status, priority, description, details_json, tenant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       type,
@@ -86,6 +92,7 @@ router.post("/", (req: Request, res: Response) => {
       priority || "Média",
       description,
       details ? JSON.stringify(details) : null,
+      tenantId,
     ]
   )
 
@@ -97,6 +104,7 @@ router.post("/", (req: Request, res: Response) => {
 // PATCH /api/requests/:id/status
 router.patch("/:id/status", (req: Request, res: Response) => {
   const { id } = req.params
+  const tenantId = req.tenantId || "tenant_default"
   const { status } = req.body
 
   if (!status) {
@@ -105,7 +113,7 @@ router.patch("/:id/status", (req: Request, res: Response) => {
   }
 
   const db = getDB()
-  db.run(`UPDATE requests SET status = ? WHERE id = ?`, [status, id])
+  db.run(`UPDATE requests SET status = ? WHERE id = ? AND tenant_id = ?`, [status, id, tenantId])
   persist()
 
   res.json({ ok: true, message: `Status da solicitação alterado para "${status}".` })
@@ -114,9 +122,10 @@ router.patch("/:id/status", (req: Request, res: Response) => {
 // DELETE /api/requests/:id
 router.delete("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  db.run(`DELETE FROM requests WHERE id = ?`, [id])
+  db.run(`DELETE FROM requests WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
 
   res.json({ ok: true, message: "Solicitação excluída com sucesso." })
@@ -125,11 +134,12 @@ router.delete("/:id", (req: Request, res: Response) => {
 // GET /api/requests/:id
 router.get("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  const result = db.exec(`SELECT * FROM requests WHERE id = ?`, [id])
+  const result = db.exec(`SELECT * FROM requests WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   if (!result.length || !result[0].values.length) {
-    res.status(404).json({ ok: false, error: "Solicitação não encontrada." })
+    res.status(404).json({ ok: false, error: "Solicitação não encontrada nesta organização." })
     return
   }
 
@@ -150,6 +160,7 @@ router.get("/:id", (req: Request, res: Response) => {
 // PATCH /api/requests/:id (Atualização genérica de solicitação)
 router.patch("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const { status, priority, description, details } = req.body
 
   const db = getDB()
@@ -167,10 +178,12 @@ router.patch("/:id", (req: Request, res: Response) => {
   }
 
   params.push(id)
-  db.run(`UPDATE requests SET ${fields.join(", ")} WHERE id = ?`, params)
+  params.push(tenantId)
+  db.run(`UPDATE requests SET ${fields.join(", ")} WHERE id = ? AND tenant_id = ?`, params)
   persist()
 
   res.json({ ok: true, message: "Solicitação atualizada com sucesso." })
 })
 
 export default router
+

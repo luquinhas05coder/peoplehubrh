@@ -1,18 +1,23 @@
 /**
- * routes/conversations.routes.ts — Gestão de Chat Omnichannel & Mensagens
+ * routes/conversations.routes.ts — Gestão de Chat Omnichannel & Mensagens com Multi-Tenancy
  */
 import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
+import { resolveTenant } from "../middleware/auth.js"
 
 const router = Router()
+
+// Aplicar resolução de tenant em todas as rotas de conversas
+router.use(resolveTenant)
 
 // GET /api/conversations
 router.get("/", (req: Request, res: Response) => {
   const { channel, topic, status, priority, search } = req.query as Record<string, string>
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  let sql = `SELECT * FROM conversations WHERE 1=1`
-  const params: any[] = []
+  let sql = `SELECT * FROM conversations WHERE tenant_id = ?`
+  const params: any[] = [tenantId]
 
   if (channel) {
     sql += ` AND channel = ?`
@@ -104,11 +109,12 @@ router.get("/", (req: Request, res: Response) => {
 // GET /api/conversations/:id
 router.get("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  const convRes = db.exec(`SELECT * FROM conversations WHERE id = ?`, [id])
+  const convRes = db.exec(`SELECT * FROM conversations WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   if (!convRes.length || !convRes[0].values.length) {
-    res.status(404).json({ ok: false, error: "Conversa não encontrada." })
+    res.status(404).json({ ok: false, error: "Conversa não encontrada nesta organização." })
     return
   }
 
@@ -170,6 +176,7 @@ router.get("/:id", (req: Request, res: Response) => {
 // POST /api/conversations
 router.post("/", (req: Request, res: Response) => {
   const { name, channel, topic, role, department, initialMessage, assignedTo, contact } = req.body
+  const tenantId = req.tenantId || "tenant_default"
 
   if (!name || !channel || !topic) {
     res.status(400).json({ ok: false, error: "Nome, canal e tópico são obrigatórios." })
@@ -183,8 +190,8 @@ router.post("/", (req: Request, res: Response) => {
 
   const db = getDB()
   db.run(
-    `INSERT INTO conversations (id, name, initials, channel, topic, role, department, lastMessage, time, unread, online, status, priority, pinned, snoozedUntil, assignedTo, contact_email, contact_phone, contact_location, contact_tenure, contact_manager)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO conversations (id, name, initials, channel, topic, role, department, lastMessage, time, unread, online, status, priority, pinned, snoozedUntil, assignedTo, contact_email, contact_phone, contact_location, contact_tenure, contact_manager, tenant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       name,
@@ -207,6 +214,7 @@ router.post("/", (req: Request, res: Response) => {
       contact?.location || "",
       contact?.tenure || "",
       contact?.manager || "",
+      tenantId,
     ]
   )
 
@@ -234,9 +242,10 @@ router.post("/:id/messages", (req: Request, res: Response) => {
   }
 
   const db = getDB()
-  const convCheck = db.exec(`SELECT id FROM conversations WHERE id = ?`, [id])
+  const tenantId = req.tenantId || "tenant_default"
+  const convCheck = db.exec(`SELECT id FROM conversations WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   if (!convCheck.length || !convCheck[0].values.length) {
-    res.status(404).json({ ok: false, error: "Conversa não encontrada." })
+    res.status(404).json({ ok: false, error: "Conversa não encontrada nesta organização." })
     return
   }
 
@@ -251,8 +260,8 @@ router.post("/:id/messages", (req: Request, res: Response) => {
   )
 
   db.run(
-    `UPDATE conversations SET lastMessage = ?, time = ? WHERE id = ?`,
-    [text, time, id]
+    `UPDATE conversations SET lastMessage = ?, time = ? WHERE id = ? AND tenant_id = ?`,
+    [text, time, id, tenantId]
   )
 
   persist()
@@ -273,6 +282,7 @@ router.post("/:id/messages", (req: Request, res: Response) => {
 // PATCH /api/conversations/:id
 router.patch("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const { status, priority, assignedTo, pinned, snoozedUntil } = req.body
 
   const db = getDB()
@@ -306,7 +316,8 @@ router.patch("/:id", (req: Request, res: Response) => {
   }
 
   params.push(id)
-  db.run(`UPDATE conversations SET ${fields.join(", ")} WHERE id = ?`, params)
+  params.push(tenantId)
+  db.run(`UPDATE conversations SET ${fields.join(", ")} WHERE id = ? AND tenant_id = ?`, params)
   persist()
 
   res.json({ ok: true, message: "Conversa atualizada com sucesso." })
@@ -315,10 +326,17 @@ router.patch("/:id", (req: Request, res: Response) => {
 // DELETE /api/conversations/:id
 router.delete("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
+  const convCheck = db.exec(`SELECT id FROM conversations WHERE id = ? AND tenant_id = ?`, [id, tenantId])
+  if (!convCheck.length || !convCheck[0].values.length) {
+    res.status(404).json({ ok: false, error: "Conversa não encontrada nesta organização." })
+    return
+  }
+
   db.run(`DELETE FROM messages WHERE conversation_id = ?`, [id])
-  db.run(`DELETE FROM conversations WHERE id = ?`, [id])
+  db.run(`DELETE FROM conversations WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
 
   res.json({ ok: true, message: "Conversa e mensagens excluídas com sucesso." })

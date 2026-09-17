@@ -759,12 +759,24 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
 
       <!-- MODO GRADE / TABELA DE PASTAS DE COLABORADORES -->
       <section v-else>
-        <div v-if="!filteredFolders.length" class="rounded-2xl border bg-card p-12 text-center text-sm text-muted-foreground">
-          Nenhuma pasta de colaborador encontrada com os filtros atuais.
+        <div v-if="!filteredFolders.length" class="rounded-2xl border bg-card p-12 text-center text-sm text-muted-foreground flex flex-col items-center justify-center gap-3">
+          <Folder :size="40" class="text-muted-foreground/30" />
+          <div>
+            <p class="font-bold text-foreground text-base">Nenhuma pasta de colaborador encontrada</p>
+            <p class="text-xs text-muted-foreground mt-0.5">Cadastre o primeiro colaborador clicando no botão abaixo.</p>
+          </div>
+          <button
+            v-if="userPermissions.canManagePeople"
+            class="mt-1 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-primary-foreground shadow transition-all hover:opacity-95 cursor-pointer"
+            style="background-color: var(--color-primary)"
+            @click="showNewFolderModal = true"
+          >
+            <FolderPlus :size="15" /> Criar Nova Pasta
+          </button>
         </div>
 
         <!-- MODO GRADE (CARDS DE PASTAS DIGITAIS) -->
-        <div v-if="viewMode === 'grid'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div v-else-if="viewMode === 'grid'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <div
             v-for="folder in filteredFolders"
             :key="folder.id"

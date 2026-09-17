@@ -25,6 +25,8 @@ import {
   DollarSign,
   FileCheck2,
   CalendarClock,
+  ShieldCheck,
+  Send,
 } from "lucide-vue-next"
 import type { EmployeeFolder, ContractType, WorkSchedule } from "../data"
 import { contractTypeConfigs, workScheduleConfigs } from "../data"
@@ -67,6 +69,9 @@ const cpf = ref(props.folderToEdit?.cpf || "")
 const email = ref(props.folderToEdit?.email || "")
 const phone = ref(props.folderToEdit?.phone || "")
 const emailManuallyEdited = ref(!!props.folderToEdit?.email)
+
+// Envio de Credenciais por E-mail via SMTP (O RH não visualiza a senha do colaborador)
+const sendAccessEmail = ref(true)
 
 // CBO Autocomplete & ConectaGov API State
 const cbo = ref(props.folderToEdit?.cbo || "")
@@ -481,6 +486,7 @@ async function submit() {
       salary: salary.value.trim() || "R$ 6.500,00",
       contractType: contractType.value,
       workSchedule: workSchedule.value,
+      sendEmail: sendAccessEmail.value,
     })
 
     emit("created", created.id)
@@ -605,10 +611,10 @@ async function submit() {
             </div>
           </div>
 
-          <!-- E-mail Institucional -->
-          <div class="md:col-span-2">
+          <!-- E-mail Institucional / Login de Acesso -->
+          <div :class="isEditing ? 'md:col-span-2' : ''">
             <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-              E-mail Institucional
+              E-mail Institucional (Login de Acesso) <span class="text-red-500">*</span>
             </label>
             <div class="relative">
               <Mail :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -616,11 +622,47 @@ async function submit() {
                 v-model="email"
                 @input="onEmailInput"
                 type="email"
+                required
                 placeholder="carlos.santos@empresa.com"
                 class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
                 style="--tw-ring-color: var(--color-ring)"
               />
             </div>
+          </div>
+        </div>
+
+        <!-- Card de Disparo SMTP sem exibição de senha para o RH (Confidencialidade & LGPD) -->
+        <div v-if="!isEditing" class="rounded-xl border border-teal-500/30 bg-teal-50/70 dark:bg-teal-950/20 p-4 space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-500/15 pb-2.5">
+            <div class="flex items-center gap-2 text-teal-900 dark:text-teal-200">
+              <ShieldCheck :size="18" class="text-teal-600 shrink-0" />
+              <span class="text-xs font-bold">Geração Automática de Credenciais & Envio via SMTP</span>
+            </div>
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 self-start sm:self-auto">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Servidor SMTP Conectado
+            </span>
+          </div>
+
+          <div class="flex items-start gap-2.5 text-xs text-teal-900/80 dark:text-teal-200/80">
+            <p class="leading-relaxed text-[11px]">
+              🔒 <strong>Confidencialidade & LGPD:</strong> O RH <strong>não visualiza</strong> a senha do colaborador. Ao salvar esta pasta funcional, o sistema gera automaticamente uma senha temporária criptografada de alta segurança e dispara um e-mail com as orientações de login diretamente para:
+              <span class="font-bold text-foreground underline decoration-teal-500/60">{{ email || 'o e-mail do colaborador' }}</span>.
+            </p>
+          </div>
+
+          <div class="pt-1 flex items-center justify-between">
+            <label class="flex items-center gap-2 text-xs font-semibold text-teal-900 dark:text-teal-100 cursor-pointer select-none">
+              <input
+                v-model="sendAccessEmail"
+                type="checkbox"
+                class="rounded border-teal-400 text-teal-600 focus:ring-teal-500 h-4 w-4 cursor-pointer"
+              />
+              <span class="flex items-center gap-1.5">
+                <Send :size="13" class="text-teal-600" />
+                Disparar e-mail de boas-vindas com a senha inicial via SMTP
+              </span>
+            </label>
           </div>
         </div>
       </div>

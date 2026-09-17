@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { MessagesSquare } from "lucide-vue-next"
-import { chatOpen, totalUnread, isAuthenticated, authStep, activeToasts } from "./store"
+import { chatOpen, totalUnread, isAuthenticated, authStep, activeToasts, currentUser } from "./store"
 import NavRail from "./components/NavRail.vue"
 import HomeWorkspace from "./components/HomeWorkspace.vue"
 import ChatPanel from "./components/ChatPanel.vue"
 import LoginPage from "./components/LoginPage.vue"
 import MfaVerification from "./components/MfaVerification.vue"
+import FirstLoginPasswordModal from "./components/FirstLoginPasswordModal.vue"
 
 function openChat() {
   chatOpen.value = true
@@ -51,7 +52,12 @@ function toggleChat() {
     <MfaVerification v-else-if="authStep === 'mfa'" />
   </template>
 
-  <!-- Main App -->
+  <!-- Guarda Obrigatória: Redefinição de Senha no Primeiro Login -->
+  <template v-else-if="currentUser?.mustChangePassword">
+    <FirstLoginPasswordModal />
+  </template>
+
+  <!-- Main App (só monta após autenticação e senha permanente definida) -->
   <div v-else class="flex h-screen w-full overflow-hidden bg-background text-foreground">
     <NavRail
       :chat-open="chatOpen"

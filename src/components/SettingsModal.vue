@@ -8,10 +8,16 @@ import {
   Bell,
   Save,
   ShieldCheck,
+  ShieldAlert,
   Clock,
   Database,
   Download,
   CheckCircle2,
+  Smartphone,
+  QrCode,
+  Copy,
+  Check,
+  AlertTriangle,
 } from "lucide-vue-next"
 import {
   showToast,
@@ -19,6 +25,10 @@ import {
   employeeFolders,
   onboardingItems,
   onboardingTracks,
+  get2faStatus,
+  setup2fa,
+  enable2fa,
+  disable2fa,
 } from "../store"
 
 const emit = defineEmits<{
@@ -142,8 +152,83 @@ function exportBackupJson() {
   }
 }
 
+/* ─── 2FA TOTP (Google Authenticator) ─── */
+const twoFactorActive = ref(false)
+const twoFactorLoading = ref(false)
+const showSetupModal = ref(false)
+const qrCodeData = ref("")
+const secretKey = ref("")
+const verificationCode = ref("")
+const verifying2fa = ref(false)
+const copiedSecret = ref(false)
+const setupError = ref<string | null>(null)
+
+async function load2faStatus() {
+  twoFactorLoading.value = true
+  const res = await get2faStatus()
+  twoFactorActive.value = res.enabled
+  twoFactorLoading.value = false
+}
+
+async function start2faSetup() {
+  setupError.value = null
+  verificationCode.value = ""
+  twoFactorLoading.value = true
+  const res = await setup2fa()
+  twoFactorLoading.value = false
+  if (res.ok && res.secret && res.qrCode) {
+    secretKey.value = res.secret
+    qrCodeData.value = res.qrCode
+    showSetupModal.value = true
+  } else {
+    showToast(res.error || "Não foi possível iniciar a configuração de 2FA", "error")
+  }
+}
+
+function copySecret() {
+  if (!secretKey.value) return
+  navigator.clipboard.writeText(secretKey.value)
+  copiedSecret.value = true
+  setTimeout(() => {
+    copiedSecret.value = false
+  }, 2000)
+}
+
+async function confirm2fa() {
+  const clean = verificationCode.value.trim().replace(/\D/g, "")
+  if (clean.length !== 6) {
+    setupError.value = "Digite o código completo de 6 dígitos gerado pelo aplicativo."
+    return
+  }
+  setupError.value = null
+  verifying2fa.value = true
+  const res = await enable2fa(clean)
+  verifying2fa.value = false
+  if (res.ok) {
+    twoFactorActive.value = true
+    showSetupModal.value = false
+    verificationCode.value = ""
+  } else {
+    setupError.value = res.error || "Código incorreto. Verifique no app autenticador e tente novamente."
+  }
+}
+
+async function handleDisable2fa() {
+  if (!confirm("Tem certeza que deseja desativar a autenticação em duas etapas para sua conta?")) {
+    return
+  }
+  twoFactorLoading.value = true
+  const res = await disable2fa()
+  twoFactorLoading.value = false
+  if (res.ok) {
+    twoFactorActive.value = false
+    showSetupModal.value = false
+  }
+}
+
 onMounted(() => {
   loadSettings()
+  load2faStatus()
 })
 </script>
 
@@ -442,6 +527,161 @@ onMounted(() => {
 
         <!-- ─── TAB 4: SEGURANÇA & DADOS ─── -->
         <div v-else-if="activeTab === 'security'" class="space-y-4">
+          <!-- Card de Autenticação em Duas Etapas (2FA - TOTP) -->
+          <div class="rounded-xl border bg-card p-5 space-y-4 shadow-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                  <Smartphone :size="20" />
+                </div>
+                <div>
+                  <h3 class="font-bold text-foreground text-sm flex items-center gap-2">
+                    Autenticação em Duas Etapas (2FA)
+                    <span
+                      v-if="twoFactorActive"
+                      class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"
+                    >
+                      <CheckCircle2 :size="12" /> Ativo
+                    </span>
+                    <span
+                      v-else
+                      class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
+                    >
+                      Desativado
+                    </span>
+                  </h3>
+                  <p class="text-xs text-muted-foreground">Google Authenticator, Authy ou Microsoft Authenticator (TOTP)</p>
+                </div>
+              </div>
+
+              <div>
+                <button
+                  v-if="twoFactorActive"
+                  type="button"
+                  :disabled="twoFactorLoading"
+                  class="flex items-center gap-1.5 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20 px-3.5 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-100/50 cursor-pointer transition-all disabled:opacity-50"
+                  @click="handleDisable2fa"
+                >
+                  <ShieldAlert :size="14" /> Desativar 2FA
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  :disabled="twoFactorLoading"
+                  class="flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-bold text-primary-foreground shadow-sm transition-all hover:opacity-90 active:scale-95 cursor-pointer disabled:opacity-50"
+                  style="background: linear-gradient(135deg, #0f766e, #0d9488)"
+                  @click="start2faSetup"
+                >
+                  <QrCode :size="15" /> {{ twoFactorLoading ? 'Carregando...' : 'Configurar Google Authenticator' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Descrição e status -->
+            <div class="text-xs text-muted-foreground leading-relaxed">
+              <p v-if="twoFactorActive">
+                Sua conta corporativa está protegida com dupla verificação. A cada novo login será exigido um código gerado dinamicamente no seu aplicativo autenticador.
+              </p>
+              <p v-else>
+                Adicione uma camada robusta de proteção contra vazamentos de senha vinculando o Google Authenticator ou outro aplicativo compatível com o padrão TOTP.
+              </p>
+            </div>
+
+            <!-- Painel inline de Configuração do 2FA -->
+            <div
+              v-if="showSetupModal"
+              class="rounded-2xl border-2 border-teal-500/30 bg-teal-50/40 dark:bg-teal-950/20 p-5 space-y-5 animate-in fade-in zoom-in-95 duration-200"
+            >
+              <div class="flex items-center justify-between border-b border-teal-200 dark:border-teal-800/40 pb-3">
+                <div class="flex items-center gap-2">
+                  <QrCode :size="18" class="text-teal-600 dark:text-teal-400" />
+                  <h4 class="font-bold text-sm text-foreground">Configurar Aplicativo Autenticador</h4>
+                </div>
+                <button
+                  type="button"
+                  class="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                  @click="showSetupModal = false"
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                <!-- Passo 1: QR Code -->
+                <div class="flex flex-col items-center text-center space-y-3">
+                  <span class="text-xs font-bold text-foreground">1. Escaneie este QR Code no aplicativo:</span>
+                  <div class="rounded-xl border bg-white p-2.5 shadow-md">
+                    <img :src="qrCodeData" alt="QR Code 2FA TOTP" class="h-44 w-44 object-contain" />
+                  </div>
+                  <div class="space-y-1">
+                    <p class="text-[11px] text-muted-foreground">Ou insira a chave manualmente:</p>
+                    <div class="flex items-center gap-1.5 justify-center">
+                      <code class="rounded-lg bg-background border px-2 py-1 font-mono text-xs font-bold tracking-wider text-teal-700 dark:text-teal-300 select-all">
+                        {{ secretKey }}
+                      </code>
+                      <button
+                        type="button"
+                        class="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                        title="Copiar chave"
+                        @click="copySecret"
+                      >
+                        <Check v-if="copiedSecret" :size="14" class="text-emerald-500" />
+                        <Copy v-else :size="14" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Passo 2: Código de 6 dígitos -->
+                <div class="space-y-4">
+                  <div class="space-y-1.5">
+                    <span class="text-xs font-bold text-foreground">2. Digite o código de 6 dígitos gerado:</span>
+                    <p class="text-[11px] text-muted-foreground leading-relaxed">
+                      Após escanear, o Google Authenticator exibirá um código temporário de 6 dígitos referente ao <strong>PeopleHub RH</strong>.
+                    </p>
+                  </div>
+
+                  <div>
+                    <input
+                      v-model="verificationCode"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="6"
+                      placeholder="000 000"
+                      class="h-12 w-full rounded-xl border-2 bg-background text-center font-mono text-xl font-black tracking-widest outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                      @keydown.enter="confirm2fa"
+                    />
+                  </div>
+
+                  <div v-if="setupError" class="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/40 p-2.5 text-xs text-red-600 dark:text-red-400">
+                    <AlertTriangle :size="15" class="shrink-0" />
+                    <span>{{ setupError }}</span>
+                  </div>
+
+                  <div class="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      class="rounded-xl border px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                      @click="showSetupModal = false"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      :disabled="verificationCode.trim().length !== 6 || verifying2fa"
+                      class="flex-1 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-primary-foreground shadow-md transition-all hover:opacity-90 active:scale-95 cursor-pointer disabled:opacity-50"
+                      style="background: linear-gradient(135deg, #0f766e, #0d9488)"
+                      @click="confirm2fa"
+                    >
+                      <ShieldCheck :size="15" />
+                      {{ verifying2fa ? 'Validando...' : 'Ativar Proteção 2FA' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Banco de Dados e Privacidade -->
           <div class="rounded-xl border bg-card p-5 space-y-4 shadow-xs">
             <div class="flex items-center justify-between border-b pb-3">

@@ -68,6 +68,11 @@ export interface AuthUser {
   roleType?: UserRoleType
   initials: string
   department: string
+  tenantId?: string
+  tenantName?: string
+  tenantSlug?: string
+  twoFactorEnabled?: boolean
+  mustChangePassword?: boolean
 }
 
 export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
@@ -79,6 +84,9 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     roleType: "rh",
     initials: "MA",
     department: "Recursos Humanos",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
   },
   dp: {
     id: "usr_dp",
@@ -88,6 +96,9 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     roleType: "dp",
     initials: "CS",
     department: "Departamento Pessoal",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
   },
   ti: {
     id: "usr_ti",
@@ -97,6 +108,9 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     roleType: "ti",
     initials: "LM",
     department: "Tecnologia da Informação",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
   },
   colaborador: {
     id: "usr_colab",
@@ -106,12 +120,16 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     roleType: "colaborador",
     initials: "GS",
     department: "Tecnologia",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
   },
 }
 
 interface AllowedUser extends AuthUser {
   passwordHash: string
 }
+
 
 export const isAuthenticated = ref<boolean>(false)
 export const currentUser = ref<AuthUser | null>(null)
@@ -120,6 +138,33 @@ export const mfaCode = ref<string>("")
 export const pendingToken = ref<string>("")
 export const sessionToken = ref<string>("")
 let mfaPendingUser: AllowedUser | null = null
+
+/* ─── Helpers de Autenticação & Tenant para API ─────────── */
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  }
+  if (sessionToken.value) {
+    headers["Authorization"] = `Bearer ${sessionToken.value}`
+  }
+  const tenantId = currentUser.value?.tenantId || "tenant_default"
+  headers["x-tenant-id"] = tenantId
+  return headers
+}
+
+export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const authHeaders = getAuthHeaders()
+  const customHeaders = (options.headers || {}) as Record<string, string>
+  return fetch(url, {
+    ...options,
+    credentials: "include",
+    headers: {
+      ...authHeaders,
+      ...customHeaders,
+    },
+  })
+}
+
 
 export const userRoleType = computed<UserRoleType>(() => {
   if (!currentUser.value) return "rh"
@@ -165,7 +210,7 @@ function generateMfaCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-export async function loginUser(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+export async function loginUser(email: string, password: string): Promise<{ ok: boolean; require2fa?: boolean; error?: string }> {
   const e = email.toLowerCase().trim()
   let detectedRoleType: UserRoleType = "rh"
   let detectedRole = "Gestor de RH"
@@ -193,11 +238,18 @@ export async function loginUser(email: string, password: string): Promise<{ ok: 
       body: JSON.stringify({ email, password }),
     })
     const data = await res.json()
-    if (data.ok && data.user) {
+    if (data.ok && data.require2fa) {
+      pendingToken.value = data.pendingToken || ""
+      mfaCode.value = ""
+      authStep.value = "mfa"
+      showToast("Insira o código do seu aplicativo autenticador", "info")
+      return { ok: true, require2fa: true }
+    } else if (data.ok && data.user) {
       sessionToken.value = data.token || ""
       currentUser.value = {
         ...data.user,
         roleType: detectedRoleType,
+        mustChangePassword: Boolean(data.user.mustChangePassword),
       }
       isAuthenticated.value = true
       authStep.value = "done"
@@ -238,6 +290,68 @@ export async function loginUser(email: string, password: string): Promise<{ ok: 
     authStep.value = "done"
     showToast("Login efetuado com sucesso!", "success")
     return { ok: true }
+  }
+}
+
+export async function changeFirstLoginPassword(newPassword: string, currentPassword?: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionToken.value ? { Authorization: `Bearer ${sessionToken.value}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        newPassword,
+        currentPassword,
+        userId: currentUser.value?.id,
+        email: currentUser.value?.email,
+      }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      if (currentUser.value) {
+        currentUser.value.mustChangePassword = false
+      }
+      showToast(data.message || "Senha alterada com sucesso!", "success")
+      return { ok: true }
+    }
+    return { ok: false, error: data.error || "Erro ao alterar senha." }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Erro de conexão ao alterar senha." }
+  }
+}
+
+export async function registerUser(data: {
+  name: string
+  email: string
+  password: string
+  role?: string
+  department?: string
+  tenantId?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    })
+    const resData = await res.json()
+    if (resData.ok && resData.user) {
+      sessionToken.value = resData.token || ""
+      currentUser.value = resData.user
+      isAuthenticated.value = true
+      authStep.value = "done"
+      showToast(`Conta criada com sucesso! Bem-vindo, ${resData.user.name}!`, "success")
+      fetchAllFromBackend()
+      return { ok: true }
+    } else {
+      return { ok: false, error: resData.error || "Erro ao criar conta." }
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Erro de conexão ao criar conta." }
   }
 }
 
@@ -308,7 +422,7 @@ export async function checkAuthSession(): Promise<void> {
   try {
     const res = await fetch("/api/auth/me", {
       method: "GET",
-      headers: sessionToken.value ? { Authorization: `Bearer ${sessionToken.value}` } : {},
+      headers: getAuthHeaders(),
       credentials: "include",
     })
     const data = await res.json()
@@ -319,6 +433,84 @@ export async function checkAuthSession(): Promise<void> {
       fetchAllFromBackend()
     }
   } catch (_e) {}
+}
+
+/* ─── 2FA TOTP (Google Authenticator) ─── */
+export async function get2faStatus(): Promise<{ ok: boolean; enabled: boolean }> {
+  try {
+    const res = await fetch("/api/auth/2fa/status", {
+      headers: getAuthHeaders(),
+      credentials: "include",
+    })
+    const data = await res.json()
+    if (data.ok) {
+      if (currentUser.value) {
+        currentUser.value.twoFactorEnabled = data.enabled
+      }
+      return { ok: true, enabled: Boolean(data.enabled) }
+    }
+  } catch (_e) {}
+  return { ok: false, enabled: false }
+}
+
+export async function setup2fa(): Promise<{ ok: boolean; secret?: string; qrCode?: string; otpauth?: string; error?: string }> {
+  try {
+    const res = await fetch("/api/auth/2fa/setup", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      credentials: "include",
+    })
+    const data = await res.json()
+    if (data.ok) {
+      return { ok: true, secret: data.secret, qrCode: data.qrCode, otpauth: data.otpauth }
+    }
+    return { ok: false, error: data.error || "Falha ao iniciar configuração 2FA." }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Erro de conexão." }
+  }
+}
+
+export async function enable2fa(code: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/auth/2fa/enable", {
+      method: "POST",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ code }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      if (currentUser.value) {
+        currentUser.value.twoFactorEnabled = true
+      }
+      showToast("Autenticação em Duas Etapas ativada com sucesso!", "success")
+      return { ok: true }
+    }
+    return { ok: false, error: data.error || "Código 2FA incorreto." }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Erro de conexão." }
+  }
+}
+
+export async function disable2fa(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/auth/2fa/disable", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      credentials: "include",
+    })
+    const data = await res.json()
+    if (data.ok) {
+      if (currentUser.value) {
+        currentUser.value.twoFactorEnabled = false
+      }
+      showToast("Autenticação em Duas Etapas desativada.", "info")
+      return { ok: true }
+    }
+    return { ok: false, error: data.error || "Falha ao desativar 2FA." }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Erro de conexão." }
+  }
 }
 
 export async function logoutUser(): Promise<void> {
@@ -1242,6 +1434,8 @@ export async function createEmployeeFolder(payload: {
   salary?: string
   contractType?: ContractType
   workSchedule?: WorkSchedule
+  initialPassword?: string
+  sendEmail?: boolean
 }): Promise<EmployeeFolder> {
   const id = "f-" + Date.now()
   const loc = payload.location || (payload.city && payload.state ? `${payload.city}, ${payload.state}` : "São Paulo, SP")
@@ -1279,9 +1473,8 @@ export async function createEmployeeFolder(payload: {
   activeFolderId.value = id
 
   try {
-    await fetch("/api/employees", {
+    const res = await apiFetch("/api/employees", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: payload.name,
         role: payload.role,
@@ -1297,11 +1490,19 @@ export async function createEmployeeFolder(payload: {
         cboTitle: payload.cboTitle,
         contractType: payload.contractType || "prazo_indeterminado",
         workSchedule: payload.workSchedule || "escala_5x2",
+        sendEmail: payload.sendEmail !== false,
       }),
     })
-  } catch (_e) {}
+    const data = await res.json()
+    if (data.emailDispatched) {
+      showToast(`Pasta criada e credenciais enviadas por e-mail para ${payload.email}!`, "success")
+    } else {
+      showToast(`Pasta de RH criada para ${payload.name}`, "success")
+    }
+  } catch (_e) {
+    showToast(`Pasta de RH criada para ${payload.name}`, "success")
+  }
 
-  showToast(`Pasta de RH criada para ${payload.name}`, "success")
   return newFolder
 }
 
@@ -1373,9 +1574,8 @@ export async function updateEmployeeFolder(
   if (payload.workSchedule !== undefined) folder.workSchedule = payload.workSchedule
 
   try {
-    await fetch(`/api/employees/${folderId}`, {
+    await apiFetch(`/api/employees/${folderId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: folder.name,
         role: folder.role,
@@ -1414,9 +1614,8 @@ export async function updateEmployeeContractAndSchedule(
   }
 
   try {
-    await fetch(`/api/employees/${folderId}`, {
+    await apiFetch(`/api/employees/${folderId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contractType,
         workSchedule,
@@ -1437,7 +1636,7 @@ export async function deleteEmployeeFolder(folderId: string) {
     activeFolderId.value = null
   }
   try {
-    await fetch(`/api/employees/${folderId}`, { method: "DELETE" })
+    await apiFetch(`/api/employees/${folderId}`, { method: "DELETE" })
   } catch (_e) {}
   showToast("Pasta de colaborador removida.", "info")
 }
@@ -2015,10 +2214,12 @@ export async function deleteOnboardingItem(id: string) {
   showToast("Onboarding removido.", "info")
 }
 
+
+
 /* ─── Fetch global do Backend ───────────────────────────── */
 export async function fetchAllFromBackend(retries = 3) {
   try {
-    const resHealth = await fetch("/api/health")
+    const resHealth = await apiFetch("/api/health")
     if (!resHealth.ok && retries > 0) {
       setTimeout(() => fetchAllFromBackend(retries - 1), 1200)
       return
@@ -2032,7 +2233,7 @@ export async function fetchAllFromBackend(retries = 3) {
 
   // 1. Conversas
   try {
-    const resConv = await fetch("/api/conversations")
+    const resConv = await apiFetch("/api/conversations")
     const dataConv = await resConv.json()
     if (dataConv.ok && Array.isArray(dataConv.conversations) && dataConv.conversations.length > 0) {
       conversations.value = dataConv.conversations
@@ -2044,45 +2245,41 @@ export async function fetchAllFromBackend(retries = 3) {
 
   // 2. Colaboradores
   try {
-    const resEmp = await fetch("/api/employees")
+    const resEmp = await apiFetch("/api/employees")
     const dataEmp = await resEmp.json()
-    if (dataEmp.ok && Array.isArray(dataEmp.employees) && dataEmp.employees.length > 0) {
-      dataEmp.employees.forEach((emp: any, idx: number) => {
-        if (!employeeFolders.value.some((f) => f.id === emp.id || f.email === emp.email)) {
-          employeeFolders.value.unshift({
-            id: emp.id,
-            name: emp.name,
-            initials: emp.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase(),
-            cpf: emp.cpf || "000.000.000-00",
-            registration: emp.registration || String(101 + idx),
-            role: emp.role,
-            department: emp.department,
-            email: emp.email,
-            phone: emp.phone || "+55 11 90000-0000",
-            location: emp.location || "São Paulo, SP",
-            tenure: "1 ano",
-            manager: emp.manager || "RH Gestão",
-            admissionDate: emp.hireDate || "01/01/2024",
-            salary: emp.salary || "R$ 6.500,00",
-            status: (emp.status?.toLowerCase() === "ativo" ? "ativo" : emp.status?.toLowerCase()) || "ativo",
-            documents: [],
-            notes: "Importado do banco de dados.",
-            contractType: emp.contractType || "prazo_indeterminado",
-            workSchedule: emp.workSchedule || "escala_5x2",
-            customSchedulePattern: emp.customSchedulePattern
-              ? typeof emp.customSchedulePattern === "string"
-                ? JSON.parse(emp.customSchedulePattern)
-                : emp.customSchedulePattern
-              : undefined,
-          })
-        }
-      })
+    if (dataEmp.ok && Array.isArray(dataEmp.employees)) {
+      employeeFolders.value = dataEmp.employees.map((emp: any, idx: number) => ({
+        id: emp.id,
+        name: emp.name,
+        initials: emp.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase() || "US",
+        cpf: emp.cpf || "000.000.000-00",
+        registration: emp.registration || String(101 + idx),
+        role: emp.role,
+        department: emp.department,
+        email: emp.email,
+        phone: emp.phone || "+55 11 90000-0000",
+        location: emp.location || "São Paulo, SP",
+        tenure: "1 ano",
+        manager: emp.manager || "RH Gestão",
+        admissionDate: emp.hireDate || "01/01/2024",
+        salary: emp.salary || "R$ 6.500,00",
+        status: (emp.status?.toLowerCase() === "ativo" ? "ativo" : emp.status?.toLowerCase()) || "ativo",
+        documents: [],
+        notes: "Importado do banco de dados.",
+        contractType: emp.contractType || "prazo_indeterminado",
+        workSchedule: emp.workSchedule || "escala_5x2",
+        customSchedulePattern: emp.customSchedulePattern
+          ? typeof emp.customSchedulePattern === "string"
+            ? JSON.parse(emp.customSchedulePattern)
+            : emp.customSchedulePattern
+          : undefined,
+      }))
     }
   } catch (_e) {}
 
   // 3. Solicitações / Chamados
   try {
-    const resReq = await fetch("/api/requests")
+    const resReq = await apiFetch("/api/requests")
     const dataReq = await resReq.json()
     if (dataReq.ok && Array.isArray(dataReq.requests) && dataReq.requests.length > 0) {
       dataReq.requests.forEach((r: any) => {
@@ -2132,7 +2329,7 @@ export async function fetchAllFromBackend(retries = 3) {
 
   // 4. Documentos
   try {
-    const resDoc = await fetch("/api/documents")
+    const resDoc = await apiFetch("/api/documents")
     const dataDoc = await resDoc.json()
     if (dataDoc.ok && Array.isArray(dataDoc.documents) && dataDoc.documents.length > 0) {
       dataDoc.documents.forEach((d: any) => {
@@ -2162,7 +2359,7 @@ export async function fetchAllFromBackend(retries = 3) {
 
   // 5. Onboarding
   try {
-    const resOnb = await fetch("/api/onboarding")
+    const resOnb = await apiFetch("/api/onboarding")
     const dataOnb = await resOnb.json()
     if (dataOnb.ok && Array.isArray(dataOnb.onboardingItems) && dataOnb.onboardingItems.length > 0) {
       dataOnb.onboardingItems.forEach((o: any) => {

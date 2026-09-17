@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
+import { currentUser, showToast } from "../store"
 
 const routes: RouteRecordRaw[] = [
   {
@@ -68,6 +69,15 @@ const routes: RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+// Proteção de rota: bloqueia qualquer navegação caso o usuário precise redefinir sua senha obrigatória
+router.beforeEach((_to, _from, next) => {
+  if (currentUser.value?.mustChangePassword) {
+    showToast("Ação bloqueada: você deve redefinir sua senha obrigatória antes de navegar na plataforma.", "warning")
+    return next(false)
+  }
+  next()
 })
 
 export default router

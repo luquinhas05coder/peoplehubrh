@@ -1,18 +1,25 @@
 /**
- * routes/employees.routes.ts — Gestão de Colaboradores & Pastas de RH
+ * routes/employees.routes.ts — Gestão de Colaboradores & Pastas de RH com Multi-Tenancy
  */
 import { Router, type Request, type Response } from "express"
+import bcrypt from "bcryptjs"
 import { getDB, persist } from "../db/index.js"
+import { resolveTenant } from "../middleware/auth.js"
+import { sendWelcomeEmployeeEmail, generateSecureRandomPassword } from "../services/mail.service.js"
 
 const router = Router()
+
+// Aplicar resolução de tenant em todas as rotas de colaboradores
+router.use(resolveTenant)
 
 // GET /api/employees
 router.get("/", (req: Request, res: Response) => {
   const { search, department, status } = req.query as Record<string, string>
   const db = getDB()
+  const tenantId = req.tenantId || "tenant_default"
 
-  let sql = `SELECT * FROM employees WHERE 1=1`
-  const params: any[] = []
+  let sql = `SELECT * FROM employees WHERE tenant_id = ?`
+  const params: any[] = [tenantId]
 
   if (department) {
     sql += ` AND department = ?`
@@ -55,11 +62,12 @@ router.get("/", (req: Request, res: Response) => {
 // GET /api/employees/:id
 router.get("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  const result = db.exec(`SELECT * FROM employees WHERE id = ?`, [id])
+  const result = db.exec(`SELECT * FROM employees WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   if (!result.length || !result[0].values.length) {
-    res.status(404).json({ ok: false, error: "Colaborador não encontrado." })
+    res.status(404).json({ ok: false, error: "Colaborador não encontrado nesta organização." })
     return
   }
 
@@ -77,9 +85,26 @@ router.get("/:id", (req: Request, res: Response) => {
   res.json({ ok: true, employee: emp })
 })
 
-// POST /api/employees (Criar pasta de colaborador / Novo funcionário)
-router.post("/", (req: Request, res: Response) => {
-  const { name, role, department, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern } = req.body
+// POST /api/employees (Criar pasta de colaborador / Novo funcionário e envio de credenciais via SMTP)
+router.post("/", async (req: Request, res: Response) => {
+  const {
+    name,
+    role,
+    department,
+    email,
+    phone,
+    cpf,
+    hireDate,
+    salary,
+    manager,
+    location,
+    contractType,
+    workSchedule,
+    customSchedulePattern,
+    initialPassword,
+    sendEmail = true,
+  } = req.body
+  const tenantId = req.tenantId || "tenant_default"
 
   if (!name || !role || !department || !email) {
     res.status(400).json({ ok: false, error: "Nome, cargo, departamento e e-mail são obrigatórios." })
@@ -94,9 +119,10 @@ router.post("/", (req: Request, res: Response) => {
       : JSON.stringify(customSchedulePattern)
     : null
 
+  // 1. Criar pasta funcional do colaborador na tabela employees
   db.run(
-    `INSERT INTO employees (id, name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO employees (id, name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern, tenant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       name,
@@ -113,20 +139,138 @@ router.post("/", (req: Request, res: Response) => {
       contractType || "prazo_indeterminado",
       workSchedule || "escala_5x2",
       patternJson,
+      tenantId,
     ]
   )
 
+  // 2. Gerar senha temporária segura (o RH não visualiza a senha; o sistema gera e dispara ao e-mail)
+  const cleanEmail = String(email).trim().toLowerCase()
+  const cleanName = String(name).trim()
+  const userPassword = initialPassword && String(initialPassword).trim()
+    ? String(initialPassword).trim()
+    : generateSecureRandomPassword()
+
+  const hash = bcrypt.hashSync(userPassword, 10)
+  const initials = cleanName
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "US"
+
+  const userRole = role ? String(role) : "Colaborador"
+  const userDept = department ? String(department) : "Recursos Humanos"
+
+  const existingUser = db.exec(`SELECT id FROM users WHERE lower(email) = ?`, [cleanEmail])
+  if (existingUser.length && existingUser[0].values.length) {
+    const existingId = existingUser[0].values[0][0] as string
+    db.run(
+      `UPDATE users SET name = ?, password = ?, role = ?, department = ?, initials = ?, tenant_id = ?, must_change_password = 1 WHERE id = ?`,
+      [cleanName, hash, userRole, userDept, initials, tenantId, existingId]
+    )
+  } else {
+    const newUserId = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    db.run(
+      `INSERT INTO users (id, name, email, password, role, department, initials, tenant_id, two_factor_enabled, must_change_password)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)`,
+      [newUserId, cleanName, cleanEmail, hash, userRole, userDept, initials, tenantId]
+    )
+  }
+
   persist()
 
-  res.status(201).json({ ok: true, id, message: "Pasta de colaborador criada com sucesso." })
+  // 3. Buscar nome do tenant para o e-mail corporativo
+  let tenantName = "PeopleHub Matriz"
+  const tRes = db.exec(`SELECT name FROM tenants WHERE id = ?`, [tenantId])
+  if (tRes.length && tRes[0].values.length) {
+    tenantName = tRes[0].values[0][0] as string
+  }
+
+  // 4. Disparo de e-mail SMTP com a senha para o colaborador
+  let emailDispatched = false
+  let emailError: string | undefined
+
+  if (sendEmail !== false) {
+    try {
+      const mailRes = await sendWelcomeEmployeeEmail({
+        to: cleanEmail,
+        name: cleanName,
+        temporaryPassword: userPassword,
+        role: userRole,
+        department: userDept,
+        tenantName,
+      })
+      emailDispatched = mailRes.ok
+      if (!mailRes.ok) emailError = mailRes.error
+    } catch (mErr: any) {
+      emailError = mErr.message
+    }
+  }
+
+  res.status(201).json({
+    ok: true,
+    id,
+    userEmail: cleanEmail,
+    emailDispatched,
+    emailError,
+    message: emailDispatched
+      ? `Pasta de colaborador criada e credenciais de acesso enviadas via SMTP para ${cleanEmail}.`
+      : `Pasta de colaborador criada e credenciais de acesso geradas com sucesso.`,
+  })
+})
+
+// POST /api/employees/:id/resend-access-email (Reenviar e-mail de credenciais com nova senha via SMTP)
+router.post("/:id/resend-access-email", async (req: Request, res: Response) => {
+  const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
+  const db = getDB()
+
+  const result = db.exec(`SELECT name, email, role, department FROM employees WHERE id = ? AND tenant_id = ?`, [id, tenantId])
+  if (!result.length || !result[0].values.length) {
+    res.status(404).json({ ok: false, error: "Colaborador não encontrado." })
+    return
+  }
+
+  const [name, email, role, department] = result[0].values[0] as [string, string, string, string]
+  const cleanEmail = email.toLowerCase().trim()
+  const newPassword = generateSecureRandomPassword()
+  const hash = bcrypt.hashSync(newPassword, 10)
+
+  // Atualizar senha na tabela users
+  db.run(`UPDATE users SET password = ? WHERE lower(email) = ?`, [hash, cleanEmail])
+  persist()
+
+  let tenantName = "PeopleHub Matriz"
+  const tRes = db.exec(`SELECT name FROM tenants WHERE id = ?`, [tenantId])
+  if (tRes.length && tRes[0].values.length) {
+    tenantName = tRes[0].values[0][0] as string
+  }
+
+  const mailRes = await sendWelcomeEmployeeEmail({
+    to: cleanEmail,
+    name,
+    temporaryPassword: newPassword,
+    role,
+    department,
+    tenantName,
+  })
+
+  res.json({
+    ok: mailRes.ok,
+    message: mailRes.ok
+      ? `Novas credenciais de acesso enviadas via SMTP para ${cleanEmail}.`
+      : `Erro ao disparar e-mail: ${mailRes.error}`,
+  })
 })
 
 // DELETE /api/employees/:id
 router.delete("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  db.run(`DELETE FROM employees WHERE id = ?`, [id])
+  db.run(`DELETE FROM employees WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
 
   res.json({ ok: true, message: "Colaborador removido com sucesso." })
@@ -135,6 +279,7 @@ router.delete("/:id", (req: Request, res: Response) => {
 // PATCH /api/employees/:id
 router.patch("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const { name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern } = req.body
 
   const db = getDB()
@@ -171,10 +316,12 @@ router.patch("/:id", (req: Request, res: Response) => {
   }
 
   params.push(id)
-  db.run(`UPDATE employees SET ${fields.join(", ")} WHERE id = ?`, params)
+  params.push(tenantId)
+  db.run(`UPDATE employees SET ${fields.join(", ")} WHERE id = ? AND tenant_id = ?`, params)
   persist()
 
   res.json({ ok: true, message: "Cadastro do colaborador atualizado com sucesso." })
 })
 
 export default router
+

@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, reactive } from "vue"
-import { X, User, Mail, Lock, Save, Briefcase, Building, ShieldCheck } from "lucide-vue-next"
-import { currentUser, showToast, userRoleType, type UserRoleType } from "../store"
+import { ref, reactive, computed } from "vue"
+import { X, User, Mail, Save, Briefcase, Building, ShieldCheck, Lock } from "lucide-vue-next"
+import { currentUser, showToast, userRoleType, userPermissions, type UserRoleType } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 
 const emit = defineEmits<{
   (e: "close"): void
 }>()
+
+const isAdmin = computed(() => {
+  const email = (currentUser.value?.email || "").toLowerCase()
+  return email === "admin@empresa.com" || userPermissions.value.canManageSettings || userRoleType.value === "ti"
+})
 
 const form = reactive({
   name: currentUser.value?.name || "",
@@ -14,11 +19,10 @@ const form = reactive({
   role: currentUser.value?.role || "Gestor de RH",
   roleType: (currentUser.value?.roleType || userRoleType.value) as UserRoleType,
   department: currentUser.value?.department || "Recursos Humanos",
-  password: "",
-  confirmPassword: "",
 })
 
 function onRoleChange() {
+  if (!isAdmin.value) return
   if (form.roleType === "rh") {
     form.role = "Gestora de RH & DHO"
     form.department = "Recursos Humanos"
@@ -37,22 +41,17 @@ function onRoleChange() {
 const loading = ref(false)
 
 async function handleSave() {
-  if (form.password && form.password !== form.confirmPassword) {
-    showToast("As senhas não coincidem.", "error")
-    return
-  }
-
   loading.value = true
   try {
     const payload: Record<string, string> = {
       name: form.name,
       email: form.email,
-      role: form.role,
-      roleType: form.roleType,
-      department: form.department,
     }
-    if (form.password) {
-      payload.password = form.password
+
+    if (isAdmin.value) {
+      payload.role = form.role
+      payload.roleType = form.roleType
+      payload.department = form.department
     }
 
     const res = await fetch("/api/auth/profile", {
@@ -66,7 +65,9 @@ async function handleSave() {
     if (data.ok && data.user) {
       currentUser.value = {
         ...data.user,
-        roleType: form.roleType,
+        roleType: isAdmin.value ? form.roleType : (currentUser.value?.roleType || form.roleType),
+        role: isAdmin.value ? data.user.role : (currentUser.value?.role || data.user.role),
+        department: isAdmin.value ? data.user.department : (currentUser.value?.department || data.user.department),
       }
       showToast("Perfil atualizado com sucesso!", "success")
       emit("close")
@@ -81,9 +82,9 @@ async function handleSave() {
       id: currentUser.value?.id || "usr_1",
       name: rawName,
       email: form.email,
-      role: form.role,
-      roleType: form.roleType,
-      department: form.department,
+      role: isAdmin.value ? form.role : (currentUser.value?.role || form.role),
+      roleType: isAdmin.value ? form.roleType : (currentUser.value?.roleType || form.roleType),
+      department: isAdmin.value ? form.department : (currentUser.value?.department || form.department),
       initials,
     }
     showToast("Perfil atualizado com sucesso!", "success")
@@ -144,18 +145,33 @@ async function handleSave() {
               <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <ShieldCheck :size="15" class="text-primary" /> Perfil de Acesso (RBAC)
               </label>
-              <span class="text-[10px] text-muted-foreground">Define telas e permissões</span>
+              <span class="text-[10px] text-muted-foreground flex items-center gap-1">
+                <template v-if="!isAdmin">
+                  <Lock :size="11" class="text-amber-500" /> Somente Administrador
+                </template>
+                <template v-else>
+                  Define telas e permissões
+                </template>
+              </span>
             </div>
             <select
               v-model="form.roleType"
+              :disabled="!isAdmin"
               @change="onRoleChange"
-              class="w-full rounded-xl border bg-background py-2.5 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              class="w-full rounded-xl border py-2.5 px-3 text-sm font-semibold outline-none transition-colors"
+              :class="!isAdmin ? 'bg-muted/50 border-muted text-muted-foreground cursor-not-allowed' : 'bg-background cursor-pointer focus:ring-2 focus:ring-primary'"
             >
               <option value="rh">Recursos Humanos (RH) — Gestão de Pessoas & DHO</option>
               <option value="dp">Departamento Pessoal (DP) — Folha, Ponto & Férias</option>
               <option value="ti">Tecnologia da Informação (T.I.) — Segurança & Infra</option>
               <option value="colaborador">Colaborador — Portal de Autoatendimento</option>
             </select>
+
+            <div v-if="!isAdmin" class="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+              <Lock :size="14" class="shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>Suas permissões e telas de acesso são definidas exclusivamente pelo Administrador da plataforma.</span>
+            </div>
+
             <div class="mt-2 flex flex-wrap gap-1.5 text-[10px]">
               <span v-if="form.roleType === 'rh' || form.roleType === 'dp'" class="rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 px-2 py-0.5 font-medium">✓ Chat Interno</span>
               <span v-if="form.roleType === 'rh' || form.roleType === 'dp'" class="rounded bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-0.5 font-medium">✓ Pastas Colaboradores</span>
@@ -184,35 +200,42 @@ async function handleSave() {
 
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1.5">
-              <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Cargo / Função</label>
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Cargo / Função</label>
+                <span v-if="!isAdmin" class="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Lock :size="10" /> Somente Leitura
+                </span>
+              </div>
               <div class="relative">
                 <Briefcase :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input v-model="form.role" type="text" required class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary" />
+                <input
+                  v-model="form.role"
+                  type="text"
+                  :readonly="!isAdmin"
+                  :class="!isAdmin ? 'bg-muted/50 border-muted text-muted-foreground cursor-not-allowed select-none' : 'bg-background focus:ring-2 focus:ring-primary'"
+                  class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm outline-none"
+                  :title="!isAdmin ? 'O cargo/função é definido pelo RH/Administrador e não pode ser alterado aqui.' : ''"
+                />
               </div>
             </div>
 
             <div class="space-y-1.5">
-              <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Departamento</label>
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Departamento</label>
+                <span v-if="!isAdmin" class="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Lock :size="10" /> Somente Leitura
+                </span>
+              </div>
               <div class="relative">
                 <Building :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input v-model="form.department" type="text" required class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary" />
-              </div>
-            </div>
-          </div>
-
-          <!-- Alteração de Senha -->
-          <div class="rounded-xl border bg-muted/20 p-4 space-y-3 pt-3">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Lock :size="14" /> Alterar Senha (Opcional)
-            </h4>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Nova Senha</label>
-                <input v-model="form.password" type="password" placeholder="••••••••" class="w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary" />
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold text-muted-foreground mb-1">Confirmar Nova Senha</label>
-                <input v-model="form.confirmPassword" type="password" placeholder="••••••••" class="w-full rounded-lg border bg-background px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary" />
+                <input
+                  v-model="form.department"
+                  type="text"
+                  :readonly="!isAdmin"
+                  :class="!isAdmin ? 'bg-muted/50 border-muted text-muted-foreground cursor-not-allowed select-none' : 'bg-background focus:ring-2 focus:ring-primary'"
+                  class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm outline-none"
+                  :title="!isAdmin ? 'O departamento é definido pelo RH/Administrador e não pode ser alterado aqui.' : ''"
+                />
               </div>
             </div>
           </div>

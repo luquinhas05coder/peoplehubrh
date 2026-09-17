@@ -54,6 +54,19 @@ export function persist(): void {
 }
 
 function runMigrations(): void {
+  // Tenants (Organizações / Empresas)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      slug       TEXT UNIQUE NOT NULL,
+      cnpj       TEXT,
+      plan       TEXT DEFAULT 'pro',
+      status     TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `)
+
   // Users
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -64,6 +77,10 @@ function runMigrations(): void {
       role       TEXT NOT NULL,
       department TEXT NOT NULL,
       initials   TEXT NOT NULL,
+      tenant_id  TEXT,
+      two_factor_secret TEXT,
+      two_factor_enabled INTEGER DEFAULT 0,
+      must_change_password INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `)
@@ -103,7 +120,8 @@ function runMigrations(): void {
       contact_phone    TEXT,
       contact_location TEXT,
       contact_tenure   TEXT,
-      contact_manager  TEXT
+      contact_manager  TEXT,
+      tenant_id        TEXT
     );
   `)
 
@@ -139,7 +157,8 @@ function runMigrations(): void {
       location     TEXT NOT NULL,
       contractType TEXT,
       workSchedule TEXT,
-      customSchedulePattern TEXT
+      customSchedulePattern TEXT,
+      tenant_id    TEXT
     );
   `)
   try {
@@ -163,7 +182,8 @@ function runMigrations(): void {
       status      TEXT NOT NULL,
       priority    TEXT NOT NULL,
       description TEXT NOT NULL,
-      details_json TEXT
+      details_json TEXT,
+      tenant_id   TEXT
     );
   `)
 
@@ -177,7 +197,8 @@ function runMigrations(): void {
       date         TEXT NOT NULL,
       status       TEXT NOT NULL,
       fileUrl      TEXT NOT NULL,
-      type         TEXT NOT NULL
+      type         TEXT NOT NULL,
+      tenant_id    TEXT
     );
   `)
 
@@ -192,32 +213,150 @@ function runMigrations(): void {
       mentor        TEXT NOT NULL,
       status        TEXT NOT NULL,
       progress      INTEGER NOT NULL,
-      steps_json    TEXT NOT NULL
+      steps_json    TEXT NOT NULL,
+      tenant_id     TEXT
     );
   `)
 
-  console.log("[DB] Tabelas criadas/verificadas com sucesso.")
+  // Migrações dinâmicas para adicionar tenant_id em bases já existentes
+  const tablesWithTenant = ["users", "conversations", "employees", "requests", "documents", "onboarding"]
+  for (const table of tablesWithTenant) {
+    try {
+      db.run(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT;`)
+    } catch (_e) {}
+  }
+
+  // Suporte a 2FA TOTP (Google Authenticator)
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN two_factor_secret TEXT;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0;`)
+  } catch (_e) {}
+
+  // Índices para garantir rapidez e eficiência nos filtros por tenant_id
+  const tenantIndexes = [
+    "CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);",
+    "CREATE INDEX IF NOT EXISTS idx_conversations_tenant ON conversations(tenant_id);",
+    "CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees(tenant_id);",
+    "CREATE INDEX IF NOT EXISTS idx_requests_tenant ON requests(tenant_id);",
+    "CREATE INDEX IF NOT EXISTS idx_documents_tenant ON documents(tenant_id);",
+    "CREATE INDEX IF NOT EXISTS idx_onboarding_tenant ON onboarding(tenant_id);",
+  ]
+  for (const idxSql of tenantIndexes) {
+    try {
+      db.run(idxSql)
+    } catch (_e) {}
+  }
+
+  console.log("[DB] Tabelas e índices criados/verificados com sucesso.")
 }
 
 function seedInitialData(): void {
-  // Garantir a conta de Administrador para testes
-  const adminHash = bcrypt.hashSync("admin123", 10)
-  db.run(`DELETE FROM users WHERE lower(email) = 'admin@empresa.com'`)
-  db.run(
-    `INSERT INTO users (id, name, email, password, role, department, initials)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ["u_admin", "Administrador PeopleHub", "admin@empresa.com", adminHash, "Administrador da Plataforma", "Tecnologia", "AD"]
-  )
-  console.log("[DB] Usuário Admin (admin@empresa.com / admin123) configurado com sucesso.")
+  // Garantir existência dos Tenants padrão
+  db.run(`
+    INSERT OR IGNORE INTO tenants (id, name, slug, cnpj, plan, status)
+    VALUES 
+      ('tenant_default', 'PeopleHub Matriz', 'matriz', '12.345.678/0001-90', 'enterprise', 'active'),
+      ('tenant_techcorp', 'TechCorp Inovações', 'techcorp', '98.765.432/0001-10', 'pro', 'active');
+  `)
+
+  // Garantir a existência de contas de usuários padrão para teste
+  const defaultUsers = [
+    {
+      id: "u_admin",
+      name: "Administrador PeopleHub",
+      email: "admin@empresa.com",
+      password: "admin123",
+      role: "Administrador da Plataforma",
+      department: "Tecnologia",
+      initials: "AD",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_rh",
+      name: "Mariana Alcantara",
+      email: "rh@peoplehub.com.br",
+      password: "admin123",
+      role: "Gestora de RH & DHO",
+      department: "Recursos Humanos",
+      initials: "MA",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_dp",
+      name: "Carlos Eduardo Souza",
+      email: "dp@peoplehub.com.br",
+      password: "admin123",
+      role: "Especialista em DP & Folha",
+      department: "Departamento Pessoal",
+      initials: "CS",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_ti",
+      name: "Lucas Barros",
+      email: "ti@peoplehub.com.br",
+      password: "admin123",
+      role: "Administrador de Sistemas & TI",
+      department: "Tecnologia da Informação",
+      initials: "LB",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_colab",
+      name: "Gabriel Santos",
+      email: "colaborador@peoplehub.com.br",
+      password: "admin123",
+      role: "Colaborador",
+      department: "Operações",
+      initials: "GS",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_techcorp_admin",
+      name: "Fernanda Lima",
+      email: "admin@techcorp.com.br",
+      password: "admin123",
+      role: "Diretora de RH",
+      department: "Gestão Corporativa",
+      initials: "FL",
+      tenant_id: "tenant_techcorp",
+    },
+  ]
+
+  for (const u of defaultUsers) {
+    const userCheck = db.exec(`SELECT id FROM users WHERE lower(email) = lower(?)`, [u.email])
+    if (!userCheck.length || !userCheck[0].values.length) {
+      const hash = bcrypt.hashSync(u.password, 10)
+      db.run(
+        `INSERT INTO users (id, name, email, password, role, department, initials, tenant_id, two_factor_enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        [u.id, u.name, u.email, hash, u.role, u.department, u.initials, u.tenant_id]
+      )
+    }
+  }
+  console.log("[DB] Usuários padrão (admin, rh, dp, ti, colaborador) configurados com senha 'admin123'.")
+
+  // Vincular registros legados ao tenant padrão
+  const tables = ["users", "conversations", "employees", "requests", "documents", "onboarding"]
+  for (const t of tables) {
+    try {
+      db.run(`UPDATE ${t} SET tenant_id = 'tenant_default' WHERE tenant_id IS NULL OR tenant_id = '';`)
+    } catch (_e) {}
+  }
 
   // Limpar tabelas de dados de demonstração/testes fictícios se existirem
-  db.run(`DELETE FROM conversations`)
-  db.run(`DELETE FROM messages`)
+  db.run(`DELETE FROM conversations WHERE id IN ('conv-1', 'conv-2')`)
+  db.run(`DELETE FROM messages WHERE id IN ('msg-1', 'msg-2')`)
   db.run(`DELETE FROM employees WHERE id IN ('emp-1', 'emp-2')`)
   db.run(`DELETE FROM requests WHERE id IN ('REQ-001', 'REQ-002')`)
   db.run(`DELETE FROM documents WHERE id IN ('DOC-101', 'DOC-102')`)
   db.run(`DELETE FROM onboarding WHERE id IN ('ONB-01')`)
   persist()
 
-  console.log("[DB] Banco de dados inicializado e limpo de dados de teste.")
+  console.log("[DB] Banco de dados inicializado com suporte a Multi-Tenancy.")
 }

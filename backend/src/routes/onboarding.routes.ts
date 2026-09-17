@@ -1,18 +1,23 @@
 /**
- * routes/onboarding.routes.ts — Gestão do Módulo de Integração (Onboarding)
+ * routes/onboarding.routes.ts — Gestão do Módulo de Integração (Onboarding) com Multi-Tenancy
  */
 import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
+import { resolveTenant } from "../middleware/auth.js"
 
 const router = Router()
+
+// Aplicar resolução de tenant em todas as rotas de onboarding
+router.use(resolveTenant)
 
 // GET /api/onboarding
 router.get("/", (req: Request, res: Response) => {
   const { status, department } = req.query as Record<string, string>
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  let sql = `SELECT * FROM onboarding WHERE 1=1`
-  const params: any[] = []
+  let sql = `SELECT * FROM onboarding WHERE tenant_id = ?`
+  const params: any[] = [tenantId]
 
   if (status) {
     sql += ` AND status = ?`
@@ -54,6 +59,7 @@ router.get("/", (req: Request, res: Response) => {
 // POST /api/onboarding
 router.post("/", (req: Request, res: Response) => {
   const { candidateName, role, department, startDate, mentor } = req.body
+  const tenantId = req.tenantId || "tenant_default"
 
   if (!candidateName || !role || !department) {
     res.status(400).json({ ok: false, error: "Nome, cargo e departamento são obrigatórios." })
@@ -71,8 +77,8 @@ router.post("/", (req: Request, res: Response) => {
 
   const db = getDB()
   db.run(
-    `INSERT INTO onboarding (id, candidateName, role, department, startDate, mentor, status, progress, steps_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO onboarding (id, candidateName, role, department, startDate, mentor, status, progress, steps_json, tenant_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       candidateName,
@@ -83,6 +89,7 @@ router.post("/", (req: Request, res: Response) => {
       "Em Progresso",
       0,
       JSON.stringify(defaultSteps),
+      tenantId,
     ]
   )
 
@@ -94,6 +101,7 @@ router.post("/", (req: Request, res: Response) => {
 // PATCH /api/onboarding/:id/step
 router.patch("/:id/step", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const { stepId, done } = req.body
 
   if (stepId === undefined || done === undefined) {
@@ -102,10 +110,10 @@ router.patch("/:id/step", (req: Request, res: Response) => {
   }
 
   const db = getDB()
-  const result = db.exec(`SELECT steps_json FROM onboarding WHERE id = ?`, [id])
+  const result = db.exec(`SELECT steps_json FROM onboarding WHERE id = ? AND tenant_id = ?`, [id, tenantId])
 
   if (!result.length || !result[0].values.length) {
-    res.status(404).json({ ok: false, error: "Onboarding não encontrado." })
+    res.status(404).json({ ok: false, error: "Onboarding não encontrado nesta organização." })
     return
   }
 
@@ -126,8 +134,8 @@ router.patch("/:id/step", (req: Request, res: Response) => {
   const status = progress === 100 ? "Concluído" : "Em Progresso"
 
   db.run(
-    `UPDATE onboarding SET steps_json = ?, progress = ?, status = ? WHERE id = ?`,
-    [JSON.stringify(steps), progress, status, id]
+    `UPDATE onboarding SET steps_json = ?, progress = ?, status = ? WHERE id = ? AND tenant_id = ?`,
+    [JSON.stringify(steps), progress, status, id, tenantId]
   )
 
   persist()
@@ -138,9 +146,10 @@ router.patch("/:id/step", (req: Request, res: Response) => {
 // DELETE /api/onboarding/:id
 router.delete("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  db.run(`DELETE FROM onboarding WHERE id = ?`, [id])
+  db.run(`DELETE FROM onboarding WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
 
   res.json({ ok: true, message: "Processo de onboarding excluído com sucesso." })
@@ -149,11 +158,12 @@ router.delete("/:id", (req: Request, res: Response) => {
 // GET /api/onboarding/:id
 router.get("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
-  const result = db.exec(`SELECT * FROM onboarding WHERE id = ?`, [id])
+  const result = db.exec(`SELECT * FROM onboarding WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   if (!result.length || !result[0].values.length) {
-    res.status(404).json({ ok: false, error: "Processo de onboarding não encontrado." })
+    res.status(404).json({ ok: false, error: "Processo de onboarding não encontrado nesta organização." })
     return
   }
 
@@ -174,6 +184,7 @@ router.get("/:id", (req: Request, res: Response) => {
 // PATCH /api/onboarding/:id (Atualização genérica)
 router.patch("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
+  const tenantId = req.tenantId || "tenant_default"
   const { candidateName, role, department, startDate, mentor, status } = req.body
 
   const db = getDB()
@@ -193,10 +204,12 @@ router.patch("/:id", (req: Request, res: Response) => {
   }
 
   params.push(id)
-  db.run(`UPDATE onboarding SET ${fields.join(", ")} WHERE id = ?`, params)
+  params.push(tenantId)
+  db.run(`UPDATE onboarding SET ${fields.join(", ")} WHERE id = ? AND tenant_id = ?`, params)
   persist()
 
   res.json({ ok: true, message: "Onboarding atualizado com sucesso." })
 })
 
 export default router
+

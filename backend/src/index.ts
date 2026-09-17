@@ -4,7 +4,15 @@
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser"
+import path from "path"
+import { fileURLToPath } from "url"
 import dotenv from "dotenv"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+dotenv.config({ path: path.resolve(__dirname, "../.env") })
+dotenv.config({ path: path.resolve(__dirname, "../../.env") })
+dotenv.config()
 
 import { initDB } from "./db/index.js"
 import authRoutes from "./routes/auth.routes.js"
@@ -20,8 +28,6 @@ import pdfRoutes from "./routes/pdf.routes.js"
 
 import swaggerUi from "swagger-ui-express"
 import { swaggerSpec } from "./swagger.js"
-
-dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 3001
