@@ -5,12 +5,15 @@ import { Router, type Request, type Response } from "express"
 import bcrypt from "bcryptjs"
 import { getDB, persist } from "../db/index.js"
 import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC, requirePermission, recordAuditLog } from "../middleware/rbac.js"
+import { roleHasPermission } from "../constants/rbac.js"
 import { sendWelcomeEmployeeEmail, generateSecureRandomPassword } from "../services/mail.service.js"
 
 const router = Router()
 
-// Aplicar resolução de tenant em todas as rotas de colaboradores
+// Aplicar autenticação RBAC e resolução de tenant em todas as rotas de colaboradores
 router.use(resolveTenant)
+router.use(authenticateRBAC)
 
 // GET /api/employees
 router.get("/", (req: Request, res: Response) => {
@@ -18,8 +21,22 @@ router.get("/", (req: Request, res: Response) => {
   const db = getDB()
   const tenantId = req.tenantId || "tenant_default"
 
+  const scope = req.access?.scope || "OWN"
+  const userEmail = (req.access?.email || "").toLowerCase()
+  const userDept = req.access?.department || ""
+  const userName = req.access?.name || ""
+
   let sql = `SELECT * FROM employees WHERE tenant_id = ?`
   const params: any[] = [tenantId]
+
+  // Enforçamento estrito de escopo de dados RBAC
+  if (scope === "OWN") {
+    sql += ` AND lower(email) = ?`
+    params.push(userEmail)
+  } else if (scope === "TEAM") {
+    sql += ` AND (department = ? OR manager = ? OR lower(email) = ?)`
+    params.push(userDept, userName, userEmail)
+  }
 
   if (department) {
     sql += ` AND department = ?`
@@ -43,6 +60,8 @@ router.get("/", (req: Request, res: Response) => {
   }
 
   const columns = result[0].columns
+  const canViewSensitive = roleHasPermission(req.access?.role || "COLABORADOR", "employees.view_sensitive")
+
   const employees = result[0].values.map((row) => {
     const emp: any = {}
     columns.forEach((col, idx) => {
@@ -53,13 +72,28 @@ router.get("/", (req: Request, res: Response) => {
         emp.customSchedulePattern = JSON.parse(emp.customSchedulePattern)
       } catch (_e) {}
     }
+    if (emp.customMonthlyOverrides && typeof emp.customMonthlyOverrides === "string") {
+      try {
+        emp.customMonthlyOverrides = JSON.parse(emp.customMonthlyOverrides)
+      } catch (_e) {}
+    }
+
+    // Mascaramento de dados confidenciais (salário, CPF) quando fora de permissão
+    const isOwn = emp.email && emp.email.toLowerCase() === userEmail
+    if (!canViewSensitive && !isOwn) {
+      emp.salary = "Confidencial"
+      if (emp.cpf) {
+        emp.cpf = emp.cpf.substring(0, 3) + ".***.***-**"
+      }
+    }
+
     return emp
   })
 
   res.json({ ok: true, employees })
 })
 
-// GET /api/employees/:id
+// GET /api/employees/:id (ou /api/funcionarios/:id) — Perfil Completo Consolidado
 router.get("/:id", (req: Request, res: Response) => {
   const id = String(req.params.id)
   const tenantId = req.tenantId || "tenant_default"
@@ -76,17 +110,170 @@ router.get("/:id", (req: Request, res: Response) => {
   result[0].values[0].forEach((val, idx) => {
     emp[columns[idx]] = val
   })
+
+  // Validação de Escopo RBAC para acesso a perfil individual
+  const scope = req.access?.scope || "OWN"
+  const userEmail = (req.access?.email || "").toLowerCase()
+  const userDept = req.access?.department || ""
+  const userName = req.access?.name || ""
+  const isOwnRecord = emp.email && emp.email.toLowerCase() === userEmail
+
+  if (scope === "OWN" && !isOwnRecord) {
+    res.status(403).json({
+      ok: false,
+      error: "Acesso negado: Seu perfil só possui permissão para visualizar seu próprio perfil de colaborador.",
+    })
+    return
+  }
+
+  if (scope === "TEAM" && !isOwnRecord) {
+    const isSameDept = emp.department && emp.department.toLowerCase() === userDept.toLowerCase()
+    const isManager = emp.manager && emp.manager.toLowerCase() === userName.toLowerCase()
+    if (!isSameDept && !isManager) {
+      res.status(403).json({
+        ok: false,
+        error: "Acesso negado: Este colaborador não pertence à sua equipe ou departamento.",
+      })
+      return
+    }
+  }
+
+  const canViewSensitive = roleHasPermission(req.access?.role || "COLABORADOR", "employees.view_sensitive")
+  if (!canViewSensitive && !isOwnRecord) {
+    emp.salary = "Confidencial"
+    if (emp.cpf) {
+      emp.cpf = emp.cpf.substring(0, 3) + ".***.***-**"
+    }
+  }
+
   if (emp.customSchedulePattern && typeof emp.customSchedulePattern === "string") {
     try {
       emp.customSchedulePattern = JSON.parse(emp.customSchedulePattern)
     } catch (_e) {}
   }
+  if (emp.customMonthlyOverrides && typeof emp.customMonthlyOverrides === "string") {
+    try {
+      emp.customMonthlyOverrides = JSON.parse(emp.customMonthlyOverrides)
+    } catch (_e) {}
+  }
 
-  res.json({ ok: true, employee: emp })
+  // 1. Documentos vinculados
+  const docsRes = db.exec(
+    `SELECT id, name, category, employeeName, expiryDate, date, status, fileUrl, type 
+     FROM documents 
+     WHERE tenant_id = ? AND (employee_id = ? OR employeeName = ?)
+     ORDER BY date DESC`,
+    [tenantId, id, emp.name]
+  )
+  const documents: any[] = []
+  if (docsRes.length && docsRes[0].values.length) {
+    const docCols = docsRes[0].columns
+    docsRes[0].values.forEach((row) => {
+      const docItem: any = {}
+      docCols.forEach((col, idx) => { docItem[col] = row[idx] })
+      documents.push(docItem)
+    })
+  }
+
+  // 2. Solicitações relacionadas ao colaborador
+  const reqRes = db.exec(
+    `SELECT id, type, requester, department, date, status, priority, description, details_json
+     FROM requests 
+     WHERE tenant_id = ? AND requester = ?
+     ORDER BY date DESC`,
+    [tenantId, emp.name]
+  )
+  const requests: any[] = []
+  const vacationRequests: any[] = []
+  if (reqRes.length && reqRes[0].values.length) {
+    const reqCols = reqRes[0].columns
+    reqRes[0].values.forEach((row) => {
+      const rItem: any = {}
+      reqCols.forEach((col, idx) => { rItem[col] = row[idx] })
+      if (rItem.details_json && typeof rItem.details_json === "string") {
+        try { rItem.details = JSON.parse(rItem.details_json) } catch (_e) {}
+      }
+      requests.push(rItem)
+      if (rItem.type?.toLowerCase().includes("ferias") || rItem.type?.toLowerCase().includes("férias")) {
+        vacationRequests.push(rItem)
+      }
+    })
+  }
+
+  // 3. Férias consolidadas
+  const diasAprovados = vacationRequests
+    .filter((r) => r.status?.toLowerCase() === "aprovado")
+    .reduce((acc, curr) => acc + (curr.details?.days || 15), 0)
+
+  const vacation = {
+    diasDisponiveis: Math.max(30 - diasAprovados, 0),
+    diasUtilizados: diasAprovados,
+    solicitacoesFerias: vacationRequests,
+    proximoPeriodo: "Período Aquisitivo 2024/2025",
+    temFeriasPendentes: vacationRequests.some((r) => ["pendente", "em análise", "em_analise"].includes(r.status?.toLowerCase())),
+  }
+
+  // 4. Histórico Funcional / Auditoria
+  const histRes = db.exec(
+    `SELECT id, type, title, description, old_value, new_value, created_by, created_at 
+     FROM employee_history 
+     WHERE tenant_id = ? AND employee_id = ?
+     ORDER BY created_at DESC`,
+    [tenantId, id]
+  )
+  const history: any[] = []
+  if (histRes.length && histRes[0].values.length) {
+    const histCols = histRes[0].columns
+    histRes[0].values.forEach((row) => {
+      const hItem: any = {}
+      histCols.forEach((col, idx) => { hItem[col] = row[idx] })
+      history.push(hItem)
+    })
+  } else {
+    // Se não houver histórico, cria um marco de Admissão visual
+    history.push({
+      id: `hist_adm_${emp.id}`,
+      type: "admissao",
+      title: "Admissão Cadastrada",
+      description: `Início das atividades profissionais na empresa como ${emp.role}.`,
+      old_value: null,
+      new_value: emp.salary,
+      created_by: "Sistema RH",
+      created_at: emp.hireDate || "2024-01-01",
+    })
+  }
+
+  // 5. Cálculo do tempo de empresa
+  let tenure = "Menos de 1 ano"
+  if (emp.hireDate) {
+    try {
+      const hireTime = new Date(emp.hireDate).getTime()
+      if (!isNaN(hireTime)) {
+        const diffMonths = Math.floor((Date.now() - hireTime) / (1000 * 60 * 60 * 24 * 30.4))
+        const years = Math.floor(diffMonths / 12)
+        const months = diffMonths % 12
+        if (years > 0) {
+          tenure = `${years} ano${years > 1 ? "s" : ""}${months > 0 ? ` e ${months} m${months > 1 ? "eses" : "ês"}` : ""}`
+        } else {
+          tenure = `${Math.max(months, 1)} m${months > 1 ? "eses" : "ês"}`
+        }
+      }
+    } catch (_e) {}
+  }
+  emp.tenure = tenure
+
+  res.json({
+    ok: true,
+    employee: emp,
+    documents,
+    requests,
+    vacation,
+    history,
+  })
 })
 
 // POST /api/employees (Criar pasta de colaborador / Novo funcionário e envio de credenciais via SMTP)
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requirePermission("employees.create"), async (req: Request, res: Response) => {
   const {
     name,
     role,
@@ -180,6 +367,17 @@ router.post("/", async (req: Request, res: Response) => {
 
   persist()
 
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "EMPLOYEE_CREATE",
+    entity: "employees",
+    entityId: id,
+    details: { name: cleanName, role: userRole, department: userDept, email: cleanEmail },
+    tenantId,
+  })
+
   // 3. Buscar nome do tenant para o e-mail corporativo
   let tenantName = "PeopleHub Matriz"
   const tRes = db.exec(`SELECT name FROM tenants WHERE id = ?`, [tenantId])
@@ -221,7 +419,7 @@ router.post("/", async (req: Request, res: Response) => {
 })
 
 // POST /api/employees/:id/resend-access-email (Reenviar e-mail de credenciais com nova senha via SMTP)
-router.post("/:id/resend-access-email", async (req: Request, res: Response) => {
+router.post("/:id/resend-access-email", requirePermission("employees.update"), async (req: Request, res: Response) => {
   const id = String(req.params.id)
   const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
@@ -256,6 +454,17 @@ router.post("/:id/resend-access-email", async (req: Request, res: Response) => {
     tenantName,
   })
 
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "EMPLOYEE_RESET_PASSWORD",
+    entity: "employees",
+    entityId: id,
+    details: { email: cleanEmail },
+    tenantId,
+  })
+
   res.json({
     ok: mailRes.ok,
     message: mailRes.ok
@@ -265,7 +474,7 @@ router.post("/:id/resend-access-email", async (req: Request, res: Response) => {
 })
 
 // DELETE /api/employees/:id
-router.delete("/:id", (req: Request, res: Response) => {
+router.delete("/:id", requirePermission("employees.delete"), (req: Request, res: Response) => {
   const id = String(req.params.id)
   const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
@@ -273,16 +482,88 @@ router.delete("/:id", (req: Request, res: Response) => {
   db.run(`DELETE FROM employees WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
 
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "EMPLOYEE_DELETE",
+    entity: "employees",
+    entityId: id,
+    tenantId,
+  })
+
   res.json({ ok: true, message: "Colaborador removido com sucesso." })
 })
 
-// PATCH /api/employees/:id
-router.patch("/:id", (req: Request, res: Response) => {
+// Helper comum para atualização de colaborador com auditoria funcional
+function handleEmployeeUpdate(req: Request, res: Response) {
   const id = String(req.params.id)
   const tenantId = req.tenantId || "tenant_default"
-  const { name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, customSchedulePattern } = req.body
+  const {
+    name,
+    role,
+    department,
+    status,
+    email,
+    phone,
+    cpf,
+    hireDate,
+    terminationDate,
+    salary,
+    manager,
+    location,
+    contractType,
+    workSchedule,
+    birthDate,
+    address,
+    city,
+    state,
+    cep,
+    notes,
+    customSchedulePattern,
+    customMonthlyOverrides,
+  } = req.body
 
   const db = getDB()
+
+  // Buscar dados anteriores para registrar histórico de auditoria
+  const oldRes = db.exec(`SELECT * FROM employees WHERE id = ? AND tenant_id = ?`, [id, tenantId])
+  if (!oldRes.length || !oldRes[0].values.length) {
+    res.status(404).json({ ok: false, error: "Colaborador não encontrado." })
+    return
+  }
+
+  const oldCols = oldRes[0].columns
+  const oldEmp: any = {}
+  oldRes[0].values[0].forEach((val, idx) => {
+    oldEmp[oldCols[idx]] = val
+  })
+
+  // Validação de permissões e escopos RBAC
+  const userRole = req.access?.role || "COLABORADOR"
+  const bodyKeys = Object.keys(req.body)
+  const isScheduleOnly = bodyKeys.length > 0 && bodyKeys.every(
+    (k) => k === "customSchedulePattern" || k === "customMonthlyOverrides" || req.body[k] === undefined
+  )
+
+  if (isScheduleOnly && roleHasPermission(userRole, "schedules.manage")) {
+    if (req.access?.scope === "TEAM") {
+      const isTeam = oldEmp.department === req.access.department || oldEmp.manager === req.access.name
+      if (!isTeam) {
+        res.status(403).json({ ok: false, error: "Acesso negado: Este colaborador não pertence à sua equipe." })
+        return
+      }
+    }
+  } else {
+    if (!roleHasPermission(userRole, "employees.update")) {
+      res.status(403).json({
+        ok: false,
+        error: `Acesso negado: Seu perfil (${userRole}) não possui permissão para editar dados cadastrais de funcionários.`,
+      })
+      return
+    }
+  }
+
   const fields: string[] = []
   const params: any[] = []
 
@@ -294,11 +575,18 @@ router.patch("/:id", (req: Request, res: Response) => {
   if (phone !== undefined) { fields.push("phone = ?"); params.push(phone) }
   if (cpf !== undefined) { fields.push("cpf = ?"); params.push(cpf) }
   if (hireDate !== undefined) { fields.push("hireDate = ?"); params.push(hireDate) }
+  if (terminationDate !== undefined) { fields.push("terminationDate = ?"); params.push(terminationDate) }
   if (salary !== undefined) { fields.push("salary = ?"); params.push(salary) }
   if (manager !== undefined) { fields.push("manager = ?"); params.push(manager) }
   if (location !== undefined) { fields.push("location = ?"); params.push(location) }
   if (contractType !== undefined) { fields.push("contractType = ?"); params.push(contractType) }
   if (workSchedule !== undefined) { fields.push("workSchedule = ?"); params.push(workSchedule) }
+  if (birthDate !== undefined) { fields.push("birthDate = ?"); params.push(birthDate) }
+  if (address !== undefined) { fields.push("address = ?"); params.push(address) }
+  if (city !== undefined) { fields.push("city = ?"); params.push(city) }
+  if (state !== undefined) { fields.push("state = ?"); params.push(state) }
+  if (cep !== undefined) { fields.push("cep = ?"); params.push(cep) }
+  if (notes !== undefined) { fields.push("notes = ?"); params.push(notes) }
   if (customSchedulePattern !== undefined) {
     fields.push("customSchedulePattern = ?")
     params.push(
@@ -306,6 +594,16 @@ router.patch("/:id", (req: Request, res: Response) => {
         ? typeof customSchedulePattern === "string"
           ? customSchedulePattern
           : JSON.stringify(customSchedulePattern)
+        : null
+    )
+  }
+  if (customMonthlyOverrides !== undefined) {
+    fields.push("customMonthlyOverrides = ?")
+    params.push(
+      customMonthlyOverrides
+        ? typeof customMonthlyOverrides === "string"
+          ? customMonthlyOverrides
+          : JSON.stringify(customMonthlyOverrides)
         : null
     )
   }
@@ -318,10 +616,64 @@ router.patch("/:id", (req: Request, res: Response) => {
   params.push(id)
   params.push(tenantId)
   db.run(`UPDATE employees SET ${fields.join(", ")} WHERE id = ? AND tenant_id = ?`, params)
+
+  // Auditoria automática no employee_history
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19)
+
+  if (role !== undefined && role !== oldEmp.role) {
+    db.run(
+      `INSERT INTO employee_history (id, employee_id, tenant_id, type, title, description, old_value, new_value, created_by, created_at)
+       VALUES (?, ?, ?, 'cargo', 'Alteração de Cargo', ?, ?, ?, 'Gestor RH', ?)`,
+      [`hist_${Date.now()}_cargo`, id, tenantId, `Cargo alterado de "${oldEmp.role}" para "${role}".`, oldEmp.role, role, nowStr]
+    )
+  }
+
+  if (salary !== undefined && salary !== oldEmp.salary) {
+    db.run(
+      `INSERT INTO employee_history (id, employee_id, tenant_id, type, title, description, old_value, new_value, created_by, created_at)
+       VALUES (?, ?, ?, 'salario', 'Reajuste / Alteração Salarial', ?, ?, ?, 'Gestor RH', ?)`,
+      [`hist_${Date.now()}_sal`, id, tenantId, `Salário base alterado de ${oldEmp.salary} para ${salary}.`, oldEmp.salary, salary, nowStr]
+    )
+  }
+
+  if (department !== undefined && department !== oldEmp.department) {
+    db.run(
+      `INSERT INTO employee_history (id, employee_id, tenant_id, type, title, description, old_value, new_value, created_by, created_at)
+       VALUES (?, ?, ?, 'departamento', 'Mudança de Departamento', ?, ?, ?, 'Gestor RH', ?)`,
+      [`hist_${Date.now()}_dept`, id, tenantId, `Transferência do departamento "${oldEmp.department}" para "${department}".`, oldEmp.department, department, nowStr]
+    )
+  }
+
+  if (status !== undefined && status !== oldEmp.status) {
+    db.run(
+      `INSERT INTO employee_history (id, employee_id, tenant_id, type, title, description, old_value, new_value, created_by, created_at)
+       VALUES (?, ?, ?, 'status', 'Alteração de Status', ?, ?, ?, 'Gestor RH', ?)`,
+      [`hist_${Date.now()}_stat`, id, tenantId, `Status cadastral atualizado de "${oldEmp.status}" para "${status}".`, oldEmp.status, status, nowStr]
+    )
+  }
+
   persist()
 
-  res.json({ ok: true, message: "Cadastro do colaborador atualizado com sucesso." })
-})
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "EMPLOYEE_UPDATE",
+    entity: "employees",
+    entityId: id,
+    details: { fieldsUpdated: fields.map((f) => f.split(" ")[0]) },
+    tenantId,
+  })
+
+  res.json({ ok: true, message: "Funcionário atualizado com sucesso." })
+}
+
+// PUT /api/employees/:id
+router.put("/:id", handleEmployeeUpdate)
+
+// PATCH /api/employees/:id
+router.patch("/:id", handleEmployeeUpdate)
 
 export default router
+
 

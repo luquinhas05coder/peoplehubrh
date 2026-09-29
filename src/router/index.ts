@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
-import { currentUser, showToast } from "../store"
+import { currentUser, showToast, hasRole, isAuthenticated, type UserRole } from "../store"
 
 const routes: RouteRecordRaw[] = [
   {
@@ -40,7 +40,7 @@ const routes: RouteRecordRaw[] = [
     path: "/onboarding",
     name: "Onboarding",
     component: () => import("../components/OnboardingModule.vue"),
-    meta: { tab: "onboarding" },
+    meta: { tab: "onboarding", requiresRoles: ["ADMIN", "RH", "GESTOR"] as UserRole[] },
   },
   {
     path: "/solicitacoes",
@@ -52,7 +52,43 @@ const routes: RouteRecordRaw[] = [
     path: "/relatorios",
     name: "Relatorios",
     component: () => import("../components/ReportsModule.vue"),
-    meta: { tab: "relatorios" },
+    meta: { tab: "relatorios", requiresRoles: ["ADMIN", "RH", "GESTOR"] as UserRole[] },
+  },
+  {
+    path: "/dashboard",
+    name: "Dashboard",
+    component: () => import("../components/HomeWorkspace.vue"),
+    meta: { tab: "dashboard" },
+  },
+  {
+    path: "/feed",
+    name: "Feed",
+    component: () => import("../components/CorporateFeedModule.vue"),
+    meta: { tab: "feed" },
+  },
+  {
+    path: "/eventos-adversos",
+    name: "EventosAdversos",
+    component: () => import("../components/AdverseEventsModule.vue"),
+    meta: { tab: "eventos-adversos" },
+  },
+  {
+    path: "/usuarios",
+    name: "Usuarios",
+    component: () => import("../components/UsersModule.vue"),
+    meta: { tab: "usuarios", requiresRoles: ["ADMIN"] as UserRole[] },
+  },
+  {
+    path: "/acesso-negado",
+    name: "AcessoNegado",
+    component: () => import("../components/AccessDeniedView.vue"),
+    meta: { tab: "acesso-negado" },
+  },
+  {
+    path: "/funcionarios/:id",
+    name: "FuncionarioPerfil",
+    component: () => import("../components/EmployeeProfilePage.vue"),
+    meta: { tab: "perfil_funcionario" },
   },
   {
     path: "/login",
@@ -71,12 +107,33 @@ export const router = createRouter({
   routes,
 })
 
-// Proteção de rota: bloqueia qualquer navegação caso o usuário precise redefinir sua senha obrigatória
-router.beforeEach((_to, _from, next) => {
-  if (currentUser.value?.mustChangePassword) {
+// Proteção de rotas RBAC, prevenção de trap na tela de login e verificação de senha
+router.beforeEach((to, _from, next) => {
+  // 1. Prevenção de loop/trap: se o usuário já está logado e clica em Voltar voltando a /login, redireciona para /home
+  if (isAuthenticated.value && to.path === "/login") {
+    return next("/home")
+  }
+
+  // 2. Se o usuário NÃO está logado e tenta acessar rotas internas, vai para /login
+  if (!isAuthenticated.value && to.path !== "/login") {
+    return next("/login")
+  }
+
+  // 3. Usuário com redefinição de senha obrigatória
+  if (currentUser.value?.mustChangePassword && to.path !== "/login") {
     showToast("Ação bloqueada: você deve redefinir sua senha obrigatória antes de navegar na plataforma.", "warning")
     return next(false)
   }
+
+  // 4. Verificação de permissões RBAC por perfil
+  const requiredRoles = to.meta.requiresRoles as UserRole[] | undefined
+  if (requiredRoles && requiredRoles.length > 0) {
+    if (!hasRole(requiredRoles)) {
+      showToast(`Acesso negado: esta página requer o perfil ${requiredRoles.join(" ou ")}.`, "error")
+      return next("/acesso-negado")
+    }
+  }
+
   next()
 })
 

@@ -25,6 +25,11 @@ import reportsRoutes from "./routes/reports.routes.js"
 import integrationsRoutes from "./routes/integrations.routes.js"
 import cboRoutes from "./routes/cbo.routes.js"
 import pdfRoutes from "./routes/pdf.routes.js"
+import contrachequesRoutes from "./routes/contracheques.routes.js"
+import dashboardRoutes from "./routes/dashboard.routes.js"
+import usersRoutes from "./routes/users.routes.js"
+import adverseEventsRoutes from "./routes/adverse_events.routes.js"
+import feedRoutes from "./routes/feed.routes.js"
 
 import swaggerUi from "swagger-ui-express"
 import { swaggerSpec } from "./swagger.js"
@@ -58,6 +63,8 @@ app.use((req, _res, next) => {
 app.use("/api/auth", authRoutes)
 app.use("/api/conversations", conversationsRoutes)
 app.use("/api/employees", employeesRoutes)
+app.use("/api/funcionarios", employeesRoutes) // Alias em Português conforme solicitado
+app.use("/api/dashboard", dashboardRoutes)
 app.use("/api/requests", requestsRoutes)
 app.use("/api/documents", documentsRoutes)
 app.use("/api/onboarding", onboardingRoutes)
@@ -65,6 +72,10 @@ app.use("/api/reports", reportsRoutes)
 app.use("/api/integrations", integrationsRoutes)
 app.use("/api/cbo", cboRoutes)
 app.use("/api/pdf", pdfRoutes)
+app.use("/api/contracheques", contrachequesRoutes)
+app.use("/api/users", usersRoutes)
+app.use("/api/adverse-events", adverseEventsRoutes)
+app.use("/api/feed", feedRoutes)
 
 app.get("/", (_req, res) => {
   res.send(`
@@ -137,7 +148,7 @@ app.use((req, res) => {
 // Middleware global de tratamento de erros
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("❌ Erro interno no servidor:", err)
-  res.status(500).json({ ok: false, error: "Erro interno no servidor de API." })
+  res.status(500).json({ ok: false, error: err?.message || "Erro interno no servidor de API." })
 })
 
 initDB()

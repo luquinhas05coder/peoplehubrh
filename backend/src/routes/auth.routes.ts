@@ -54,99 +54,104 @@ router.post("/register", async (_req: Request, res: Response) => {
 
 // POST /api/auth/login
 router.post("/login", async (req: Request, res: Response) => {
-  const { email, password } = req.body as { email?: string; password?: string }
+  try {
+    const { email, password } = req.body as { email?: string; password?: string }
 
-  if (!email || !password) {
-    res.status(400).json({ ok: false, error: "E-mail e senha são obrigatórios." })
-    return
-  }
+    if (!email || !password) {
+      res.status(400).json({ ok: false, error: "E-mail e senha são obrigatórios." })
+      return
+    }
 
-  const db = getDB()
-  const result = db.exec(
-    `SELECT id, name, email, password, role, department, initials, tenant_id, two_factor_enabled, two_factor_secret, must_change_password FROM users WHERE lower(email) = lower(?)`,
-    [email]
-  )
+    const db = getDB()
+    const result = db.exec(
+      `SELECT id, name, email, password, role, department, initials, tenant_id, two_factor_enabled, two_factor_secret, must_change_password FROM users WHERE lower(email) = lower(?)`,
+      [email]
+    )
 
-  let userObj: { id: string; name: string; email: string; role: string; department: string; initials: string; tenant_id: string; two_factor_enabled: number; must_change_password: number }
+    let userObj: { id: string; name: string; email: string; role: string; department: string; initials: string; tenant_id: string; two_factor_enabled: number; must_change_password: number }
 
-  if (!result.length || !result[0].values.length) {
-    res.status(401).json({
-      ok: false,
-      error: "Usuário não encontrado. O acesso à plataforma deve ser cadastrado previamente pelo RH ao criar a pasta do colaborador.",
+    if (!result.length || !result[0].values.length) {
+      res.status(401).json({
+        ok: false,
+        error: "Usuário não encontrado. O acesso à plataforma deve ser cadastrado previamente pelo RH ao criar a pasta do colaborador.",
+      })
+      return
+    }
+
+    const [id, name, userEmail, hash, role, department, initials, rawTenantId, raw2faEnabled, _secret, rawMustChange] = result[0].values[0] as [string, string, string, string, string, string, string, string | null, number | null, string | null, number | null]
+    const valid = await bcrypt.compare(password, hash)
+
+    if (!valid) {
+      res.status(401).json({ ok: false, error: "E-mail ou senha incorretos." })
+      return
+    }
+
+    const tenantId = rawTenantId || "tenant_default"
+    userObj = {
+      id,
+      name,
+      email: userEmail,
+      role,
+      department,
+      initials,
+      tenant_id: tenantId,
+      two_factor_enabled: raw2faEnabled === 1 ? 1 : 0,
+      must_change_password: rawMustChange === 1 ? 1 : 0,
+    }
+
+    // Se o 2FA (Google Authenticator) estiver habilitado para este usuário, bloquear emissão direta de token
+    if (userObj.two_factor_enabled === 1) {
+      const pendingToken = signPendingToken(userObj.id, userObj.email)
+      res.json({
+        ok: true,
+        require2fa: true,
+        pendingToken,
+        message: "Autenticação em duas etapas (2FA) necessária. Abra seu app autenticador.",
+      })
+      return
+    }
+
+    // Buscar dados da organização (Tenant)
+    let tenantName = "PeopleHub Matriz"
+    let tenantSlug = "matriz"
+    const tRes = db.exec(`SELECT name, slug FROM tenants WHERE id = ?`, [userObj.tenant_id])
+    if (tRes.length && tRes[0].values.length) {
+      tenantName = tRes[0].values[0][0] as string
+      tenantSlug = tRes[0].values[0][1] as string
+    }
+
+    const token = signSessionToken(userObj.id, userObj.email, userObj.tenant_id, tenantName, userObj.role, userObj.department, userObj.name)
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 8 * 60 * 60 * 1000,
     })
-    return
-  }
+    persist()
 
-  const [id, name, userEmail, hash, role, department, initials, rawTenantId, raw2faEnabled, _secret, rawMustChange] = result[0].values[0] as [string, string, string, string, string, string, string, string | null, number | null, string | null, number | null]
-  const valid = await bcrypt.compare(password, hash)
-
-  if (!valid) {
-    res.status(401).json({ ok: false, error: "E-mail ou senha incorretos." })
-    return
-  }
-
-  const tenantId = rawTenantId || "tenant_default"
-  userObj = {
-    id,
-    name,
-    email: userEmail,
-    role,
-    department,
-    initials,
-    tenant_id: tenantId,
-    two_factor_enabled: raw2faEnabled === 1 ? 1 : 0,
-    must_change_password: rawMustChange === 1 ? 1 : 0,
-  }
-
-  // Se o 2FA (Google Authenticator) estiver habilitado para este usuário, bloquear emissão direta de token
-  if (userObj.two_factor_enabled === 1) {
-    const pendingToken = signPendingToken(userObj.id, userObj.email)
     res.json({
       ok: true,
-      require2fa: true,
-      pendingToken,
-      message: "Autenticação em duas etapas (2FA) necessária. Abra seu app autenticador.",
+      token,
+      user: {
+        ...userObj,
+        twoFactorEnabled: false,
+        mustChangePassword: userObj.must_change_password === 1,
+        tenantId: userObj.tenant_id,
+        tenantName,
+        tenantSlug,
+      },
+      tenant: {
+        id: userObj.tenant_id,
+        name: tenantName,
+        slug: tenantSlug,
+      },
+      message: "Login efetuado com sucesso.",
     })
-    return
+  } catch (err: any) {
+    console.error("❌ [LOGIN ERROR]:", err)
+    res.status(500).json({ ok: false, error: err?.message || "Erro interno ao processar login." })
   }
-
-  // Buscar dados da organização (Tenant)
-  let tenantName = "PeopleHub Matriz"
-  let tenantSlug = "matriz"
-  const tRes = db.exec(`SELECT name, slug FROM tenants WHERE id = ?`, [userObj.tenant_id])
-  if (tRes.length && tRes[0].values.length) {
-    tenantName = tRes[0].values[0][0] as string
-    tenantSlug = tRes[0].values[0][1] as string
-  }
-
-  const token = signSessionToken(userObj.id, userObj.email, userObj.tenant_id, tenantName)
-
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 8 * 60 * 60 * 1000,
-  })
-  persist()
-
-  res.json({
-    ok: true,
-    token,
-    user: {
-      ...userObj,
-      twoFactorEnabled: false,
-      mustChangePassword: userObj.must_change_password === 1,
-      tenantId: userObj.tenant_id,
-      tenantName,
-      tenantSlug,
-    },
-    tenant: {
-      id: userObj.tenant_id,
-      name: tenantName,
-      slug: tenantSlug,
-    },
-    message: "Login efetuado com sucesso.",
-  })
 })
 
 // POST /api/auth/verify-mfa

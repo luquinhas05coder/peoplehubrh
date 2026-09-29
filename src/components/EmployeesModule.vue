@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, onMounted, watch } from "vue"
+import { useRouter } from "vue-router"
 import {
   Folder,
   FolderPlus,
@@ -25,22 +26,49 @@ import {
   DollarSign,
   CalendarClock,
   FileCheck2,
+  FolderArchive,
 } from "lucide-vue-next"
-import type { DocCategory, EmployeeFolder } from "../data"
+import type { DocCategory, EmployeeFolder, ContractType, WorkSchedule } from "../data"
 import { docCategoryLabels, contractTypeConfigs, workScheduleConfigs } from "../data"
-import { employeeFolders, activeFolderId, addDocumentToFolder, deleteDocumentFromFolder, deleteEmployeeFolder, userRoleType, userPermissions } from "../store"
+import {
+  activeTab,
+  employeeFolders,
+  activeFolderId,
+  addDocumentToFolder,
+  deleteDocumentFromFolder,
+  deleteEmployeeFolder,
+  userRoleType,
+  userPermissions,
+  currentUser,
+} from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import NewEmployeeFolderModal from "./NewEmployeeFolderModal.vue"
 import HoleriteCard from "./HoleriteCard.vue"
 import FolhaDePontoCard from "./FolhaDePontoCard.vue"
 import EscalaContratoCard from "./EscalaContratoCard.vue"
+import ExportDossierModal from "./ExportDossierModal.vue"
+
+const router = useRouter()
 
 const search = ref("")
 const selectedDepartment = ref("todos")
 const selectedStatus = ref("todos")
 const selectedContractType = ref("todos")
 const selectedWorkSchedule = ref("todos")
+const sortBy = ref<"nome_asc" | "nome_desc" | "admissao_desc" | "matricula_asc">("nome_asc")
+const currentPage = ref(1)
+const itemsPerPage = ref(8)
 const viewMode = ref<"grid" | "table">("grid")
+
+function goToEmployeeProfile(id: string) {
+  activeTab.value = "perfil_funcionario"
+  router.push(`/funcionarios/${id}`)
+}
+
+// Resetar página ao alterar filtros
+watch([search, selectedDepartment, selectedStatus, selectedContractType, selectedWorkSchedule, sortBy], () => {
+  currentPage.value = 1
+})
 
 const showNewFolderModal = ref(false)
 const activeFolderViewTab = ref<"ficha" | "escala_contrato" | "holerite" | "ponto">("ficha")
@@ -144,6 +172,27 @@ const filteredFolders = computed(() => {
   })
 })
 
+const sortedFolders = computed(() => {
+  const list = [...filteredFolders.value]
+  if (sortBy.value === "nome_asc") {
+    return list.sort((a, b) => a.name.localeCompare(b.name))
+  } else if (sortBy.value === "nome_desc") {
+    return list.sort((a, b) => b.name.localeCompare(a.name))
+  } else if (sortBy.value === "admissao_desc") {
+    return list.sort((a, b) => (b.admissionDate || "").localeCompare(a.admissionDate || ""))
+  } else if (sortBy.value === "matricula_asc") {
+    return list.sort((a, b) => (a.registration || "").localeCompare(b.registration || "", undefined, { numeric: true }))
+  }
+  return list
+})
+
+const totalPages = computed(() => Math.ceil(sortedFolders.value.length / itemsPerPage.value) || 1)
+
+const paginatedFolders = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return sortedFolders.value.slice(start, start + itemsPerPage.value)
+})
+
 const activeFolder = computed(() => {
   if (!activeFolderId.value) return null
   return employeeFolders.value.find((f) => f.id === activeFolderId.value) ?? null
@@ -189,6 +238,33 @@ function handleFolderCreated(id: string) {
   openFolder(id)
 }
 
+// Exportação da Pasta / Dossiê do Colaborador em PDF (Requisitável pelo Colaborador ou pelo Técnico)
+const showExportDossierModal = ref(false)
+const folderForDossier = ref<EmployeeFolder | null>(null)
+
+function openDossierForFolder(folder: EmployeeFolder) {
+  folderForDossier.value = folder
+  showExportDossierModal.value = true
+}
+
+const myFolder = computed(() => {
+  const currentEmail = currentUser.value?.email?.toLowerCase() || ""
+  const currentName = currentUser.value?.name?.toLowerCase() || ""
+  return (
+    employeeFolders.value.find(
+      (f) =>
+        (f.email && f.email.toLowerCase() === currentEmail) ||
+        (f.name && f.name.toLowerCase().includes(currentName))
+    ) || employeeFolders.value[0] || null
+  )
+})
+
+onMounted(() => {
+  if (userPermissions.value.isColaborador && myFolder.value) {
+    activeFolderId.value = myFolder.value.id
+  }
+})
+
 function handleAddDocument() {
   if (!activeFolderId.value || !newDocName.value.trim()) return
   const finalSize = newDocSize.value || `${(Math.random() * 2 + 0.5).toFixed(1)} MB`
@@ -225,11 +301,33 @@ const docsInCategory = computed(() => {
   return activeFolder.value.documents.filter((d) => d.category === activeDocTab.value)
 })
 
-const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: string; label: string }> = {
+const statusBadgeStyles: Record<string, { bg: string; color: string; label: string }> = {
   ativo: { bg: "var(--color-success-soft)", color: "var(--color-success)", label: "Ativo" },
   ferias: { bg: "var(--color-accent-soft)", color: "var(--color-accent)", label: "Em Férias" },
   afastado: { bg: "var(--color-danger-soft)", color: "var(--color-danger)", label: "Afastado" },
   desligado: { bg: "var(--color-muted)", color: "var(--color-muted-foreground)", label: "Desligado" },
+  inativo: { bg: "var(--color-muted)", color: "var(--color-muted-foreground)", label: "Inativo" },
+}
+
+function getStatusStyle(status?: string) {
+  const key = (status || "ativo").toLowerCase()
+  return (
+    statusBadgeStyles[key] || {
+      bg: "var(--color-muted)",
+      color: "var(--color-muted-foreground)",
+      label: status || "Ativo",
+    }
+  )
+}
+
+function getContractMeta(key?: string) {
+  const k = (key as ContractType) || "prazo_indeterminado"
+  return contractTypeConfigs[k] || contractTypeConfigs.prazo_indeterminado
+}
+
+function getScheduleMeta(key?: string) {
+  const k = (key as WorkSchedule) || "escala_5x2"
+  return workScheduleConfigs[k] || workScheduleConfigs.escala_5x2
 }
 </script>
 
@@ -369,7 +467,11 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
     <header v-if="!showNewFolderModal && !isEditingFolder" class="border-b bg-card px-5 py-4 sm:px-8">
       <!-- 1. CABEÇALHO QUANDO VISUALIZANDO UM COLABORADOR ESPECÍFICO -->
       <div v-if="activeFolder" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div v-if="userPermissions.isColaborador" class="flex items-center gap-2">
+          <span class="text-sm font-bold text-foreground">Minha Pasta & Dossiê Funcional</span>
+        </div>
         <button
+          v-else
           class="flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow hover:bg-teal-700 hover:shadow-md transition-all active:scale-95 cursor-pointer self-start"
           @click="closeFolder"
           title="Voltar para a lista de colaboradores"
@@ -377,14 +479,21 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
           <ArrowLeft :size="17" /> Voltar para Colaboradores
         </button>
 
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-muted-foreground">Pasta ativa:</span>
+        <div class="flex items-center gap-2.5">
+          <button
+            class="flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/40 dark:border-indigo-700 px-3.5 py-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-all shadow-sm cursor-pointer"
+            @click="openDossierForFolder(activeFolder)"
+            title="Gerar e exportar Dossiê Funcional completo da página em PDF"
+          >
+            <FolderArchive :size="15" class="text-indigo-600" /> Exportar Dossiê (PDF)
+          </button>
+          <span class="text-xs text-muted-foreground hidden sm:inline">Pasta ativa:</span>
           <span class="text-sm font-bold text-foreground">{{ activeFolder.name }}</span>
           <span
             class="rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-            :style="{ backgroundColor: statusBadgeStyles[activeFolder.status].bg, color: statusBadgeStyles[activeFolder.status].color }"
+            :style="{ backgroundColor: getStatusStyle(activeFolder.status).bg, color: getStatusStyle(activeFolder.status).color }"
           >
-            {{ statusBadgeStyles[activeFolder.status].label }}
+            {{ getStatusStyle(activeFolder.status).label }}
           </span>
         </div>
       </div>
@@ -404,14 +513,24 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
             </p>
           </div>
 
-          <button
-            v-if="!userPermissions.isColaborador"
-            class="flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 font-semibold text-sm text-primary-foreground shadow transition-transform hover:-translate-y-0.5 active:scale-95 shrink-0 cursor-pointer"
-            style="background-color: var(--color-primary)"
-            @click="openNewFolderForm"
-          >
-            <FolderPlus :size="18" /> Nova Pasta de Colaborador
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="userPermissions.isColaborador && myFolder"
+              class="flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 font-semibold text-sm border border-teal-600/30 bg-teal-500/10 text-teal-800 dark:text-teal-300 hover:bg-teal-500/20 shadow transition-all cursor-pointer"
+              @click="openDossierForFolder(myFolder)"
+              title="Exportar meu dossiê funcional completo em PDF"
+            >
+              <FolderArchive :size="18" /> Meu Dossiê (PDF)
+            </button>
+            <button
+              v-if="!userPermissions.isColaborador"
+              class="flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 font-semibold text-sm text-primary-foreground shadow transition-transform hover:-translate-y-0.5 active:scale-95 shrink-0 cursor-pointer"
+              style="background-color: var(--color-primary)"
+              @click="openNewFolderForm"
+            >
+              <FolderPlus :size="18" /> Nova Pasta de Colaborador
+            </button>
+          </div>
         </div>
 
         <!-- Barra de Filtros & Busca (só aparece na listagem geral) -->
@@ -466,6 +585,17 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
               </option>
             </select>
 
+            <select
+              v-model="sortBy"
+              class="rounded-xl border bg-background px-3 py-2 text-xs font-medium outline-none shrink-0 cursor-pointer"
+              title="Ordenar colaboradores"
+            >
+              <option value="nome_asc">Nome (A - Z)</option>
+              <option value="nome_desc">Nome (Z - A)</option>
+              <option value="admissao_desc">Admissão Recente</option>
+              <option value="matricula_asc">Matrícula</option>
+            </select>
+
             <div class="flex items-center rounded-xl border bg-background p-1 shrink-0">
               <button
                 class="rounded-lg p-1.5 transition-colors cursor-pointer"
@@ -517,9 +647,9 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 <h2 class="text-xl font-bold">{{ activeFolder.name }}</h2>
                 <span
                   class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
-                  :style="{ backgroundColor: statusBadgeStyles[activeFolder.status].bg, color: statusBadgeStyles[activeFolder.status].color }"
+                  :style="{ backgroundColor: getStatusStyle(activeFolder.status).bg, color: getStatusStyle(activeFolder.status).color }"
                 >
-                  {{ statusBadgeStyles[activeFolder.status].label }}
+                  {{ getStatusStyle(activeFolder.status).label }}
                 </span>
               </div>
               <p class="text-sm text-muted-foreground">{{ activeFolder.role }} · <span class="font-medium text-foreground">{{ activeFolder.department }}</span></p>
@@ -531,15 +661,15 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 </span>
                 <span
                   class="flex items-center gap-1 font-semibold px-2 py-0.5 rounded text-xs"
-                  :class="[contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado'].badgeBg, contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado'].badgeColor]"
+                  :class="[getContractMeta(activeFolder.contractType).badgeBg, getContractMeta(activeFolder.contractType).badgeColor]"
                 >
-                  <FileCheck2 :size="13" /> {{ contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado'].label }}
+                  <FileCheck2 :size="13" /> {{ getContractMeta(activeFolder.contractType).label }}
                 </span>
                 <span
                   class="flex items-center gap-1 font-semibold px-2 py-0.5 rounded text-xs"
-                  :class="[workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2'].badgeBg, workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2'].badgeColor]"
+                  :class="[getScheduleMeta(activeFolder.workSchedule).badgeBg, getScheduleMeta(activeFolder.workSchedule).badgeColor]"
                 >
-                  <Clock :size="13" /> {{ workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2'].label }}
+                  <Clock :size="13" /> {{ getScheduleMeta(activeFolder.workSchedule).label }}
                 </span>
                 <span class="flex items-center gap-1"><Clock :size="13" /> Admissão: {{ activeFolder.admissionDate }}</span>
               </div>
@@ -547,19 +677,34 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
           </div>
 
           <div class="flex items-center gap-2 border-t pt-3 sm:border-t-0 sm:pt-0">
+            <!-- Botão Dossiê em PDF: visível para todos (destaque para o Colaborador e Técnico) -->
             <button
+              class="flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/40 dark:border-indigo-700 px-4 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-all shadow-sm cursor-pointer"
+              @click="openDossierForFolder(activeFolder)"
+              title="Gerar e exportar Dossiê Funcional completo da página em PDF"
+            >
+              <FolderArchive :size="16" class="text-indigo-600" />
+              <span>Exportar Dossiê (PDF)</span>
+            </button>
+
+            <button
+              v-if="!userPermissions.isColaborador"
               class="flex items-center gap-1.5 rounded-xl border border-teal-600/30 bg-teal-500/10 px-3.5 py-2 text-xs font-bold text-teal-800 hover:bg-teal-500/20 transition-all shadow-sm cursor-pointer"
               @click="openEditFolder(activeFolder)"
             >
               <Edit3 :size="15" /> Editar Colaborador
             </button>
+
             <button
+              v-if="!userPermissions.isColaborador"
               class="flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
               @click="showAddDocModal = true"
             >
               <FileUp :size="15" style="color: var(--color-primary)" /> Adicionar Arquivo
             </button>
+
             <button
+              v-if="!userPermissions.isColaborador"
               class="flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
               @click="handleDeleteFolder(activeFolder.id, activeFolder.name)"
             >
@@ -584,8 +729,8 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
             @click="activeFolderViewTab = 'escala_contrato'"
           >
             <CalendarClock :size="15" class="text-teal-600" />
-            <span>Escala & Tipo de Contrato</span>
-            <span class="rounded-full bg-teal-500/20 text-teal-800 text-[10px] font-bold px-2 py-0.2">Jornada & Vínculo</span>
+            <span>Escala & Calendário Mensal</span>
+            <span class="rounded-full bg-teal-500/20 text-teal-800 text-[10px] font-bold px-2 py-0.2">Folgas & Férias</span>
           </button>
           <button
             class="px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0"
@@ -639,11 +784,11 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 </li>
                 <li class="flex items-center justify-between border-b pb-2">
                   <span class="text-muted-foreground flex items-center gap-1.5"><FileCheck2 :size="14" class="text-teal-600" /> Regime Contratual</span>
-                  <span class="font-bold text-teal-800">{{ contractTypeConfigs[activeFolder.contractType || 'prazo_indeterminado']?.label }}</span>
+                  <span class="font-bold text-teal-800">{{ getContractMeta(activeFolder.contractType).label }}</span>
                 </li>
                 <li class="flex items-center justify-between border-b pb-2">
                   <span class="text-muted-foreground flex items-center gap-1.5"><Clock :size="14" class="text-teal-600" /> Escala de Trabalho</span>
-                  <span class="font-bold text-teal-800">{{ workScheduleConfigs[activeFolder.workSchedule || 'escala_5x2']?.label }}</span>
+                  <span class="font-bold text-teal-800">{{ getScheduleMeta(activeFolder.workSchedule).label }}</span>
                 </li>
                 <li class="flex items-center justify-between border-b pb-2">
                   <span class="text-muted-foreground flex items-center gap-1.5"><DollarSign :size="14" class="text-teal-600" /> Salário Bruto</span>
@@ -778,7 +923,7 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
         <!-- MODO GRADE (CARDS DE PASTAS DIGITAIS) -->
         <div v-else-if="viewMode === 'grid'" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <div
-            v-for="folder in filteredFolders"
+            v-for="folder in paginatedFolders"
             :key="folder.id"
             class="group relative flex flex-col justify-between rounded-2xl border bg-card p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
             @click="openFolder(folder.id)"
@@ -811,18 +956,18 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                   <span class="text-muted-foreground">Contrato:</span>
                   <span
                     class="rounded px-1.5 py-0.2 text-[10px] font-bold truncate max-w-[130px]"
-                    :class="[contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeBg, contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeColor]"
+                    :class="[getContractMeta(folder.contractType).badgeBg, getContractMeta(folder.contractType).badgeColor]"
                   >
-                    {{ contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].short }}
+                    {{ getContractMeta(folder.contractType).short }}
                   </span>
                 </div>
                 <div class="flex items-center justify-between">
                   <span class="text-muted-foreground">Escala:</span>
                   <span
                     class="rounded px-1.5 py-0.2 text-[10px] font-bold"
-                    :class="[workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeBg, workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeColor]"
+                    :class="[getScheduleMeta(folder.workSchedule).badgeBg, getScheduleMeta(folder.workSchedule).badgeColor]"
                   >
-                    {{ workScheduleConfigs[folder.workSchedule || 'escala_5x2'].label }}
+                    {{ getScheduleMeta(folder.workSchedule).label }}
                   </span>
                 </div>
                 <div class="flex items-center justify-between">
@@ -834,18 +979,31 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
               </div>
             </div>
 
-            <!-- Rodapé do Card -->
+            <!-- Rodapé do Card com Botão Ver Perfil -->
             <div class="mt-4 flex items-center justify-between border-t pt-3">
               <span
                 class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                :style="{ backgroundColor: statusBadgeStyles[folder.status].bg, color: statusBadgeStyles[folder.status].color }"
+                :style="{ backgroundColor: getStatusStyle(folder.status).bg, color: getStatusStyle(folder.status).color }"
               >
-                {{ statusBadgeStyles[folder.status].label }}
+                {{ getStatusStyle(folder.status).label }}
               </span>
 
-              <span class="text-xs font-semibold text-teal-700 group-hover:underline">
-                Abrir Pasta →
-              </span>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="rounded-lg bg-teal-600/10 text-teal-700 hover:bg-teal-600/20 px-2.5 py-1 text-xs font-bold transition-colors cursor-pointer"
+                  @click.stop="goToEmployeeProfile(folder.id)"
+                  title="Ver Perfil Completo do Funcionário"
+                >
+                  Ver Perfil →
+                </button>
+                <button
+                  class="text-xs text-muted-foreground hover:text-foreground cursor-pointer px-1 py-1"
+                  @click.stop="openFolder(folder.id)"
+                  title="Abrir pasta digital"
+                >
+                  Pasta
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -866,7 +1024,7 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
             </thead>
             <tbody class="divide-y">
               <tr
-                v-for="folder in filteredFolders"
+                v-for="folder in paginatedFolders"
                 :key="folder.id"
                 class="hover:bg-muted/40 transition-colors cursor-pointer"
                 @click="openFolder(folder.id)"
@@ -892,16 +1050,16 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                   <div class="space-y-1">
                     <span
                       class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
-                      :class="[contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeBg, contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].badgeColor]"
+                      :class="[getContractMeta(folder.contractType).badgeBg, getContractMeta(folder.contractType).badgeColor]"
                     >
-                      <FileCheck2 :size="11" /> {{ contractTypeConfigs[folder.contractType || 'prazo_indeterminado'].short }}
+                      <FileCheck2 :size="11" /> {{ getContractMeta(folder.contractType).short }}
                     </span>
                     <br />
                     <span
                       class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
-                      :class="[workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeBg, workScheduleConfigs[folder.workSchedule || 'escala_5x2'].badgeColor]"
+                      :class="[getScheduleMeta(folder.workSchedule).badgeBg, getScheduleMeta(folder.workSchedule).badgeColor]"
                     >
-                      <Clock :size="11" /> {{ workScheduleConfigs[folder.workSchedule || 'escala_5x2'].label }}
+                      <Clock :size="11" /> {{ getScheduleMeta(folder.workSchedule).label }}
                     </span>
                   </div>
                 </td>
@@ -913,24 +1071,78 @@ const statusBadgeStyles: Record<EmployeeFolder["status"], { bg: string; color: s
                 <td class="p-3.5">
                   <span
                     class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                    :style="{ backgroundColor: statusBadgeStyles[folder.status].bg, color: statusBadgeStyles[folder.status].color }"
+                    :style="{ backgroundColor: getStatusStyle(folder.status).bg, color: getStatusStyle(folder.status).color }"
                   >
-                    {{ statusBadgeStyles[folder.status].label }}
+                    {{ getStatusStyle(folder.status).label }}
                   </span>
                 </td>
                 <td class="p-3.5 text-right">
-                  <button
-                    class="rounded-lg border px-3 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-50"
-                    @click.stop="openFolder(folder.id)"
-                  >
-                    Ver Pasta
-                  </button>
+                  <div class="flex items-center justify-end gap-1.5">
+                    <button
+                      class="rounded-lg bg-teal-600 text-white px-2.5 py-1 text-xs font-bold hover:bg-teal-700 transition-colors shadow-2xs cursor-pointer"
+                      @click.stop="goToEmployeeProfile(folder.id)"
+                      title="Ver Perfil Completo do Funcionário"
+                    >
+                      Ver perfil
+                    </button>
+                    <button
+                      class="rounded-lg border border-teal-200 bg-teal-50/60 p-1.5 text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
+                      @click.stop="openDossierForFolder(folder)"
+                      title="Exportar Dossiê do Colaborador em PDF"
+                    >
+                      <FolderArchive :size="14" />
+                    </button>
+                    <button
+                      class="rounded-lg border px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer"
+                      @click.stop="openFolder(folder.id)"
+                    >
+                      Pasta
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+
+        <!-- BARRA DE PAGINAÇÃO -->
+        <div
+          v-if="totalPages > 1"
+          class="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4 text-xs text-muted-foreground"
+        >
+          <p>
+            Exibindo <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> a
+            <strong>{{ Math.min(currentPage * itemsPerPage, sortedFolders.length) }}</strong> de
+            <strong>{{ sortedFolders.length }}</strong> colaboradores
+          </p>
+          <div class="flex items-center gap-1 self-center sm:self-auto">
+            <button
+              class="rounded-lg border px-3 py-1.5 font-semibold hover:bg-muted disabled:opacity-40 cursor-pointer"
+              :disabled="currentPage === 1"
+              @click="currentPage--"
+            >
+              Anterior
+            </button>
+            <span class="px-2 font-medium">Página {{ currentPage }} de {{ totalPages }}</span>
+            <button
+              class="rounded-lg border px-3 py-1.5 font-semibold hover:bg-muted disabled:opacity-40 cursor-pointer"
+              :disabled="currentPage === totalPages"
+              @click="currentPage++"
+            >
+              Próxima
+            </button>
+          </div>
+        </div>
       </section>
     </div>
+
+    <!-- Modal Exportação de Dossiê do Colaborador em PDF -->
+    <ExportDossierModal
+      v-if="showExportDossierModal && folderForDossier"
+      :folder="folderForDossier"
+      :is-open="showExportDossierModal"
+      @close="showExportDossierModal = false"
+      @toast="showToast"
+    />
   </div>
 </template>

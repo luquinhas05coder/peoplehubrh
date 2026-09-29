@@ -23,6 +23,9 @@ import {
 import type { EmployeeFolder, ContractType, WorkSchedule, WeeklyScheduleItem } from "../data"
 import { contractTypeConfigs, workScheduleConfigs } from "../data"
 import { updateEmployeeContractAndSchedule } from "../store"
+import MonthlyScheduleCalendar from "./MonthlyScheduleCalendar.vue"
+
+const activeViewTab = ref<"calendario_mensal" | "grade_semanal">("calendario_mensal")
 
 const props = defineProps<{
   folder: EmployeeFolder
@@ -434,8 +437,46 @@ function resetSelection() {
       </transition>
     </div>
 
-    <!-- PAINEL 1: ROTULAGEM DE TIPO DE CONTRATO (5 OPÇÕES) -->
-    <div class="rounded-2xl border bg-card p-6 shadow-sm space-y-4">
+    <!-- SELETOR DE MODO: CALENDÁRIO MENSAL VS REGRA GERAL DA ESCALA -->
+    <div class="flex items-center gap-2 border-b pb-2">
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="activeViewTab === 'calendario_mensal' ? 'bg-teal-600 text-white shadow-sm' : 'border hover:bg-muted text-muted-foreground'"
+        @click="activeViewTab = 'calendario_mensal'"
+      >
+        <CalendarDays :size="16" />
+        <span>Calendário Mensal do Colaborador</span>
+        <span
+          class="rounded-full text-[10px] px-2 py-0.5 font-bold"
+          :class="activeViewTab === 'calendario_mensal' ? 'bg-white/20 text-white' : 'bg-teal-500/10 text-teal-800 dark:text-teal-300'"
+        >
+          Folgas, Férias & PJ
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+        :class="activeViewTab === 'grade_semanal' ? 'bg-teal-600 text-white shadow-sm' : 'border hover:bg-muted text-muted-foreground'"
+        @click="activeViewTab = 'grade_semanal'"
+      >
+        <Clock :size="16" />
+        <span>Regra Contratual & Grade Semanal Base</span>
+      </button>
+    </div>
+
+    <!-- MODO 1: CALENDÁRIO MENSAL PERSONALIZADO (FOLGAS, FÉRIAS, PRESTADOR PJ) -->
+    <MonthlyScheduleCalendar
+      v-if="activeViewTab === 'calendario_mensal'"
+      :folder="folder"
+      @toast="(msg) => emit('toast', msg)"
+    />
+
+    <!-- MODO 2: ROTULAGEM DE TIPO DE CONTRATO E GRADE SEMANAL BASE -->
+    <div v-else class="space-y-6">
+      <!-- PAINEL 1: ROTULAGEM DE TIPO DE CONTRATO (5 OPÇÕES) -->
+      <div class="rounded-2xl border bg-card p-6 shadow-sm space-y-4">
       <div class="flex items-center justify-between border-b pb-3">
         <div class="flex items-center gap-2">
           <Briefcase :size="18" class="text-teal-600" />
@@ -1026,6 +1067,7 @@ function resetSelection() {
           </p>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

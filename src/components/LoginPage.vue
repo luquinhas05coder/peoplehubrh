@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue"
+import { useRouter } from "vue-router"
 import {
   Mail,
   Lock,
@@ -17,7 +18,9 @@ import {
   Send,
   CheckCircle2,
 } from "lucide-vue-next"
-import { loginUser, loginAsPreset } from "../store"
+import { loginUser } from "../store"
+
+const router = useRouter()
 
 const form = reactive({ email: "", password: "" })
 const showPassword = ref(false)
@@ -96,6 +99,7 @@ async function handleSubmit() {
     error.value = result.error ?? "Falha no login."
     return
   }
+  router.replace("/home")
 }
 
 const features = [
@@ -409,69 +413,7 @@ const features = [
           </p>
         </div>
 
-        <!-- Acesso Rápido por Perfil (RH, DP, T.I. e Colaborador) -->
-        <div class="space-y-3 pt-2">
-          <div class="relative flex items-center justify-center">
-            <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-border"></div></div>
-            <span class="relative bg-background px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Acesso Rápido por Perfil
-            </span>
-          </div>
 
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <!-- RH -->
-            <button
-              type="button"
-              class="flex flex-col items-start p-2.5 rounded-xl border bg-card hover:bg-muted/40 hover:border-teal-500 transition-all text-left cursor-pointer group shadow-2xs"
-              @click="loginAsPreset('rh')"
-            >
-              <div class="flex items-center gap-1.5 font-bold text-foreground">
-                <span class="h-2 w-2 rounded-full bg-teal-500"></span>
-                <span>Recursos Humanos</span>
-              </div>
-              <span class="text-[10px] text-muted-foreground mt-0.5">Mariana · DHO & Gestão</span>
-            </button>
-
-            <!-- DP -->
-            <button
-              type="button"
-              class="flex flex-col items-start p-2.5 rounded-xl border bg-card hover:bg-muted/40 hover:border-blue-500 transition-all text-left cursor-pointer group shadow-2xs"
-              @click="loginAsPreset('dp')"
-            >
-              <div class="flex items-center gap-1.5 font-bold text-foreground">
-                <span class="h-2 w-2 rounded-full bg-blue-500"></span>
-                <span>Depto. Pessoal</span>
-              </div>
-              <span class="text-[10px] text-muted-foreground mt-0.5">Carlos · Folha & Ponto</span>
-            </button>
-
-            <!-- TI -->
-            <button
-              type="button"
-              class="flex flex-col items-start p-2.5 rounded-xl border bg-card hover:bg-muted/40 hover:border-purple-500 transition-all text-left cursor-pointer group shadow-2xs"
-              @click="loginAsPreset('ti')"
-            >
-              <div class="flex items-center gap-1.5 font-bold text-foreground">
-                <span class="h-2 w-2 rounded-full bg-purple-500"></span>
-                <span>T.I. & Segurança</span>
-              </div>
-              <span class="text-[10px] text-muted-foreground mt-0.5">Lucas · Infra & Backups</span>
-            </button>
-
-            <!-- Colaborador -->
-            <button
-              type="button"
-              class="flex flex-col items-start p-2.5 rounded-xl border bg-card hover:bg-muted/40 hover:border-emerald-500 transition-all text-left cursor-pointer group shadow-2xs"
-              @click="loginAsPreset('colaborador')"
-            >
-              <div class="flex items-center gap-1.5 font-bold text-foreground">
-                <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-                <span>Colaborador</span>
-              </div>
-              <span class="text-[10px] text-muted-foreground mt-0.5">Gabriel · Autoatendimento</span>
-            </button>
-          </div>
-        </div>
 
         <!-- Security badge -->
         <div class="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/70">

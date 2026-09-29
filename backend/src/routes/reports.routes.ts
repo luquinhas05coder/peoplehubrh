@@ -3,8 +3,14 @@
  */
 import { Router, type Request, type Response } from "express"
 import { getDB } from "../db/index.js"
+import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC, requirePermission } from "../middleware/rbac.js"
 
 const router = Router()
+
+router.use(resolveTenant)
+router.use(authenticateRBAC)
+router.use(requirePermission("reports.view"))
 
 // GET /api/reports/metrics
 router.get("/metrics", (_req: Request, res: Response) => {

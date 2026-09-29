@@ -4,11 +4,13 @@
 import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
 import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC, requirePermission, recordAuditLog } from "../middleware/rbac.js"
 
 const router = Router()
 
-// Aplicar resolução de tenant em todas as rotas de documentos
+// Aplicar resolução de tenant e autenticação RBAC em todas as rotas de documentos
 router.use(resolveTenant)
+router.use(authenticateRBAC)
 
 // GET /api/documents
 router.get("/", (req: Request, res: Response) => {
@@ -16,8 +18,17 @@ router.get("/", (req: Request, res: Response) => {
   const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
+  const scope = req.access?.scope || "OWN"
+  const userName = (req.access?.name || "").toLowerCase()
+  const userEmail = (req.access?.email || "").toLowerCase()
+
   let sql = `SELECT * FROM documents WHERE tenant_id = ?`
   const params: any[] = [tenantId]
+
+  if (scope === "OWN") {
+    sql += ` AND (lower(employeeName) = ? OR lower(employeeName) = ?)`
+    params.push(userName, userEmail)
+  }
 
   if (category) {
     sql += ` AND category = ?`
@@ -49,7 +60,7 @@ router.get("/", (req: Request, res: Response) => {
 })
 
 // POST /api/documents/generate
-router.post("/generate", (req: Request, res: Response) => {
+router.post("/generate", requirePermission("documents.upload"), (req: Request, res: Response) => {
   const { templateName, category, employeeName, notes } = req.body
   const tenantId = req.tenantId || "tenant_default"
 
@@ -72,6 +83,17 @@ router.post("/generate", (req: Request, res: Response) => {
 
   persist()
 
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "DOCUMENT_CREATE",
+    entity: "documents",
+    entityId: id,
+    details: { templateName, employeeName },
+    tenantId,
+  })
+
   res.status(201).json({
     ok: true,
     document: {
@@ -89,13 +111,23 @@ router.post("/generate", (req: Request, res: Response) => {
 })
 
 // DELETE /api/documents/:id
-router.delete("/:id", (req: Request, res: Response) => {
+router.delete("/:id", requirePermission("documents.delete"), (req: Request, res: Response) => {
   const id = String(req.params.id)
   const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
   db.run(`DELETE FROM documents WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
+
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "DOCUMENT_DELETE",
+    entity: "documents",
+    entityId: id,
+    tenantId,
+  })
 
   res.json({ ok: true, message: "Documento excluído com sucesso." })
 })

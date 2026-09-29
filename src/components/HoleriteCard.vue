@@ -1,6 +1,23 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
-import { Printer, Download, Calendar, Loader2, Send, Plus, Trash2, Sliders, X, Check } from "lucide-vue-next"
+import { ref, computed, onMounted } from "vue"
+import {
+  Printer,
+  Download,
+  Calendar,
+  Loader2,
+  Send,
+  Plus,
+  Trash2,
+  Sliders,
+  X,
+  Check,
+  Lock,
+  Scale,
+  Clock,
+  AlertTriangle,
+  History,
+  Info,
+} from "lucide-vue-next"
 import jsPDF from "jspdf"
 import type { EmployeeFolder } from "../data"
 import type { HoleriteItem } from "../utils/payroll"
@@ -9,6 +26,9 @@ import {
   saveContraChequeSnapshot,
   updateContraChequeRubricas,
   sendHoleriteToEmployeeChat,
+  pedirVistaContraCheque,
+  fetchContraChequesFromBackend,
+  tenantContestDeadlineDays,
 } from "../store"
 
 const props = defineProps<{
@@ -25,34 +45,84 @@ const isGeneratingPdf = ref(false)
 const isSendingChat = ref(false)
 const isRubricasModalOpen = ref(false)
 
-const monthsOptions = [
-  "08/2026",
-  "07/2026",
-  "06/2026",
-  "05/2026",
-  "04/2026",
-  "03/2026",
-  "02/2026",
-  "01/2026",
-  "13º/2025",
+// Pedido de Vista / Recurso
+const isContestModalOpen = ref(false)
+const contestReasonType = ref("Horas extras ou adicionais incorretos")
+const contestDetails = ref("")
+const isSubmittingContest = ref(false)
+
+onMounted(async () => {
+  await fetchContraChequesFromBackend(props.folder.id)
+})
+
+// Linha do tempo linear temporal (da competência mais antiga para a mais recente)
+const monthsLinearOrder = [
+  "11/2025",
   "12/2025",
+  "13º/2025",
+  "01/2026",
+  "02/2026",
+  "03/2026",
+  "04/2026",
+  "05/2026",
+  "06/2026",
+  "07/2026",
+  "08/2026",
 ]
+
+const monthsOptions = computed(() => {
+  return [...monthsLinearOrder].reverse()
+})
 
 const currentSnapshot = computed(() => {
   let snap = getContraChequeSnapshot(props.folder.id, selectedMonth.value)
   if (!snap) {
     snap = saveContraChequeSnapshot(props.folder, selectedMonth.value)
   }
+  // Se for competência passada (anterior a 08/2026), marcar imutável
+  if (selectedMonth.value !== "08/2026") {
+    snap.isImmutable = true
+    if (snap.status !== "em_recurso") {
+      snap.status = "imutavel"
+    }
+  }
   return snap
+})
+
+const isCurrentImmutable = computed(() => {
+  return Boolean(currentSnapshot.value.isImmutable || currentSnapshot.value.status === "imutavel")
 })
 
 const holeriteData = computed(() => {
   return currentSnapshot.value.holerite
 })
 
+const linearMonths = computed(() => {
+  return monthsLinearOrder.map((m) => {
+    const s = getContraChequeSnapshot(props.folder.id, m)
+    const isPast = m !== "08/2026"
+    return {
+      month: m,
+      status: s?.status || (isPast ? "imutavel" : "aberto_para_vista"),
+      isImmutable: isPast || s?.isImmutable || s?.status === "imutavel",
+      version: s?.version || 1,
+    }
+  })
+})
+
 function formatNumberRaw(val: number): string {
   if (!val || val === 0) return ""
   return val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatDateDisplay(dStr?: string): string {
+  if (!dStr) return ""
+  try {
+    const d = new Date(dStr)
+    return d.toLocaleDateString("pt-BR")
+  } catch {
+    return dStr
+  }
 }
 
 // Gestão de Rubricas (Lançamentos manuais/automáticos)
@@ -76,6 +146,10 @@ const rubricaPresets = [
 ]
 
 function openRubricasModal() {
+  if (isCurrentImmutable.value && currentSnapshot.value.status !== "em_recurso") {
+    emit("toast", "Este contra-cheque é imutável. O prazo de vista regulamentar expirou.")
+    return
+  }
   rubricasList.value = JSON.parse(JSON.stringify(holeriteData.value.items))
   isRubricasModalOpen.value = true
 }
@@ -111,10 +185,38 @@ function removeRubrica(index: number) {
   rubricasList.value.splice(index, 1)
 }
 
-function saveRubricas() {
-  updateContraChequeRubricas(props.folder.id, selectedMonth.value, rubricasList.value)
+async function saveRubricas() {
+  await updateContraChequeRubricas(props.folder.id, selectedMonth.value, rubricasList.value)
   isRubricasModalOpen.value = false
-  emit("toast", "Rubricas e deduções fiscais recalculadas com sucesso!")
+  emit("toast", "Contra-cheque recalculado e nova versão imutável salva no histórico!")
+}
+
+function openContestModal() {
+  isContestModalOpen.value = true
+}
+
+async function submitContest() {
+  if (!contestReasonType.value) {
+    emit("toast", "Selecione o motivo do recurso.")
+    return
+  }
+  isSubmittingContest.value = true
+  try {
+    const res = await pedirVistaContraCheque(
+      currentSnapshot.value.id,
+      contestReasonType.value,
+      contestDetails.value
+    )
+    if (res.ok) {
+      isContestModalOpen.value = false
+      contestDetails.value = ""
+      emit("toast", "Pedido de vista registrado com sucesso! O DP analisará seu recurso.")
+    } else {
+      emit("toast", res.message || "Não foi possível registrar o recurso.")
+    }
+  } finally {
+    isSubmittingContest.value = false
+  }
 }
 
 async function handleSendChat() {
@@ -325,15 +427,27 @@ function handlePrint() {
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <!-- Botão Lançar Eventos / Rubricas -->
+        <!-- Botão Pedir Vista (Recorrer por Erro de Cálculo) -->
+        <button
+          v-if="!isCurrentImmutable && currentSnapshot.status !== 'em_recurso'"
+          type="button"
+          class="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300 px-3 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
+          @click="openContestModal"
+          title="Colaborador tem o direito de recorrer por erro de cálculo dentro do prazo regulamentar"
+        >
+          <Scale :size="13" />
+          <span>Pedir Vista (Recorrer)</span>
+        </button>
+
+        <!-- Botão Lançar Eventos / Rubricas (DP / RH) -->
         <button
           type="button"
           class="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-300 px-3 py-1.5 text-xs font-bold shadow-sm transition-all cursor-pointer"
           @click="openRubricasModal"
-          title="Adicionar ou editar adicionais, horas extras, benefícios e deduções"
+          :title="isCurrentImmutable && currentSnapshot.status !== 'em_recurso' ? 'Documento imutável (prazo encerrado)' : 'Adicionar ou editar adicionais, horas extras, benefícios e deduções'"
         >
           <Sliders :size="13" />
-          <span>Lançar Rubricas</span>
+          <span>{{ currentSnapshot.status === 'em_recurso' ? 'Recalcular Rubricas (Recurso)' : 'Lançar Rubricas' }}</span>
         </button>
 
         <!-- Botão Enviar no Chat -->
@@ -371,6 +485,247 @@ function handlePrint() {
           <Printer :size="13" />
           <span>Imprimir</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Linha do Tempo Temporal Linear (Histórico Imutável sem ligação com documentos posteriores) -->
+    <div class="rounded-xl border bg-card/60 p-3 shadow-sm print:hidden space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5 text-xs font-bold text-foreground">
+          <History :size="14" class="text-primary" />
+          <span>Linha do Tempo Temporal Linear de Contra-Cheques</span>
+        </div>
+        <span class="text-[11px] text-muted-foreground">
+          Prazo de vista do cliente (Tenant): <strong>{{ tenantContestDeadlineDays }} dias</strong>
+        </span>
+      </div>
+
+      <!-- Barra de Rolagem Horizontal Cronológica -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-1.5 pt-1 text-xs no-scrollbar">
+        <button
+          v-for="item in linearMonths"
+          :key="item.month"
+          @click="selectedMonth = item.month"
+          :class="[
+            'flex flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition-all min-w-[125px] cursor-pointer',
+            selectedMonth === item.month
+              ? 'border-primary bg-primary/10 shadow-sm ring-1 ring-primary'
+              : 'border-border bg-background hover:bg-muted/60'
+          ]"
+        >
+          <div class="flex items-center justify-between w-full">
+            <span class="font-bold text-xs">{{ item.month }}</span>
+            <span class="text-[10px] text-muted-foreground">v{{ item.version }}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span
+              v-if="item.status === 'em_recurso'"
+              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            >
+              <AlertTriangle :size="9" /> Em Recurso
+            </span>
+            <span
+              v-else-if="item.status === 'recalculado'"
+              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+            >
+              <History :size="9" /> Retificado
+            </span>
+            <span
+              v-else-if="item.isImmutable"
+              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <Lock :size="9" /> Imutável
+            </span>
+            <span
+              v-else
+              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+            >
+              <Clock :size="9" /> Aberto a Vista
+            </span>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Banner Informativo de Status & Pedido de Vista -->
+    <div class="print:hidden">
+      <!-- 1. Aberto para Vista dentro do prazo -->
+      <div
+        v-if="!isCurrentImmutable && currentSnapshot.status !== 'em_recurso'"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/20"
+      >
+        <div class="flex items-start gap-3">
+          <div class="rounded-lg bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 mt-0.5">
+            <Clock :size="16" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h4 class="text-xs font-bold text-amber-900 dark:text-amber-200">
+                Prazo para Pedido de Vista Ativo
+              </h4>
+              <span class="rounded bg-amber-200/80 px-2 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-800 dark:text-amber-100">
+                {{ currentSnapshot.daysRemaining ?? tenantContestDeadlineDays }} dias restantes
+              </span>
+            </div>
+            <p class="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5">
+              Colaborador que discordar dos valores por <strong>erro de cálculo</strong> tem o direito de pedir vista dentro do prazo estimado pelo cliente (vencimento em {{ formatDateDisplay(currentSnapshot.contestDeadlineAt) }}). 
+              <strong>Após o prazo, este documento se tornará estritamente imutável.</strong>
+            </p>
+          </div>
+        </div>
+        <button
+          @click="openContestModal"
+          class="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-amber-700 cursor-pointer"
+        >
+          <Scale :size="13" />
+          <span>Pedir Vista (Recorrer)</span>
+        </button>
+      </div>
+
+      <!-- 2. Sob Recurso / Em Análise -->
+      <div
+        v-else-if="currentSnapshot.status === 'em_recurso'"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-200 bg-purple-50/70 p-3.5 dark:border-purple-900/50 dark:bg-purple-950/20"
+      >
+        <div class="flex items-start gap-3">
+          <div class="rounded-lg bg-purple-100 p-2 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 mt-0.5">
+            <AlertTriangle :size="16" />
+          </div>
+          <div>
+            <h4 class="text-xs font-bold text-purple-900 dark:text-purple-200">
+              Pedido de Vista Registrado — Em Recurso por Erro de Cálculo
+            </h4>
+            <p class="text-[11px] text-purple-800 dark:text-purple-300/90 mt-0.5">
+              Motivo do recurso: <strong>{{ currentSnapshot.contestReason || 'Erro nas rubricas de horas extras ou descontos' }}</strong>.
+              O Departamento Pessoal pode homologar o recálculo gerando uma nova versão linear.
+            </p>
+          </div>
+        </div>
+        <button
+          @click="openRubricasModal"
+          class="flex items-center gap-1.5 rounded-lg bg-purple-700 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-purple-800 cursor-pointer"
+        >
+          <Sliders :size="13" />
+          <span>Recalcular Rubricas (DP)</span>
+        </button>
+      </div>
+
+      <!-- 3. Histórico Retificado (Imutável) -->
+      <div
+        v-else-if="currentSnapshot.status === 'recalculado'"
+        class="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/50 dark:bg-blue-950/20"
+      >
+        <div class="rounded-lg bg-blue-100 p-2 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+          <History :size="16" />
+        </div>
+        <div class="text-xs">
+          <h4 class="font-bold text-blue-900 dark:text-blue-200">
+            Histórico Retificado (Imutável)
+          </h4>
+          <p class="text-[11px] text-blue-800 dark:text-blue-300/90">
+            Este contra-cheque foi arquivado de forma imutável após recálculo deferido. Não possui ligação com os documentos gerados posteriormente.
+          </p>
+        </div>
+      </div>
+
+      <!-- 4. Imutável (Prazo Encerrado) -->
+      <div
+        v-else
+        class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/40"
+      >
+        <div class="rounded-lg bg-slate-200 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <Lock :size="16" />
+        </div>
+        <div class="text-xs">
+          <div class="flex items-center gap-2">
+            <h4 class="font-bold text-slate-800 dark:text-slate-200">
+              Contra-Cheque Imutável — Prazo de Vista Encerrado
+            </h4>
+            <span class="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              🔒 Protegido contra alterações
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+            Os contra-cheques passados armazenados no banco são estritamente imutáveis e organizados de forma temporal linear, sem ligação com documentos posteriores.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Pedido de Vista (Recurso por Erro de Cálculo) -->
+    <div v-if="isContestModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl space-y-4 border">
+        <div class="flex items-start justify-between border-b pb-3">
+          <div>
+            <h3 class="text-base font-bold text-foreground flex items-center gap-2">
+              <Scale :size="18" class="text-amber-600" />
+              <span>Pedido de Vista de Contra-Cheque</span>
+            </h3>
+            <p class="text-xs text-muted-foreground mt-0.5">
+              Competência: <strong>{{ selectedMonth }}</strong> · Colaborador: <strong>{{ currentSnapshot.employeeName }}</strong>
+            </p>
+          </div>
+          <button @click="isContestModalOpen = false" class="text-muted-foreground hover:text-foreground">
+            <X :size="20" />
+          </button>
+        </div>
+
+        <div class="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200 space-y-1">
+          <p class="font-bold flex items-center gap-1.5">
+            <Info :size="13" /> Prazo Regulamentar do Cliente (Tenant): {{ tenantContestDeadlineDays }} dias
+          </p>
+          <p class="text-[11px]">
+            O colaborador tem o direito legal de pedir vista e recorrer caso identifique erro de cálculo nas rubricas ou no valor líquido. 
+            Após o término do prazo estipulado, o documento se tornará estritamente imutável.
+          </p>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-bold text-foreground mb-1">Motivo do Erro de Cálculo:</label>
+            <select
+              v-model="contestReasonType"
+              class="w-full rounded-lg border bg-background p-2.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="Horas extras ou adicionais incorretos">Horas extras ou adicionais incorretos</option>
+              <option value="Divergência no salário base registrado">Divergência no salário base registrado</option>
+              <option value="Desconto indevido de benefícios (VR/VT/Plano)">Desconto indevido de benefícios (VR/VT/Plano)</option>
+              <option value="Falta ou atraso lançado incorretamente">Falta ou atraso lançado incorretamente</option>
+              <option value="Cálculo divergente de INSS ou IRPF">Cálculo divergente de INSS ou IRPF</option>
+              <option value="Outro erro de cálculo nas rubricas">Outro erro de cálculo nas rubricas</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-bold text-foreground mb-1">Detalhes e Apontamentos do Recurso:</label>
+            <textarea
+              v-model="contestDetails"
+              rows="4"
+              placeholder="Descreva detalhadamente o erro de cálculo (ex: realizei 15h extras a 50% em 12/08 que não foram apuradas na folha)..."
+              class="w-full rounded-lg border bg-background p-2.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-amber-500"
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 border-t pt-3">
+          <button
+            type="button"
+            @click="isContestModalOpen = false"
+            class="rounded-lg border bg-background px-3 py-2 text-xs font-semibold hover:bg-muted cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            @click="submitContest"
+            :disabled="isSubmittingContest"
+            class="flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-amber-700 cursor-pointer disabled:opacity-50"
+          >
+            <Loader2 v-if="isSubmittingContest" :size="14" class="animate-spin" />
+            <Check v-else :size="14" />
+            <span>{{ isSubmittingContest ? 'Enviando...' : 'Confirmar Pedido de Vista' }}</span>
+          </button>
+        </div>
       </div>
     </div>
 

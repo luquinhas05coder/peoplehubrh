@@ -26,6 +26,7 @@ import type {
   ContractType,
   WorkSchedule,
   WeeklyScheduleItem,
+  MonthlyCalendarDayOverride,
 } from "./data"
 import { calcularHoleriteCompleto, recalcularHoleriteComRubricas, type HoleriteItem } from "./utils/payroll"
 import {
@@ -59,12 +60,14 @@ export function showToast(title: string, type: "success" | "info" | "warning" | 
 
 /* ─── Auth State & RBAC (Perfis de Acesso) ──────────────── */
 export type UserRoleType = "rh" | "dp" | "ti" | "colaborador"
+export type UserRole = "ADMIN" | "RH" | "GESTOR" | "COLABORADOR"
 
 export interface AuthUser {
   id: string
   name: string
   email: string
   role: string
+  userRole?: UserRole
   roleType?: UserRoleType
   initials: string
   department: string
@@ -73,17 +76,45 @@ export interface AuthUser {
   tenantSlug?: string
   twoFactorEnabled?: boolean
   mustChangePassword?: boolean
+  status?: string
 }
 
-export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
+export const PRESET_USERS: Record<string, AuthUser> = {
+  admin: {
+    id: "usr_admin",
+    name: "Administrador Geral",
+    email: "admin@peoplehub.com.br",
+    role: "Administrador de Sistemas",
+    userRole: "ADMIN",
+    roleType: "ti",
+    initials: "AD",
+    department: "Tecnologia da Informação",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
+  },
   rh: {
     id: "usr_rh",
     name: "Mariana Alcantara",
     email: "rh@peoplehub.com.br",
     role: "Gestora de RH & DHO",
+    userRole: "RH",
     roleType: "rh",
     initials: "MA",
     department: "Recursos Humanos",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
+  },
+  gestor: {
+    id: "usr_gestor",
+    name: "Gestor TI",
+    email: "gestor@peoplehub.com.br",
+    role: "Gestor de Equipe & TI",
+    userRole: "GESTOR",
+    roleType: "rh",
+    initials: "GT",
+    department: "TI",
     tenantId: "tenant_default",
     tenantName: "PeopleHub Matriz",
     tenantSlug: "matriz",
@@ -93,6 +124,7 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     name: "Carlos Eduardo Souza",
     email: "dp@peoplehub.com.br",
     role: "Especialista em DP & Folha",
+    userRole: "RH",
     roleType: "dp",
     initials: "CS",
     department: "Departamento Pessoal",
@@ -105,6 +137,7 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     name: "Lucas Mendes",
     email: "ti@peoplehub.com.br",
     role: "Administrador de Sistemas & TI",
+    userRole: "ADMIN",
     roleType: "ti",
     initials: "LM",
     department: "Tecnologia da Informação",
@@ -117,9 +150,10 @@ export const PRESET_USERS: Record<UserRoleType, AuthUser> = {
     name: "Gabriel Santos",
     email: "colaborador@peoplehub.com.br",
     role: "Desenvolvedor de Software",
+    userRole: "COLABORADOR",
     roleType: "colaborador",
     initials: "GS",
-    department: "Tecnologia",
+    department: "TI",
     tenantId: "tenant_default",
     tenantName: "PeopleHub Matriz",
     tenantSlug: "matriz",
@@ -131,12 +165,41 @@ interface AllowedUser extends AuthUser {
 }
 
 
-export const isAuthenticated = ref<boolean>(false)
-export const currentUser = ref<AuthUser | null>(null)
-export const authStep = ref<"login" | "mfa" | "done">("login")
+const AUTH_STORAGE_KEY = "peoplehub_auth_session_v1"
+
+export function loadStoredAuthSession(): { user: AuthUser | null; token: string } {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.user) {
+        return { user: parsed.user, token: parsed.token || "" }
+      }
+    }
+  } catch (_e) {}
+  return { user: null, token: "" }
+}
+
+export function saveAuthSession(user: AuthUser | null, token: string = ""): void {
+  if (!user) return
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token, timestamp: Date.now() }))
+  } catch (_e) {}
+}
+
+export function clearAuthSession(): void {
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY)
+  } catch (_e) {}
+}
+
+const initialSession = loadStoredAuthSession()
+export const isAuthenticated = ref<boolean>(Boolean(initialSession.user))
+export const currentUser = ref<AuthUser | null>(initialSession.user)
+export const authStep = ref<"login" | "mfa" | "done">(initialSession.user ? "done" : "login")
 export const mfaCode = ref<string>("")
 export const pendingToken = ref<string>("")
-export const sessionToken = ref<string>("")
+export const sessionToken = ref<string>(initialSession.token)
 let mfaPendingUser: AllowedUser | null = null
 
 /* ─── Helpers de Autenticação & Tenant para API ─────────── */
@@ -166,13 +229,76 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
 }
 
 
+export const ROLE_PERMISSIONS_FRONTEND: Record<UserRole, readonly string[]> = {
+  ADMIN: [
+    "dashboard.view", "users.view", "users.create", "users.update", "users.delete", "users.manage_roles",
+    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.delete", "employees.view_sensitive",
+    "schedules.view", "schedules.manage", "payroll.view", "payroll.manage",
+    "documents.view", "documents.create", "documents.upload", "documents.delete",
+    "reports.view", "reports.export", "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
+    "requests.view", "requests.create", "requests.approve", "requests.reject", "audit.view", "settings.view", "settings.update",
+  ],
+  RH: [
+    "dashboard.view",
+    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.delete", "employees.view_sensitive",
+    "schedules.view", "schedules.manage", "payroll.view", "payroll.manage",
+    "documents.view", "documents.create", "documents.upload", "documents.delete",
+    "reports.view", "reports.export", "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
+    "requests.view", "requests.create", "requests.approve", "requests.reject", "audit.view", "settings.view",
+  ],
+  GESTOR: [
+    "dashboard.view",
+    "employees.view_team", "employees.view_own",
+    "schedules.view", "schedules.manage",
+    "documents.view", "documents.upload",
+    "reports.view",
+    "vacations.view", "vacations.approve", "vacations.reject",
+    "requests.view", "requests.create", "requests.approve", "requests.reject",
+  ],
+  COLABORADOR: [
+    "employees.view_own",
+    "schedules.view",
+    "payroll.view",
+    "documents.view", "documents.upload",
+    "vacations.view", "vacations.request",
+    "requests.view", "requests.create",
+  ],
+}
+
+export function normalizeUserRole(rawRole?: string | null): UserRole {
+  if (!rawRole) return "COLABORADOR"
+  const upper = rawRole.trim().toUpperCase()
+  if (upper === "ADMIN" || upper.includes("ADMINISTRADOR") || upper === "TI") return "ADMIN"
+  if (upper === "RH" || upper.includes("RECURSOS HUMANOS") || upper.includes("DHO") || upper === "DP") return "RH"
+  if (upper === "GESTOR" || upper.includes("GERENTE") || upper.includes("COORDENADOR") || upper.includes("LIDER")) return "GESTOR"
+  return "COLABORADOR"
+}
+
+export const activeUserRole = computed<UserRole>(() => {
+  if (!currentUser.value) return "COLABORADOR"
+  if (currentUser.value.userRole) return currentUser.value.userRole
+  return normalizeUserRole(currentUser.value.role)
+})
+
+export function hasRole(requiredRoles: UserRole | UserRole[]): boolean {
+  const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles]
+  return roles.includes(activeUserRole.value)
+}
+
+export function hasPermission(permission: string): boolean {
+  const permissions = ROLE_PERMISSIONS_FRONTEND[activeUserRole.value] || []
+  return permissions.includes(permission)
+}
+
+export const can = hasPermission
+
 export const userRoleType = computed<UserRoleType>(() => {
   if (!currentUser.value) return "rh"
   if (currentUser.value.roleType) return currentUser.value.roleType
   const r = (currentUser.value.role || "").toLowerCase()
   const d = (currentUser.value.department || "").toLowerCase()
   const e = (currentUser.value.email || "").toLowerCase()
-  if (e.includes("ti@") || r.includes("ti") || r.includes("sistemas") || d.includes("tecnologia") || d.includes("t.i")) return "ti"
+  if (e.includes("admin@") || e.includes("ti@") || r.includes("admin") || r.includes("ti") || r.includes("sistemas") || d.includes("tecnologia") || d.includes("t.i")) return "ti"
   if (e.includes("dp@") || r.includes("dp") || r.includes("pessoal") || r.includes("folha") || d.includes("departamento pessoal")) return "dp"
   if (e.includes("colaborador@") || r.includes("colaborador") || r.includes("desenvolvedor") || r.includes("designer")) return "colaborador"
   return "rh"
@@ -180,29 +306,81 @@ export const userRoleType = computed<UserRoleType>(() => {
 
 export const userPermissions = computed(() => {
   const role = userRoleType.value
+  const userTitle = (currentUser.value?.role || "").toLowerCase()
+  const currentRole = activeUserRole.value
+  const isAnalistaOuGestor =
+    currentRole === "ADMIN" ||
+    currentRole === "RH" ||
+    currentRole === "GESTOR" ||
+    role === "rh" ||
+    role === "dp" ||
+    userTitle.includes("analista") ||
+    userTitle.includes("gestor") ||
+    userTitle.includes("especialista") ||
+    userTitle.includes("coordenador") ||
+    userTitle.includes("gerente") ||
+    userTitle.includes("admin")
+
+  const isTecnico = role === "ti" || userTitle.includes("técnico") || userTitle.includes("suporte")
+
   return {
     role,
-    isRH: role === "rh",
+    userRole: currentRole,
+    isAdmin: currentRole === "ADMIN",
+    isRH: currentRole === "RH",
+    isGestor: currentRole === "GESTOR",
     isDP: role === "dp",
-    isTI: role === "ti",
-    isColaborador: role === "colaborador",
+    isTI: role === "ti" || currentRole === "ADMIN",
+    isColaborador: currentRole === "COLABORADOR",
+    isTecnico,
+    isAnalistaOuGestor,
+    canManageUsers: currentRole === "ADMIN",
+    canViewAllEmployees: ["ADMIN", "RH"].includes(currentRole),
+    canViewTeamEmployees: ["ADMIN", "RH", "GESTOR"].includes(currentRole),
+    canApproveRequests: ["ADMIN", "RH", "GESTOR"].includes(currentRole),
     canManageChat: true,
-    canManagePeople: role !== "colaborador",
-    canManageTraining: role !== "colaborador",
-    canManagePayroll: role === "dp" || role === "rh",
-    canManageDocs: role !== "colaborador",
-    canViewReports: role !== "colaborador",
-    canManageSettings: role === "ti" || role === "rh",
-    canManageTiChecklist: role === "ti" || role === "rh",
+    canManagePeople: currentRole === "ADMIN" || currentRole === "RH",
+    canManageTraining: currentRole !== "COLABORADOR",
+    canManagePayroll: currentRole === "ADMIN" || currentRole === "RH" || role === "dp",
+    canManageDocs: currentRole !== "COLABORADOR",
+    canViewReports: currentRole !== "COLABORADOR",
+    canManageSettings: currentRole === "ADMIN" || currentRole === "RH",
+    canManageTiChecklist: currentRole === "ADMIN" || currentRole === "RH",
+    canViewSchedule: true, // Visível ao colaborador, técnico e superiores
+    canEditSchedule: currentRole === "ADMIN" || currentRole === "RH" || currentRole === "GESTOR", // Editável por Gestor, RH e Admin
   }
 })
 
-export function loginAsPreset(roleType: UserRoleType) {
+export async function loginAsPreset(roleType: UserRoleType) {
   const user = PRESET_USERS[roleType]
   currentUser.value = { ...user }
   isAuthenticated.value = true
   authStep.value = "done"
-  showToast(`Conectado como ${user.name} (${user.role})!`, "success")
+
+  // Tenta autenticar no backend com credencial padrão para gerar token JWT real e autorização RBAC
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email: user.email, password: "admin123" }),
+    })
+    const data = await res.json()
+    if (data.ok && data.token) {
+      sessionToken.value = data.token
+      if (data.user) {
+        currentUser.value = {
+          ...user,
+          ...data.user,
+          roleType,
+          mustChangePassword: Boolean(data.user.mustChangePassword),
+        }
+      }
+    }
+  } catch (_e) {}
+
+  saveAuthSession(currentUser.value!, sessionToken.value)
+  showToast(`Conectado como ${currentUser.value?.name || user.name} (${user.role})!`, "success")
   fetchAllFromBackend()
 }
 
@@ -253,6 +431,7 @@ export async function loginUser(email: string, password: string): Promise<{ ok: 
       }
       isAuthenticated.value = true
       authStep.value = "done"
+      saveAuthSession(currentUser.value, sessionToken.value)
       showToast(`Bem-vindo, ${data.user.name}!`, "success")
       fetchAllFromBackend()
       return { ok: true }
@@ -268,6 +447,7 @@ export async function loginUser(email: string, password: string): Promise<{ ok: 
       }
       isAuthenticated.value = true
       authStep.value = "done"
+      saveAuthSession(currentUser.value, sessionToken.value)
       showToast("Login efetuado com sucesso!", "success")
       fetchAllFromBackend()
       return { ok: true }
@@ -288,6 +468,7 @@ export async function loginUser(email: string, password: string): Promise<{ ok: 
     }
     isAuthenticated.value = true
     authStep.value = "done"
+    saveAuthSession(currentUser.value, sessionToken.value)
     showToast("Login efetuado com sucesso!", "success")
     return { ok: true }
   }
@@ -391,6 +572,7 @@ export async function verifyMfaCode(code: string): Promise<{ ok: boolean; error?
       authStep.value = "done"
       mfaCode.value = ""
       pendingToken.value = ""
+      saveAuthSession(currentUser.value, sessionToken.value)
       showToast(`Bem-vindo, ${data.user.name}!`, "success")
       fetchAllFromBackend()
       return { ok: true }
@@ -414,11 +596,20 @@ export async function verifyMfaCode(code: string): Promise<{ ok: boolean; error?
   authStep.value = "done"
   mfaCode.value = ""
   mfaPendingUser = null
+  saveAuthSession(currentUser.value, sessionToken.value)
   showToast(`Bem-vindo, ${currentUser.value.name}!`, "success")
   return { ok: true }
 }
 
 export async function checkAuthSession(): Promise<void> {
+  const stored = loadStoredAuthSession()
+  if (stored.user && !currentUser.value) {
+    currentUser.value = stored.user
+    sessionToken.value = stored.token
+    isAuthenticated.value = true
+    authStep.value = "done"
+  }
+
   try {
     const res = await fetch("/api/auth/me", {
       method: "GET",
@@ -427,9 +618,10 @@ export async function checkAuthSession(): Promise<void> {
     })
     const data = await res.json()
     if (data.ok && data.user) {
-      currentUser.value = data.user
+      currentUser.value = { ...(currentUser.value || {}), ...data.user }
       isAuthenticated.value = true
       authStep.value = "done"
+      saveAuthSession(currentUser.value, sessionToken.value)
       fetchAllFromBackend()
     }
   } catch (_e) {}
@@ -521,6 +713,7 @@ export async function logoutUser(): Promise<void> {
     })
   } catch (_e) {}
 
+  clearAuthSession()
   sessionToken.value = ""
   pendingToken.value = ""
   isAuthenticated.value = false
@@ -938,6 +1131,63 @@ function saveFolhaToStorage(): void {
 }
 
 export const contraChequeSnapshots = ref<Record<string, ContraChequeSnapshot>>(loadStoredContraCheque())
+export const tenantContestDeadlineDays = ref(10)
+
+export async function fetchTenantContestDeadline(): Promise<number> {
+  try {
+    const res = await apiFetch("/api/contracheques/tenant/deadline")
+    const data = await res.json()
+    if (data.ok && data.contestDeadlineDays) {
+      tenantContestDeadlineDays.value = data.contestDeadlineDays
+      return data.contestDeadlineDays
+    }
+  } catch (_e) {}
+  return tenantContestDeadlineDays.value
+}
+
+export async function updateTenantContestDeadline(days: number): Promise<boolean> {
+  try {
+    const res = await apiFetch("/api/contracheques/tenant/deadline", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contestDeadlineDays: days }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      tenantContestDeadlineDays.value = days
+      showToast(`Prazo para pedido de vista atualizado para ${days} dias.`, "success")
+      return true
+    } else {
+      showToast(data.error || "Erro ao atualizar prazo.", "error")
+    }
+  } catch (_e) {
+    tenantContestDeadlineDays.value = days
+    showToast(`Prazo de pedido de vista salvo localmente (${days} dias).`, "info")
+    return true
+  }
+  return false
+}
+
+export async function fetchContraChequesFromBackend(employeeId?: string): Promise<ContraChequeSnapshot[]> {
+  try {
+    const url = employeeId ? `/api/contracheques?employee_id=${employeeId}` : "/api/contracheques"
+    const res = await apiFetch(url)
+    const data = await res.json()
+    if (data.ok && Array.isArray(data.contracheques)) {
+      const list: ContraChequeSnapshot[] = data.contracheques
+      list.forEach((cc) => {
+        const key = `${cc.employeeId}_${cc.month}`
+        const existing = contraChequeSnapshots.value[key]
+        if (!existing || (cc.version || 1) >= (existing.version || 1)) {
+          contraChequeSnapshots.value[key] = cc
+        }
+      })
+      saveContraChequeToStorage()
+      return list
+    }
+  } catch (_e) {}
+  return Object.values(contraChequeSnapshots.value).filter((c) => !employeeId || c.employeeId === employeeId)
+}
 
 export function getContraChequeSnapshot(employeeId: string, month: string): ContraChequeSnapshot | null {
   const key = `${employeeId}_${month}`
@@ -950,10 +1200,16 @@ export function saveContraChequeSnapshot(employee: EmployeeFolder, month: string
   const now = new Date()
   const dateFormatted = `${now.toLocaleDateString("pt-BR")} às ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
 
+  const parts = month.split("/")
+  const yearMonth = parts.length === 2 ? `${parts[1]}-${parts[0].padStart(2, "0")}` : "2026-08"
+  const deadlineDays = tenantContestDeadlineDays.value || 10
+  const deadlineDate = new Date(now.getTime() + deadlineDays * 24 * 60 * 60 * 1000)
+
   const snapshot: ContraChequeSnapshot = {
     id: `snap-${employee.id}-${month.replace("/", "_")}-${Date.now()}`,
     employeeId: employee.id,
     month,
+    yearMonth,
     generatedAt: dateFormatted,
     employeeName: employee.name,
     cpf: employee.cpf || "000.000.000-00",
@@ -965,19 +1221,98 @@ export function saveContraChequeSnapshot(employee: EmployeeFolder, month: string
     cboTitle: employee.cboTitle || "",
     salary: salaryStr,
     holerite,
+    version: 1,
+    status: "aberto_para_vista",
+    isImmutable: false,
+    contestDeadlineAt: deadlineDate.toISOString(),
+    daysRemaining: deadlineDays,
   }
 
   const key = `${employee.id}_${month}`
   contraChequeSnapshots.value[key] = snapshot
   saveContraChequeToStorage()
+
+  // Sincronizar em background com o backend SQLite
+  apiFetch("/api/contracheques", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      employeeId: employee.id,
+      employeeName: employee.name,
+      cpf: employee.cpf,
+      role: employee.role,
+      department: employee.department,
+      admissionDate: employee.admissionDate,
+      cbo: employee.cbo,
+      month,
+      yearMonth,
+      salaryBase: salaryStr,
+      holerite,
+    }),
+  }).then(async (res) => {
+    try {
+      const data = await res.json()
+      if (data.ok && data.contracheque) {
+        snapshot.id = data.contracheque.id
+        snapshot.contestDeadlineAt = data.contracheque.contestDeadlineAt
+        snapshot.daysRemaining = data.contracheque.daysRemaining
+        contraChequeSnapshots.value[key] = snapshot
+        saveContraChequeToStorage()
+      }
+    } catch (_e) {}
+  }).catch(() => {})
+
   return snapshot
 }
 
-export function updateContraChequeRubricas(
+export async function pedirVistaContraCheque(
+  ccId: string,
+  reason: string,
+  details?: string
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await apiFetch(`/api/contracheques/${ccId}/pedir-vista`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason, details }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      for (const k of Object.keys(contraChequeSnapshots.value)) {
+        if (contraChequeSnapshots.value[k].id === ccId) {
+          contraChequeSnapshots.value[k].status = "em_recurso"
+          contraChequeSnapshots.value[k].contestRequestedAt = new Date().toISOString()
+          contraChequeSnapshots.value[k].contestReason = details ? `${reason} — ${details}` : reason
+          break
+        }
+      }
+      saveContraChequeToStorage()
+      showToast("Pedido de vista registrado com sucesso! O DP foi acionado.", "success")
+      return { ok: true, message: data.message }
+    } else {
+      showToast(data.error || "Não foi possível registrar o pedido de vista.", "error")
+      return { ok: false, message: data.error }
+    }
+  } catch (_err: any) {
+    for (const k of Object.keys(contraChequeSnapshots.value)) {
+      if (contraChequeSnapshots.value[k].id === ccId) {
+        contraChequeSnapshots.value[k].status = "em_recurso"
+        contraChequeSnapshots.value[k].contestRequestedAt = new Date().toISOString()
+        contraChequeSnapshots.value[k].contestReason = details ? `${reason} — ${details}` : reason
+        break
+      }
+    }
+    saveContraChequeToStorage()
+    showToast("Pedido de vista registrado com sucesso!", "success")
+    return { ok: true, message: "Registrado com sucesso." }
+  }
+}
+
+export async function updateContraChequeRubricas(
   employeeId: string,
   month: string,
   rubricas: HoleriteItem[]
-): ContraChequeSnapshot | null {
+): Promise<ContraChequeSnapshot | null> {
   let snap = getContraChequeSnapshot(employeeId, month)
   if (!snap) {
     const emp = employeeFolders.value.find((f) => f.id === employeeId)
@@ -985,12 +1320,57 @@ export function updateContraChequeRubricas(
     snap = saveContraChequeSnapshot(emp, month)
   }
 
+  // REGRA DE OURO: Se for imutável e não estiver sob recurso, bloquear
+  if (snap.isImmutable && snap.status !== "em_recurso") {
+    showToast("Este contra-cheque é imutável. Prazo de vista encerrado.", "error")
+    return null
+  }
+
   const cleanSal = parseFloat((snap.salary || "6500").replace(/[^\d,-]/g, "").replace(",", "."))
   const salBase = isNaN(cleanSal) || cleanSal <= 0 ? 6500 : cleanSal
   const novoHolerite = recalcularHoleriteComRubricas(salBase, rubricas, month)
+
+  // Tentar recálculo no backend para registrar nova versão não-destrutiva
+  try {
+    const res = await apiFetch(`/api/contracheques/${snap.id}/recalcular`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        newHolerite: novoHolerite,
+        newSalaryBase: snap.salary,
+        resolutionNotes: "Recálculo aceito e homologado pelo Departamento Pessoal",
+      }),
+    })
+    const data = await res.json()
+    if (data.ok && data.contracheque) {
+      const newSnap: ContraChequeSnapshot = {
+        ...snap,
+        id: data.contracheque.id,
+        version: data.contracheque.version,
+        status: data.contracheque.status,
+        isImmutable: data.contracheque.isImmutable,
+        holerite: novoHolerite,
+        generatedAt: `${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`,
+        contestDeadlineAt: data.contracheque.contestDeadlineAt,
+        daysRemaining: data.contracheque.daysRemaining,
+      }
+      const key = `${employeeId}_${month}`
+      contraChequeSnapshots.value[key] = newSnap
+      saveContraChequeToStorage()
+      showToast(`Contra-cheque recalculado! Versão ${newSnap.version} gerada linearmente.`, "success")
+      return newSnap
+    } else if (data.error) {
+      showToast(data.error, "error")
+      return null
+    }
+  } catch (_e) {}
+
+  // Fallback local caso offline
+  const newVer = (snap.version || 1) + 1
+  snap.version = newVer
+  snap.status = "recalculado"
   snap.holerite = novoHolerite
   snap.generatedAt = `${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
-
   saveContraChequeToStorage()
   showToast("Rubricas do holerite atualizadas e recalculadas!", "success")
   return snap
@@ -1627,6 +2007,55 @@ export async function updateEmployeeContractAndSchedule(
   const ctLabel = contractTypeConfigs[contractType]?.label || contractType
   const wsLabel = workScheduleConfigs[workSchedule]?.label || workSchedule
   showToast(`Colaborador atualizado: ${ctLabel} · ${wsLabel}`, "success")
+  return folder
+}
+
+export async function updateEmployeeMonthlyCalendarOverride(
+  folderId: string,
+  override: MonthlyCalendarDayOverride
+): Promise<EmployeeFolder | null> {
+  const folder = employeeFolders.value.find((f) => f.id === folderId)
+  if (!folder) return null
+
+  if (!folder.customMonthlyOverrides) {
+    folder.customMonthlyOverrides = {}
+  }
+  folder.customMonthlyOverrides[override.date] = override
+
+  try {
+    await apiFetch(`/api/employees/${folderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customMonthlyOverrides: folder.customMonthlyOverrides,
+      }),
+    })
+  } catch (_e) {}
+
+  showToast(`Escala do dia ${override.date.split("-").reverse().join("/")} atualizada!`, "success")
+  return folder
+}
+
+export async function removeEmployeeMonthlyCalendarOverride(
+  folderId: string,
+  date: string
+): Promise<EmployeeFolder | null> {
+  const folder = employeeFolders.value.find((f) => f.id === folderId)
+  if (!folder || !folder.customMonthlyOverrides) return null
+
+  delete folder.customMonthlyOverrides[date]
+
+  try {
+    await apiFetch(`/api/employees/${folderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customMonthlyOverrides: folder.customMonthlyOverrides,
+      }),
+    })
+  } catch (_e) {}
+
+  showToast(`Dia ${date.split("-").reverse().join("/")} restaurado para o padrão da escala.`, "info")
   return folder
 }
 
@@ -2393,6 +2822,222 @@ export async function fetchAllFromBackend(retries = 3) {
       })
     }
   } catch (_e) {}
+
+  // 6. Contra-Cheques e Prazo de Pedido de Vista do Tenant
+  try {
+    await fetchTenantContestDeadline()
+    await fetchContraChequesFromBackend()
+  } catch (_e) {}
+
+  // 7. Eventos Adversos & Feed Corporativo
+  try {
+    await fetchAdverseEvents()
+    await fetchFeedPosts()
+  } catch (_e) {}
+}
+
+/* ─── Canal de Eventos Adversos & Denúncias ──────────────── */
+export interface AdverseEvent {
+  id: string
+  protocol: string
+  tenant_id?: string
+  reporter_id?: string | null
+  reporter_name?: string | null
+  reporter_email?: string | null
+  is_anonymous: number | boolean
+  category: string
+  severity: "baixa" | "media" | "alta" | "critica"
+  title: string
+  description: string
+  incident_date: string
+  incident_location?: string
+  involved_parties?: string
+  evidence_url?: string
+  status: "registrado" | "em_analise" | "em_investigacao" | "medidas_adotadas" | "concluido" | "arquivado"
+  tratativa_notes?: string
+  tratativa_by?: string
+  tratativa_updated_at?: string
+  measures_taken?: string
+  public_announcement?: string
+  announced_to_feed: number
+  created_at: string
+  updated_at: string
+}
+
+export const adverseEvents = ref<AdverseEvent[]>([])
+export const adverseEventsStats = ref({
+  total: 0,
+  novos: 0,
+  em_tratativa: 0,
+  com_medidas: 0,
+  concluidos: 0,
+})
+
+export async function fetchAdverseEvents(): Promise<void> {
+  try {
+    const res = await apiFetch("/api/adverse-events")
+    const data = await res.json()
+    if (data.ok && Array.isArray(data.events)) {
+      adverseEvents.value = data.events
+      if (data.stats) adverseEventsStats.value = data.stats
+    }
+  } catch (_e) {}
+}
+
+export async function createAdverseEvent(payload: Partial<AdverseEvent>): Promise<{ ok: boolean; protocol?: string; error?: string }> {
+  try {
+    const res = await apiFetch("/api/adverse-events", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      showToast(`Relato registrado com sucesso! Protocolo: ${data.protocol}`, "success")
+      await fetchAdverseEvents()
+      return { ok: true, protocol: data.protocol }
+    }
+    return { ok: false, error: data.error }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Erro ao registrar evento." }
+  }
+}
+
+export async function updateAdverseEventTratativa(
+  id: string,
+  payload: {
+    status?: AdverseEvent["status"]
+    tratativa_notes?: string
+    measures_taken?: string
+    public_announcement?: string
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch(`/api/adverse-events/${id}/tratativa`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      showToast("Tratativa atualizada com sucesso!", "success")
+      await fetchAdverseEvents()
+      return { ok: true }
+    }
+    return { ok: false, error: data.error }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Erro ao atualizar tratativa." }
+  }
+}
+
+export async function announceAdverseEventToFeed(id: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch(`/api/adverse-events/${id}/announce-feed`, {
+      method: "POST",
+    })
+    const data = await res.json()
+    if (data.ok) {
+      showToast("Medidas e atualizações publicadas com sucesso no Feed Corporativo!", "success")
+      await fetchAdverseEvents()
+      await fetchFeedPosts()
+      return { ok: true }
+    }
+    return { ok: false, error: data.error }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Erro ao publicar no feed." }
+  }
+}
+
+/* ─── Feed Corporativo de Novidades, Medidas e Eventos ────── */
+export interface FeedPost {
+  id: string
+  tenant_id?: string
+  author_id: string
+  author_name: string
+  author_role: string
+  title: string
+  content: string
+  category: "novidade" | "medida" | "evento" | "comunicado"
+  priority: "normal" | "urgente" | "destaque"
+  is_pinned: number | boolean
+  adverse_event_id?: string | null
+  event_date?: string | null
+  event_location?: string | null
+  tags?: string
+  likes_count: number
+  likes_users_json?: string
+  liked_by_me?: boolean
+  created_at: string
+  updated_at: string
+}
+
+export const feedPosts = ref<FeedPost[]>([])
+export const feedCounts = ref({
+  total: 0,
+  novidade: 0,
+  medida: 0,
+  evento: 0,
+  comunicado: 0,
+})
+
+export async function fetchFeedPosts(category = "todos", search = ""): Promise<void> {
+  try {
+    const query = new URLSearchParams()
+    if (category && category !== "todos") query.set("category", category)
+    if (search && search.trim()) query.set("search", search.trim())
+
+    const res = await apiFetch(`/api/feed?${query.toString()}`)
+    const data = await res.json()
+    if (data.ok && Array.isArray(data.posts)) {
+      feedPosts.value = data.posts
+      if (data.counts) feedCounts.value = data.counts
+    }
+  } catch (_e) {}
+}
+
+export async function createFeedPost(payload: Partial<FeedPost>): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch("/api/feed", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      showToast("Publicação anunciada com sucesso no Feed!", "success")
+      await fetchFeedPosts()
+      return { ok: true }
+    }
+    return { ok: false, error: data.error }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Erro ao publicar comunicado." }
+  }
+}
+
+export async function toggleFeedPostLike(id: string): Promise<void> {
+  try {
+    const res = await apiFetch(`/api/feed/${id}/like`, { method: "POST" })
+    const data = await res.json()
+    if (data.ok) {
+      const post = feedPosts.value.find((p) => p.id === id)
+      if (post) {
+        post.liked_by_me = data.liked
+        post.likes_count = data.likesCount
+      }
+    }
+  } catch (_e) {}
+}
+
+export async function deleteFeedPost(id: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch(`/api/feed/${id}`, { method: "DELETE" })
+    const data = await res.json()
+    if (data.ok) {
+      showToast("Publicação removida com sucesso.", "info")
+      feedPosts.value = feedPosts.value.filter((p) => p.id !== id)
+      return { ok: true }
+    }
+    return { ok: false, error: data.error }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Erro ao remover publicação." }
+  }
 }
 
 // Iniciar busca automática do backend ao carregar

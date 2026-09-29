@@ -8,11 +8,12 @@ import {
   FileText,
   Plus,
   ArrowRight,
-  Clock,
-  CheckCircle2,
-  Inbox,
+  LayoutDashboard,
+  Shield,
+  Sparkles,
+  ShieldAlert,
 } from "lucide-vue-next"
-import { conversations, totalUnread, activeTab, currentUser, userPermissions, userRoleType } from "../store"
+import { totalUnread, activeTab, currentUser, userPermissions, activeUserRole } from "../store"
 import { computed, ref, onMounted, watch } from "vue"
 import { useRouter, useRoute } from "vue-router"
 import EmployeesModule from "./EmployeesModule.vue"
@@ -20,6 +21,11 @@ import RequestsModule from "./RequestsModule.vue"
 import DocumentsModule from "./DocumentsModule.vue"
 import ReportsModule from "./ReportsModule.vue"
 import OnboardingModule from "./OnboardingModule.vue"
+import DashboardView from "./DashboardView.vue"
+import EmployeeProfilePage from "./EmployeeProfilePage.vue"
+import UsersModule from "./UsersModule.vue"
+import CorporateFeedModule from "./CorporateFeedModule.vue"
+import AdverseEventsModule from "./AdverseEventsModule.vue"
 
 const emit = defineEmits<{
   (e: "open-chat"): void
@@ -34,24 +40,15 @@ function showToast(msg: string) {
   }, 2500)
 }
 
-const openCount = computed(
-  () => conversations.value.filter((c) => c.status === "aberto").length,
-)
-const pendingCount = computed(
-  () => conversations.value.filter((c) => c.status === "pendente").length,
-)
-const resolvedCount = computed(
-  () => conversations.value.filter((c) => c.status === "resolvido").length,
-)
-
-const stats = computed(() => [
-  { label: "Não lidas", value: totalUnread.value, icon: Inbox, color: "var(--color-accent)" },
-  { label: "Em aberto", value: openCount.value, icon: Clock, color: "var(--color-primary)" },
-  { label: "Pendentes", value: pendingCount.value, icon: MessagesSquare, color: "var(--color-instagram)" },
-  { label: "Resolvidas", value: resolvedCount.value, icon: CheckCircle2, color: "var(--color-success)" },
-])
-
 const modules = [
+  {
+    key: "dashboard",
+    title: "Dashboard",
+    desc: "Visão executiva com indicadores de RH, movimentações e métricas em tempo real.",
+    icon: LayoutDashboard,
+    color: "var(--color-primary)",
+    active: true,
+  },
   {
     key: "chat",
     title: "Chat Interno",
@@ -100,21 +97,51 @@ const modules = [
     color: "var(--color-email)",
     active: true,
   },
+  {
+    key: "feed",
+    title: "Feed Corporativo",
+    desc: "Novidades, eventos da empresa, comunicados gerais e anúncios de medidas.",
+    icon: Sparkles,
+    color: "#8b5cf6",
+    active: true,
+  },
+  {
+    key: "adverse_events",
+    title: "Ouvidoria & Incidentes",
+    desc: "Canal seguro para comunicar eventos adversos, acompanhar investigações e medidas tomadas.",
+    icon: ShieldAlert,
+    color: "#f43f5e",
+    active: true,
+  },
 ]
 
 const router = useRouter()
 const route = useRoute()
 
-onMounted(() => {
-  if (route?.meta?.tab) {
+const isEmployeeProfileRoute = computed(() => {
+  return Boolean(route?.path && route.path.startsWith("/funcionarios/"))
+})
+
+function syncTabWithRoute() {
+  if (route.path.startsWith("/funcionarios/")) {
+    activeTab.value = "perfil_funcionario"
+  } else if (route.path === "/dashboard") {
+    activeTab.value = "dashboard"
+  } else if (route.path === "/feed") {
+    activeTab.value = "feed"
+  } else if (route.path === "/eventos-adversos") {
+    activeTab.value = "eventos-adversos"
+  } else if (route.meta?.tab) {
     activeTab.value = route.meta.tab as string
   }
+}
+
+onMounted(() => {
+  syncTabWithRoute()
 })
 
 watch(() => route.path, () => {
-  if (route?.meta?.tab) {
-    activeTab.value = route.meta.tab as string
-  }
+  syncTabWithRoute()
 })
 
 function onModuleClick(mod: typeof modules[0]) {
@@ -124,73 +151,168 @@ function onModuleClick(mod: typeof modules[0]) {
     activeTab.value = mod.key
     const routeMap: Record<string, string> = {
       home: "/home",
+      dashboard: "/dashboard",
       people: "/colaboradores",
       requests: "/solicitacoes",
       docs: "/documentos",
       reports: "/relatorios",
       onboarding: "/onboarding",
+      users: "/usuarios",
+      feed: "/feed",
+      adverse_events: "/eventos-adversos",
     }
     if (routeMap[mod.key] && router) {
       router.push(routeMap[mod.key])
     }
-    if (mod.key !== "people" && mod.key !== "requests" && mod.key !== "docs" && mod.key !== "reports" && mod.key !== "onboarding") {
+    if (mod.key !== "people" && mod.key !== "requests" && mod.key !== "docs" && mod.key !== "reports" && mod.key !== "onboarding" && mod.key !== "dashboard" && mod.key !== "users" && mod.key !== "feed" && mod.key !== "adverse_events") {
       showToast(`Módulo "${mod.title}" selecionado`)
     }
   }
 }
 
 const roleHeaderInfo = computed(() => {
-  const role = userRoleType.value
-  switch (role) {
-    case "dp":
+  const currentRole = activeUserRole.value
+  switch (currentRole) {
+    case "ADMIN":
       return {
-        badge: "Departamento Pessoal",
-        badgeClass: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
-        title: "Painel de Departamento Pessoal & Folha",
-        subtitle: "Controle de folha de pagamento, espelho de ponto, férias e relações trabalhistas (CLT/eSocial).",
+        badge: "Administrador Geral",
+        badgeClass: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
+        title: "Painel de Administração & Segurança",
+        subtitle: "Gestão completa de usuários, controle de permissões (RBAC) e auditoria de eventos.",
       }
-    case "ti":
+    case "RH":
       return {
-        badge: "T.I. & Segurança",
-        badgeClass: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
-        title: "Painel de Tecnologia & Infraestrutura",
-        subtitle: "Gestão de acessos, provisionamento de equipamentos no onboarding, conformidade LGPD e backups.",
+        badge: "Recursos Humanos",
+        badgeClass: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
+        title: "Plataforma de RH — PeopleHub",
+        subtitle: "Gestão do clima, pastas de colaboradores, contracheques, férias e comunicados.",
       }
-    case "colaborador":
+    case "GESTOR":
+      return {
+        badge: "Gestor de Equipe",
+        badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+        title: "Painel de Gestão de Equipe",
+        subtitle: "Acompanhamento da sua equipe, aprovação de solicitações de férias e escala mensal.",
+      }
+    case "COLABORADOR":
+    default:
       return {
         badge: "Portal do Colaborador",
         badgeClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
         title: "Portal do Colaborador — Autoatendimento",
-        subtitle: "Consulte seus holerites, bata ponto, solicite férias, participe de treinamentos e contate o RH.",
-      }
-    default:
-      return {
-        badge: "Recursos Humanos",
-        badgeClass: "bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30",
-        title: "Plataforma de RH — PeopleHub",
-        subtitle: "Gestão do clima, DHO, trilhas de capacitação corporativa e comunicação interna.",
+        subtitle: "Consulte seus contracheques, espelho de ponto, solicite férias e acompanhe chamados.",
       }
   }
 })
 
 const visibleModules = computed(() => {
-  return modules.filter((m) => {
-    if (m.key === "people") return userPermissions.value.canManagePeople
-    if (m.key === "reports") return userPermissions.value.canViewReports
-    return true
-  })
+  const currentRole = activeUserRole.value
+  const list = [
+    {
+      key: "dashboard",
+      title: "Dashboard",
+      desc: "Visão executiva com indicadores de RH, movimentações e métricas em tempo real.",
+      icon: LayoutDashboard,
+      color: "var(--color-primary)",
+      active: true,
+    },
+    {
+      key: "chat",
+      title: "Chat Interno",
+      desc: "Comunicação corporativa direta e instantânea com colaboradores e equipes.",
+      icon: MessagesSquare,
+      color: "var(--color-primary)",
+      active: true,
+    },
+    {
+      key: "people",
+      title: currentRole === "COLABORADOR" ? "Minha Pasta" : "Colaboradores",
+      desc: currentRole === "COLABORADOR"
+        ? "Consulte seus dados funcionais, documentos e histórico de contracheques."
+        : "Ferramenta de criação e gestão de pastas com os dados e documentos de cada colaborador.",
+      icon: Users,
+      color: "var(--color-telegram)",
+      active: true,
+    },
+    {
+      key: "requests",
+      title: "Solicitações",
+      desc: "Férias, benefícios e folha em um fluxo de aprovação organizado.",
+      icon: CalendarCheck,
+      color: "var(--color-instagram)",
+      active: true,
+    },
+    {
+      key: "docs",
+      title: "Documentos",
+      desc: "Declarações, contratos e modelos gerados automaticamente.",
+      icon: FileText,
+      color: "var(--color-email)",
+      active: userPermissions.value.canManageDocs,
+    },
+    {
+      key: "reports",
+      title: "Relatórios",
+      desc: "Indicadores de atendimento, SLA e satisfação da equipe.",
+      icon: BarChart3,
+      color: "var(--color-accent)",
+      active: userPermissions.value.canViewReports,
+    },
+    {
+      key: "onboarding",
+      title: "Onboarding",
+      desc: "Trilhas de integração e checklists para novos colaboradores.",
+      icon: GraduationCap,
+      color: "var(--color-success)",
+      active: currentRole !== "COLABORADOR",
+    },
+    {
+      key: "users",
+      title: "Gestão de Usuários (RBAC)",
+      desc: "Controle de acessos baseado em perfis, alteração de funções e auditoria.",
+      icon: Shield,
+      color: "#f43f5e",
+      active: currentRole === "ADMIN",
+    },
+    {
+      key: "feed",
+      title: "Feed Corporativo",
+      desc: "Novidades, eventos da empresa, comunicados gerais e anúncios de medidas.",
+      icon: Sparkles,
+      color: "#8b5cf6",
+      active: true,
+    },
+    {
+      key: "adverse_events",
+      title: "Ouvidoria & Incidentes",
+      desc: "Canal seguro para comunicar eventos adversos, acompanhar investigações e medidas tomadas.",
+      icon: ShieldAlert,
+      color: "#f43f5e",
+      active: true,
+    },
+  ]
+  return list.filter((m) => m.active)
 })
 </script>
 
 <template>
   <!-- Módulos Específicos -->
-  <EmployeesModule v-if="activeTab === 'people' || activeTab === 'colaboradores'" />
+  <main v-if="activeTab === 'dashboard'" class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-5 sm:p-8">
+    <div class="mx-auto w-full max-w-6xl">
+      <DashboardView />
+    </div>
+  </main>
+  <EmployeeProfilePage v-else-if="activeTab === 'perfil_funcionario' || isEmployeeProfileRoute" />
+  <EmployeesModule v-else-if="activeTab === 'people' || activeTab === 'colaboradores'" />
   <RequestsModule v-else-if="activeTab === 'requests' || activeTab === 'solicitacoes'" />
   <DocumentsModule v-else-if="activeTab === 'docs' || activeTab === 'documentos'" />
   <ReportsModule v-else-if="activeTab === 'reports' || activeTab === 'relatorios'" />
   <OnboardingModule v-else-if="activeTab === 'onboarding'" />
+  <UsersModule v-else-if="activeTab === 'users' || activeTab === 'usuarios'" />
+  <CorporateFeedModule v-else-if="activeTab === 'feed'" />
+  <AdverseEventsModule v-else-if="activeTab === 'adverse_events' || activeTab === 'eventos-adversos'" />
 
-  <!-- Workspace Padrão / Dashboard Inicial -->
+  <!-- Workspace Padrão / Início apenas com os Módulos (como estava antes) -->
   <main v-else class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative">
     <!-- Toast local -->
     <transition
@@ -227,32 +349,8 @@ const visibleModules = computed(() => {
     </header>
 
     <div class="mx-auto w-full max-w-6xl px-5 py-6 sm:px-8">
-
-
-      <!-- Indicadores -->
-      <section aria-label="Indicadores de atendimento">
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div
-            v-for="s in stats"
-            :key="s.label"
-            class="flex items-center gap-3 rounded-xl border bg-card p-4 transition-all hover:shadow-sm"
-          >
-            <span
-              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-              :style="{ backgroundColor: s.color + '1a', color: s.color }"
-            >
-              <component :is="s.icon" :size="20" />
-            </span>
-            <div class="min-w-0">
-              <p class="text-2xl font-bold leading-none">{{ s.value }}</p>
-              <p class="mt-1 truncate text-xs text-muted-foreground">{{ s.label }}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- Módulos -->
-      <section class="mt-8" aria-label="Módulos da plataforma">
+      <section aria-label="Módulos da plataforma">
         <div class="mb-3 flex items-center justify-between">
           <h2 class="text-lg font-semibold">Módulos</h2>
           <button

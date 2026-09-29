@@ -44,15 +44,38 @@ A plataforma integra **atendimento omnichannel imediato**, **gestão documental 
 
 ---
 
-### 🛡️ 2. Perfis de Acesso (RBAC) & Proteção de Dados Funcionais
-* **Matriz de Permissões Segmentada**:
-  * **RH (Recursos Humanos)**: Gestão de colaboradores, pastas funcionais, chat interno, onboarding e solicitações.
-  * **DP (Departamento Pessoal)**: Folha de pagamento, ponto eletrônico, férias, encargos e contracheques.
-  * **TI (Tecnologia da Informação / Admin)**: Configurações, segurança, infraestrutura e gestão de perfis de usuário.
-  * **Colaborador**: Portal de autoatendimento para consulta de holerites, solicitação de férias, espelho de ponto e suporte.
-* **Controle Rigoroso no Perfil do Usuário**:
-  * **Cargo / Função e Departamento Protegidos**: Exibidos como **Somente Leitura** (`readonly`) para colaboradores comuns.
-  * **Perfil de Acesso & Permissões Bloqueados**: Somente o **Administrador** da plataforma possui privilégios para alterar perfis (RBAC), departamentos e telas permitidas de qualquer colaborador.
+### 🛡️ 2. Sistema Completo de Perfis de Acesso (RBAC — Role-Based Access Control)
+O PeopleHub RH conta com um sistema corporativo rigoroso de controle de acesso baseado em funções, com garantia de bloqueio em nível de backend (HTTP 401 e HTTP 403), isolamento de escopos de dados em SQL e trilha de auditoria:
+
+* **As 4 Funções Oficiais (Roles)**:
+  * **`ADMIN` (Administrador Geral)**: Acesso irrestrito a todas as configurações, painéis, auditoria, alteração de perfis e gestão de usuários (`/usuarios`).
+  * **`RH` (Recursos Humanos & DP)**: Acesso integral a todos os colaboradores da empresa (`ALL`), criação e exclusão de pastas funcionais, gestão completa de folha de pagamento, contracheques, documentos, férias e aprovações.
+  * **`GESTOR` (Gestão de Equipe)**: Acesso restrito ao escopo da sua equipe e liderados diretos (`TEAM`). Pode visualizar colaboradores do seu departamento, gerenciar escalas mensais, e aprovar solicitações de seus liderados (com bloqueio estrito contra aprovação do próprio requerimento).
+  * **`COLABORADOR` (Autoatendimento)**: Acesso estritamente pessoal (`OWN`). Visualiza unicamente o seu próprio prontuário, espelho de ponto, contracheques emitidos e solicitações abertas. Bloqueado de criar funcionários, alterar dados de outros ou aprovar solicitações.
+
+* **Escopos de Dados em Nível de Banco de Dados**:
+  * **`ALL`** (Admin e RH): Consultas executam sem restrição departmental.
+  * **`TEAM`** (Gestor): Consultas filtram automaticamente por `department = ? OR manager = ?`.
+  * **`OWN`** (Colaborador): Consultas filtram estritamente pelo e-mail/identificador do usuário autenticado.
+
+* **Mascaramento Automático de Dados Sensíveis**:
+  * Usuários sem a permissão `employees.view_sensitive` (Gestores e Colaboradores) têm campos sensíveis como **Salário Base** exibidos como `"Confidencial"` e **CPF** ofuscado (`123.***.***-**`), com exceção do colaborador consultando o seu próprio perfil pessoal.
+
+* **Governança & Anti-Autoaprovação**:
+  * Nenhum usuário (mesmo Gestores ou Administradores) pode aprovar ou rejeitar suas próprias solicitações de férias ou contracheques (`HTTP 403: Violação de Governança`).
+
+* **Módulo Administrativo de Usuários (`/usuarios`)**:
+  * Painel restrito ao `ADMIN` para listar, criar, editar dados cadastrais, alterar funções e ativar/desativar contas.
+  * Modal com aviso de segurança explícito e confirmação antes de alterar a role de qualquer membro da organização.
+  * Bloqueio contra auto-despromoção e auto-desativação do administrador ativo.
+
+* **Trilha de Auditoria Imutável (`/api/users/audit`)**:
+  * Tabela `audit_logs` que registra de forma definitiva todas as ações críticas: `ALTERAR_ROLE`, `ATIVAR_USUARIO`, `DESATIVAR_USUARIO`, `EMPLOYEE_CREATE`, `EMPLOYEE_DELETE`, `REQUEST_STATUS_CHANGE`, acompanhado do autor, timestamp e endereço IP.
+
+* **Execução dos Testes Automatizados de Segurança**:
+  ```bash
+  cd backend && node test-rbac-permissions.js
+  ```
 
 ---
 
@@ -214,34 +237,75 @@ A aplicação estará disponível em:
 
 ---
 
+---
+
+### 📊 8. Dashboard Executivo de RH (Dados Reais do SQLite)
+* **Endpoint Dedicado**: `GET /api/dashboard` consolidando métricas da organização em tempo real:
+  * **8 Cards de Métricas Operacionais**:
+    1. Total de Funcionários
+    2. Colaboradores Ativos
+    3. Colaboradores Inativos / Afastados
+    4. Contratações no Mês (admissões recentes)
+    5. Desligamentos no Mês (turnover do período)
+    6. Solicitações Pendentes (em tramitação no RH)
+    7. Férias Pendentes (pedidos em análise)
+    8. Documentos Próximos do Vencimento (ASO, CNH, contratos < 30 dias)
+  * **Gráficos Interativos (Chart.js / Vue-ChartJS)**:
+    1. **Funcionários por Departamento**: Distribuição do efetivo por setor (TI, RH, Financeiro, Comercial, etc.).
+    2. **Contratações vs Desligamentos por Mês**: Comparativo semestral de admissões e desligamentos.
+    3. **Distribuição por Status**: Gráfico em rosca (Doughnut) com a situação cadastral.
+    4. **Evolução do Quadro**: Curva histórica de crescimento do headcount corporativo.
+    5. **Distribuição por Cargo**: Top funções com maior volume de colaboradores.
+  * **Resiliência e UX**: Estados de carregamento com *skeleton loaders*, tratamento de erro com botão "Tentar Novamente", estado vazio e atualização instantânea.
+
+---
+
+### 👤 9. Perfil Completo do Funcionário & Dossiê (`/funcionarios/:id`)
+* **Rota Dedicada**: `/funcionarios/:id` acessível diretamente através do botão `[Ver Perfil]` na listagem de colaboradores.
+* **Header do Funcionário**:
+  * Foto/Avatar, nome completo, cargo, departamento, status cadastral com badge padronizada, ID/matrícula e botões de ação ("Editar Funcionário" e "Dossiê PDF").
+* **Navegação por 7 Abas Especializadas**:
+  1. **Aba Resumo**: Cargo, departamento, data de admissão, tempo de empresa calculado, status, salário base (respeitando RBAC), gestor imediato, email e telefone corporativo. Acompanha 4 cards resumidos (Férias disponíveis, Chamados pendentes, Documentos cadastrados e Tempo de casa).
+  2. **Aba Dados Pessoais**: Nome completo, CPF (com proteção e mascaramento de dígitos para usuários sem privilégio de folha), data de nascimento, email, telefone, CEP e endereço completo.
+  3. **Aba Dados Profissionais**: Parâmetros contratuais CLT (tipo de contrato com badge, escala de trabalho, admissão, desligamento, salário base e gestor imediato).
+  4. **Aba Documentos**: Repositório de documentos digitais com tipo de arquivo, nome, data de upload, validade, status de validade (*Válido*, *Próximo do vencimento* ou *Expirado*), além de botões de **Visualizar** e **Download**.
+  5. **Aba Férias**: Painel dos 30 dias regulamentares de férias (dias disponíveis, dias usufruídos e próximo período aquisitivo) acompanhado do histórico detalhado de solicitações de férias e seus pareceres.
+  6. **Aba Solicitações**: Linha de chamados funcionais (férias, ponto, atestados, reembolsos) com protocolo, status, responsável e filtro seletivo por status.
+  7. **Aba Histórico & Auditoria**: Linha do tempo visual (*Timeline*) auditada pela tabela `employee_history`, rastreando promoções de cargo, reajustes salariais, transferências de departamento, alterações de status cadastral e admissão.
+* **Listagem Integrada de Colaboradores**:
+  * Botão `[Ver Perfil]` em cada card de colaborador e na tabela.
+  * **Busca em tempo real**, **Filtro por departamento**, **Filtro por status**, **Filtro por contrato**, **Filtro por escala**, **Ordenação dinâmica** (A-Z, Z-A, Admissão Recente, Matrícula) e **Paginação responsiva**.
+
+---
+
 ## 📁 Estrutura de Diretórios
 
 ```
 chat-de-rh1808/
 ├── 📂 src/                                 # Código Fonte do Frontend (Vue 3)
 │   ├── 📂 components/                      # Componentes e Módulos Principais
-│   │   ├── 📄 FirstLoginPasswordModal.vue  # Modal bloqueante de troca de senha no 1º acesso
-│   │   ├── 📄 ProfileModal.vue             # Modal de perfil com campos e RBAC restritos
-│   │   ├── 📄 EscalaContratoCard.vue       # Editor visual de escala semanal e contrato CLT
-│   │   ├── 📄 EmployeesModule.vue          # Módulo de colaboradores e pastas funcionais
-│   │   ├── 📄 NewEmployeeFolderModal.vue   # Provisionamento de acesso e pasta pelo RH
-│   │   ├── 📄 ChatPanel.vue                # Chat de atendimento em 1 clique
+│   │   ├── 📄 DashboardView.vue            # Dashboard executivo com 8 cards e 4 gráficos reais
+│   │   ├── 📄 EmployeeProfilePage.vue      # Perfil completo do funcionário com 7 abas funcionais
+│   │   ├── 📄 HomeWorkspace.vue            # Workspace principal com dashboard integrado
+│   │   ├── 📄 EmployeesModule.vue          # Gestão de colaboradores com busca, filtros, ordenação e paginação
+│   │   ├── 📄 NewEmployeeFolderModal.vue   # Provisionamento e edição completa de colaboradores
+│   │   ├── 📄 ExportDossierModal.vue       # Exportação de dossiê completo em PDF
 │   │   ├── 📄 DocumentsModule.vue          # Emissão de holerites e espelho de ponto em PDF
 │   │   ├── 📄 RequestsModule.vue           # Gestão de solicitações (férias, reembolsos)
 │   │   ├── 📄 OnboardingModule.vue         # Trilhas e checklists de integração
 │   │   └── 📄 LoginPage.vue                # Login, 2FA e fluxo "Esqueci minha senha"
-│   ├── 📂 stores/                          # Stores Pinia
-│   ├── 📂 router/                          # Configuração de rotas e navegação protegida
-│   ├── 📄 store.ts                         # Estado reativo centralizado (dados e permissões)
+│   ├── 📂 router/                          # Rotas: /dashboard, /home, /funcionarios/:id, /colaboradores, etc.
+│   ├── 📄 store.ts                         # Estado reativo, apiFetch autenticado e RBAC
 │   └── 📄 App.vue                          # Componente raiz da aplicação
 ├── 📂 backend/                             # Backend Node.js / Express 5 API
 │   ├── 📂 src/
-│   │   ├── 📂 routes/                      # Rotas REST (auth, employees, onboarding, etc.)
-│   │   ├── 📂 services/                    # Serviços (mail.service.ts com Nodemailer)
-│   │   ├── 📂 middleware/                  # Autenticação JWT e controle de sessão
-│   │   ├── 📂 db/                          # Banco de dados SQLite, schemas e migrações
-│   │   └── 📄 swagger.ts                   # Documentação OpenAPI / Swagger UI
-│   ├── 📄 peoplehub.db                     # Banco de dados SQLite persistido
+│   │   ├── 📂 routes/
+│   │   │   ├── 📄 dashboard.routes.ts      # API GET /api/dashboard (métricas consolidadas reais)
+│   │   │   ├── 📄 employees.routes.ts      # API GET/PUT /api/employees e /api/funcionarios
+│   │   │   ├── 📄 auth.routes.ts           # Login, JWT, MFA e recuperação de senha
+│   │   │   └── 📄 ...                      # Demais rotas (requests, documents, contracheques)
+│   │   ├── 📂 db/                          # SQLite (tabelas employees, employee_history, requests, documents)
+│   ├── 📄 peoplehub.db                     # Banco de dados SQLite persistente
 │   └── 📄 .env.example                     # Modelo de variáveis de ambiente
 └── 📄 README.md                            # Documentação oficial do projeto
 ```

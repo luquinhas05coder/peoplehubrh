@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { MessagesSquare, Home, Users, BarChart3, CalendarCheck, FileText, GraduationCap, Settings, LifeBuoy, LogOut } from "lucide-vue-next"
-import { totalUnread, activeTab, logoutUser, currentUser, userPermissions, userRoleType } from "../store"
+import { MessagesSquare, Home, Users, BarChart3, CalendarCheck, FileText, GraduationCap, Settings, LifeBuoy, LogOut, LayoutDashboard, Shield, Sparkles, ShieldAlert } from "lucide-vue-next"
+import { totalUnread, activeTab, logoutUser, currentUser, userPermissions, activeUserRole } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import SettingsModal from "./SettingsModal.vue"
 import HelpModal from "./HelpModal.vue"
@@ -27,11 +27,21 @@ const router = useRouter()
 const items = computed(() => {
   const list = [
     { key: "home", icon: Home, label: "Início", path: "/home", allowed: true },
-    { key: "people", icon: Users, label: "Colaboradores", path: "/colaboradores", allowed: userPermissions.value.canManagePeople },
+    { key: "dashboard", icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", allowed: true },
+    {
+      key: "people",
+      icon: Users,
+      label: userPermissions.value.isColaborador ? "Minha Pasta" : "Colaboradores",
+      path: "/colaboradores",
+      allowed: true,
+    },
     { key: "requests", icon: CalendarCheck, label: "Solicitações", path: "/solicitacoes", allowed: true },
     { key: "docs", icon: FileText, label: "Documentos", path: "/documentos", allowed: userPermissions.value.canManageDocs },
     { key: "reports", icon: BarChart3, label: "Relatórios", path: "/relatorios", allowed: userPermissions.value.canViewReports },
-    { key: "onboarding", icon: GraduationCap, label: "Onboarding", path: "/onboarding", allowed: true },
+    { key: "onboarding", icon: GraduationCap, label: "Onboarding", path: "/onboarding", allowed: activeUserRole.value !== "COLABORADOR" },
+    { key: "feed", icon: Sparkles, label: "Feed Corporativo", path: "/feed", allowed: true },
+    { key: "adverse_events", icon: ShieldAlert, label: "Ouvidoria & Incidentes", path: "/eventos-adversos", allowed: true },
+    { key: "users", icon: Shield, label: "Usuários", path: "/usuarios", allowed: activeUserRole.value === "ADMIN" },
   ]
   return list.filter((i) => i.allowed)
 })
@@ -65,18 +75,18 @@ function handleNavClick(key: string) {
       PH
     </button>
 
-    <!-- Badge do Perfil Ativo (RH / DP / TI / COLAB) -->
+    <!-- Badge do Perfil Ativo (ADMIN / RH / GESTOR / COLAB) -->
     <span
       class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md tracking-wider border shadow-2xs mb-0.5"
       :class="{
-        'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30': userRoleType === 'rh',
-        'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30': userRoleType === 'dp',
-        'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30': userRoleType === 'ti',
-        'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30': userRoleType === 'colaborador',
+        'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30': activeUserRole === 'ADMIN',
+        'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30': activeUserRole === 'RH',
+        'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30': activeUserRole === 'GESTOR',
+        'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30': activeUserRole === 'COLABORADOR',
       }"
-      :title="`Perfil de Acesso: ${currentUser?.role || userRoleType}`"
+      :title="`Perfil RBAC: ${currentUser?.role || activeUserRole}`"
     >
-      {{ userRoleType === 'colaborador' ? 'COLAB' : userRoleType.toUpperCase() }}
+      {{ activeUserRole === 'COLABORADOR' ? 'COLAB' : activeUserRole }}
     </span>
 
     <!-- Indicador de Organização / Tenant Ativo -->
@@ -126,7 +136,7 @@ function handleNavClick(key: string) {
       v-for="item in items"
       :key="item.key"
       class="group relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors"
-      :class="(activeTab === item.key || (item.key === 'people' && activeTab === 'colaboradores') || (item.key === 'requests' && activeTab === 'solicitacoes') || (item.key === 'docs' && activeTab === 'documentos') || (item.key === 'reports' && activeTab === 'relatorios'))
+      :class="(activeTab === item.key || (item.key === 'dashboard' && activeTab === 'dashboard') || (item.key === 'people' && (activeTab === 'colaboradores' || activeTab === 'perfil_funcionario')) || (item.key === 'requests' && activeTab === 'solicitacoes') || (item.key === 'docs' && activeTab === 'documentos') || (item.key === 'reports' && activeTab === 'relatorios') || (item.key === 'feed' && activeTab === 'feed') || (item.key === 'adverse_events' && (activeTab === 'adverse_events' || activeTab === 'eventos-adversos')))
         ? 'bg-muted text-foreground font-bold'
         : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
       :aria-label="item.label"

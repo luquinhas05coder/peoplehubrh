@@ -15,9 +15,16 @@ declare global {
   }
 }
 
+import type { Role } from "../constants/rbac.js"
+import { normalizeRole } from "../constants/rbac.js"
+
 export interface JwtPayload {
   sub: string
   email: string
+  role?: string
+  role_type?: Role
+  department?: string
+  name?: string
   tenant_id?: string
   tenant_name?: string
   type: "session" | "pending_mfa"
@@ -35,10 +42,24 @@ export function signSessionToken(
   userId: string,
   email: string,
   tenantId: string = "tenant_default",
-  tenantName?: string
+  tenantName?: string,
+  rawRole?: string,
+  department?: string,
+  name?: string
 ): string {
+  const role_type = normalizeRole(rawRole)
   return jwt.sign(
-    { sub: userId, email, tenant_id: tenantId, tenant_name: tenantName, type: "session" },
+    {
+      sub: userId,
+      email,
+      role: rawRole || role_type,
+      role_type,
+      department,
+      name,
+      tenant_id: tenantId,
+      tenant_name: tenantName,
+      type: "session",
+    },
     JWT_SECRET,
     {
       expiresIn: "8h",

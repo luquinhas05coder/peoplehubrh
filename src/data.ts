@@ -121,6 +121,7 @@ export type DocCategory =
   | "exames"
   | "holerites"
   | "certificados"
+  | "declaracoes"
 
 export const docCategoryLabels: Record<DocCategory, string> = {
   pessoais: "Documentos Pessoais",
@@ -128,6 +129,7 @@ export const docCategoryLabels: Record<DocCategory, string> = {
   exames: "Exames Médicos (ASO)",
   holerites: "Holerites & Folha",
   certificados: "Certificados & Cursos",
+  declaracoes: "Declarações & Dossiês",
 }
 
 export interface EmployeeDocument {
@@ -261,6 +263,7 @@ export type WorkSchedule =
   | "escala_6x1"
   | "escala_12x36"
   | "escala_4x3"
+  | "prestador_servicos"
 
 export interface WeeklyScheduleItem {
   day: "Seg" | "Ter" | "Qua" | "Qui" | "Sex" | "Sáb" | "Dom"
@@ -398,6 +401,60 @@ export const workScheduleConfigs: Record<WorkSchedule, WorkScheduleMeta> = {
       "Formalizado via acordo de compensação de horas ou política corporativa de redução de jornada sem redução salarial",
     ],
   },
+  prestador_servicos: {
+    id: "prestador_servicos",
+    label: "Prestador de Serviços (Escala Especial / PJ)",
+    short: "Prestador de Serviços (PJ)",
+    description: "Escala personalizada por demanda, alocação flexível de prestação de serviços com autonomia e controle de entregas.",
+    legalBasis: "Lei 13.429/17 e Código Civil (Art. 593 a 609)",
+    weeklyHours: "Flexível por Demanda",
+    dailyWorkload: "Conforme Ordem de Serviço",
+    dsrRule: "Acordo de prestação e disponibilidade mútua",
+    badgeColor: "text-purple-800 dark:text-purple-300",
+    badgeBg: "bg-purple-500/15",
+    borderStyle: "border-purple-500/30",
+    schedulePattern: [
+      { day: "Seg", fullName: "Segunda-feira", isWorkDay: true, hours: "09:00 - 18:00", shift: "Demanda / Alocação PJ" },
+      { day: "Ter", fullName: "Terça-feira", isWorkDay: true, hours: "09:00 - 18:00", shift: "Demanda / Alocação PJ" },
+      { day: "Qua", fullName: "Quarta-feira", isWorkDay: true, hours: "09:00 - 18:00", shift: "Demanda / Alocação PJ" },
+      { day: "Qui", fullName: "Quinta-feira", isWorkDay: true, hours: "09:00 - 18:00", shift: "Demanda / Alocação PJ" },
+      { day: "Sex", fullName: "Sexta-feira", isWorkDay: true, hours: "09:00 - 18:00", shift: "Demanda / Alocação PJ" },
+      { day: "Sáb", fullName: "Sábado", isWorkDay: false, hours: "Disponibilidade Opcional", shift: "Folga contratual" },
+      { day: "Dom", fullName: "Domingo", isWorkDay: false, hours: "Folga", shift: "Folga contratual" },
+    ],
+    highlights: [
+      "Escala flexível ideal para prestadores de serviços, PJs, consultores e contratos especiais",
+      "Permite ajuste individualizado dia a dia conforme entregas ou plantões alocados",
+      "Garante a segregação de subordinação estrita, preservando a autonomia técnica do prestador",
+    ],
+  },
+}
+
+/* ─── Calendário Mensal e Escala Personalizada Dia a Dia ─── */
+export type DayScheduleType =
+  | "trabalho"
+  | "folga"
+  | "ferias"
+  | "prestador_especial"
+  | "licenca_atestado"
+  | "compensacao"
+
+export interface MonthlyCalendarDayOverride {
+  date: string // "YYYY-MM-DD"
+  type: DayScheduleType
+  isWorkDay: boolean
+  entryTime?: string
+  exitTime?: string
+  breakDuration?: string
+  note?: string
+  serviceProviderDetails?: {
+    contractorRole?: string
+    hourlyRate?: number
+    serviceOrder?: string
+    location?: string
+  }
+  updatedBy?: string
+  updatedAt?: string
 }
 
 export interface EmployeeFolder {
@@ -430,6 +487,7 @@ export interface EmployeeFolder {
   contractType?: ContractType
   workSchedule?: WorkSchedule
   customSchedulePattern?: WeeklyScheduleItem[]
+  customMonthlyOverrides?: Record<string, MonthlyCalendarDayOverride>
 }
 
 import type { HoleriteCalculado } from "./utils/payroll"
@@ -438,6 +496,7 @@ export interface ContraChequeSnapshot {
   id: string
   employeeId: string
   month: string
+  yearMonth?: string
   generatedAt: string
   employeeName: string
   cpf: string
@@ -449,6 +508,15 @@ export interface ContraChequeSnapshot {
   cboTitle?: string
   salary: string
   holerite: HoleriteCalculado
+  version?: number
+  status?: "aberto_para_vista" | "em_recurso" | "recalculado" | "imutavel"
+  isImmutable?: boolean
+  contestDeadlineAt?: string
+  contestRequestedAt?: string
+  contestReason?: string
+  contestResolution?: string
+  daysRemaining?: number
+  hashSignature?: string
 }
 
 /* ─── Tipos e Modelos da Folha de Ponto Eletrônica (CLT / Portaria 671 MTE) ─── */
