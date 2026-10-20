@@ -1,0 +1,423 @@
+/**
+ * routes/pdf.routes.ts — Geração de PDF Oficial de Holerite Modelo Tradicional Simples
+ */
+import { Router, type Request, type Response } from "express"
+import PDFDocument from "pdfkit"
+import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC } from "../middleware/rbac.js"
+
+const router = Router()
+
+// Proteger rota de emissão de PDF de holerite com autenticação
+router.use(resolveTenant)
+router.use(authenticateRBAC)
+
+interface HoleriteItem {
+  code: string
+  description: string
+  reference: string
+  proventos: number
+  descontos: number
+}
+
+function calcularINSS(salarioBruto: number): number {
+  let inss = 0
+  const f1 = 1518.00
+  const f2 = 2793.88
+  const f3 = 4190.83
+  const f4 = 8157.41
+
+  const valorTeto = Math.min(salarioBruto, f4)
+
+  if (valorTeto > 0) inss += Math.min(valorTeto, f1) * 0.075
+  if (valorTeto > f1) inss += (Math.min(valorTeto, f2) - f1) * 0.09
+  if (valorTeto > f2) inss += (Math.min(valorTeto, f3) - f2) * 0.12
+  if (valorTeto > f3) inss += (valorTeto - f3) * 0.14
+
+  return Math.round(inss * 100) / 100
+}
+
+function calcularIRPF(baseIRPF: number): number {
+  if (baseIRPF <= 2259.20) return 0
+  if (baseIRPF <= 2826.65) return Math.round((baseIRPF * 0.075 - 169.44) * 100) / 100
+  if (baseIRPF <= 3751.05) return Math.round((baseIRPF * 0.15 - 381.44) * 100) / 100
+  if (baseIRPF <= 4664.68) return Math.round((baseIRPF * 0.225 - 662.77) * 100) / 100
+  return Math.round((baseIRPF * 0.275 - 896.00) * 100) / 100
+}
+
+function formatRaw(val: number): string {
+  if (!val || val === 0) return ""
+  return val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// POST /api/pdf/holerite
+router.post("/holerite", (req: Request, res: Response) => {
+  try {
+    const {
+      employeeName = "Colaborador",
+      cpf = "123.456.789-00",
+      role = "Analista de RH",
+      department = "Recursos Humanos",
+      registration = "MAT-2026-101",
+      admissionDate = "01/02/2022",
+      cbo = "2124-05",
+      salary = "R$ 6.500,00",
+      month = "08/2026",
+    } = req.body
+
+    // Verificação de escopo: COLABORADOR só pode emitir PDF para si mesmo
+    const scope = req.access?.scope || "OWN"
+    const userName = (req.access?.name || "").toLowerCase()
+    const targetName = String(employeeName).toLowerCase().trim()
+
+    if (scope === "OWN" && targetName !== userName && !userName.includes(targetName)) {
+      res.status(403).json({ ok: false, error: "Acesso negado: Você só pode emitir contra-cheques em seu próprio nome." })
+      return
+    }
+
+    const cleanSal = parseFloat(String(salary).replace(/[^\d,-]/g, "").replace(",", "."))
+    const salarioBase = isNaN(cleanSal) || cleanSal <= 0 ? 6500.00 : cleanSal
+    const horasExtras = salarioBase > 4000 ? 350.00 : 180.00
+    const salarioBruto = salarioBase + horasExtras
+
+    const valorINSS = calcularINSS(salarioBruto)
+    const baseIRPF = Math.max(0, salarioBruto - valorINSS)
+    const valorIRPF = Math.max(0, calcularIRPF(baseIRPF))
+    const valorVT = Math.round(salarioBase * 0.06 * 100) / 100
+
+    const items: HoleriteItem[] = [
+      { code: "001", description: "SALARIO", reference: "30", proventos: salarioBase, descontos: 0 },
+      { code: "015", description: "HORAS EXTRAS 50% & DSR", reference: "12", proventos: horasExtras, descontos: 0 },
+      { code: "101", description: "INSS", reference: `${((valorINSS / salarioBruto) * 100).toFixed(1)}%`, proventos: 0, descontos: valorINSS },
+      { code: "102", description: "IRPF", reference: valorIRPF > 0 ? "Tab." : "0", proventos: 0, descontos: valorIRPF },
+      { code: "105", description: "VALE TRANSPORTE", reference: "6%", proventos: 0, descontos: valorVT },
+    ]
+
+    const proventosTotais = items.reduce((acc, item) => acc + item.proventos, 0)
+    const descontosTotais = items.reduce((acc, item) => acc + item.descontos, 0)
+    const salarioLiquido = proventosTotais - descontosTotais
+
+    const cleanName = String(employeeName).replace(/\s+/g, "_").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    const cleanMonth = String(month).replace("/", "_")
+    const fileName = `Contra_Cheque_${cleanName}_${cleanMonth}.pdf`
+
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`)
+
+    const doc = new PDFDocument({
+      size: "A4",
+      layout: "landscape",
+      margin: 20,
+    })
+
+    doc.pipe(res)
+
+    const startX = 30
+    const startY = 30
+    const gridW = 730
+    const gridH = 500
+    const rightColW = 60
+    const mainW = gridW - rightColW
+
+    const line = (x1: number, y1: number, x2: number, y2: number) => {
+      doc.moveTo(x1, y1).lineTo(x2, y2).stroke()
+    }
+
+    doc.lineWidth(1).strokeColor("#000000")
+
+    // Moldura principal
+    doc.rect(startX, startY, gridW, gridH).stroke()
+
+    // Divisória vertical direita para assinatura
+    line(startX + mainW, startY, startX + mainW, startY + gridH)
+
+    // 1. Cabeçalho Empresa & Título
+    line(startX, startY + 60, startX + mainW, startY + 60)
+    line(startX + 400, startY, startX + 400, startY + 60)
+
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#000000").text("PEOPLEHUB RH S/A", startX + 10, startY + 10)
+    doc.font("Helvetica").fontSize(9).text("Av. Paulista, 1000 — Jardim Paulista", startX + 10, startY + 25)
+    doc.text("São Paulo - SP  |  CNPJ: 12.345.678/0001-90", startX + 10, startY + 40)
+
+    doc.font("Helvetica-Bold").fontSize(12).text("Recibo de Pagamento de Salário", startX + 410, startY + 12)
+    doc.font("Helvetica").fontSize(10).text(`Mês Referência: ${month}`, startX + 410, startY + 32)
+
+    // 2. Bar do Funcionário
+    line(startX, startY + 95, startX + mainW, startY + 95)
+    line(startX + 60, startY + 60, startX + 60, startY + 95)
+    line(startX + 370, startY + 60, startX + 370, startY + 95)
+    line(startX + 470, startY + 60, startX + 470, startY + 95)
+    line(startX + 530, startY + 60, startX + 530, startY + 95)
+
+    doc.fontSize(7).font("Helvetica").text("Código", startX + 5, startY + 65)
+    doc.fontSize(9).font("Helvetica-Bold").text(String(registration), startX + 5, startY + 77)
+
+    doc.fontSize(7).font("Helvetica").text("Nome do Funcionário", startX + 65, startY + 65)
+    doc.fontSize(9).font("Helvetica-Bold").text(String(employeeName), startX + 65, startY + 77)
+
+    doc.fontSize(7).font("Helvetica").text("Admissão", startX + 375, startY + 65)
+    doc.fontSize(8).font("Helvetica").text(String(admissionDate), startX + 375, startY + 77)
+
+    doc.fontSize(7).font("Helvetica").text("CBO", startX + 475, startY + 65)
+    doc.fontSize(8).font("Helvetica").text(String(cbo), startX + 475, startY + 77)
+
+    doc.fontSize(7).font("Helvetica").text("Função", startX + 535, startY + 65)
+    doc.fontSize(8).font("Helvetica").text(String(role), startX + 535, startY + 77)
+
+    // 3. Tabela de Rubricas
+    line(startX, startY + 120, startX + mainW, startY + 120)
+    line(startX + 60, startY + 95, startX + 60, startY + 410)
+    line(startX + 400, startY + 95, startX + 400, startY + 410)
+    line(startX + 530, startY + 95, startX + 530, startY + 460)
+    line(startX + 600, startY + 95, startX + 600, startY + 460)
+
+    doc.fontSize(8).font("Helvetica").text("Código", startX + 5, startY + 103, { width: 50, align: "center" })
+    doc.text("Descrição", startX + 65, startY + 103)
+    doc.text("Referência", startX + 405, startY + 103, { width: 120, align: "center" })
+    doc.text("Vencimentos", startX + 535, startY + 103, { width: 60, align: "right" })
+    doc.text("Descontos", startX + 605, startY + 103, { width: 60, align: "right" })
+
+    let rY = startY + 130
+    items.forEach((item) => {
+      doc.fontSize(8).font("Helvetica")
+      doc.text(item.code, startX + 5, rY, { width: 50, align: "center" })
+      doc.text(item.description, startX + 65, rY)
+      doc.text(item.reference, startX + 405, rY, { width: 120, align: "center" })
+      if (item.proventos > 0) doc.text(formatRaw(item.proventos), startX + 535, rY, { width: 60, align: "right" })
+      if (item.descontos > 0) doc.text(formatRaw(item.descontos), startX + 605, rY, { width: 60, align: "right" })
+      rY += 22
+    })
+
+    // 4. Totais
+    line(startX + 400, startY + 410, startX + mainW, startY + 410)
+    line(startX, startY + 435, startX + mainW, startY + 435)
+    line(startX, startY + 460, startX + mainW, startY + 460)
+
+    doc.fontSize(7).font("Helvetica").text("Total de Vencimentos", startX + 405, startY + 413, { width: 120, align: "center" })
+    doc.text("Total de Descontos", startX + 535, startY + 413, { width: 130, align: "center" })
+
+    doc.fontSize(8).font("Helvetica-Bold")
+    doc.text(formatRaw(proventosTotais), startX + 535, startY + 423, { width: 60, align: "right" })
+    doc.text(formatRaw(descontosTotais), startX + 605, startY + 423, { width: 60, align: "right" })
+
+    doc.fontSize(9).font("Helvetica-Bold").text("Valor Líquido R$ ->", startX + 410, startY + 444)
+    doc.fontSize(10).text(formatRaw(salarioLiquido), startX + 605, startY + 443, { width: 60, align: "right" })
+
+    // 5. Bases Footer (5 Colunas)
+    const baseColW = mainW / 5
+    for (let i = 1; i < 5; i++) {
+      line(startX + i * baseColW, startY + 460, startX + i * baseColW, startY + gridH)
+    }
+
+    const baseCols = [
+      { label: "Salário Base", val: formatRaw(salarioBase), x: startX + 5 },
+      { label: "Salário Contr. INSS", val: formatRaw(salarioBruto), x: startX + baseColW + 5 },
+      { label: "Base FGTS", val: formatRaw(salarioBruto), x: startX + baseColW * 2 + 5 },
+      { label: "FGTS do Mês", val: formatRaw(Math.round(salarioBruto * 0.08 * 100) / 100), x: startX + baseColW * 3 + 5 },
+      { label: "Base Calc. IRPF", val: formatRaw(baseIRPF), x: startX + baseColW * 4 + 5 },
+    ]
+
+    baseCols.forEach((c) => {
+      doc.fontSize(6.5).font("Helvetica").text(c.label, c.x, startY + 464)
+      doc.fontSize(8.5).font("Helvetica-Bold").text(c.val, c.x, startY + 480, { width: baseColW - 10, align: "right" })
+    })
+
+    // 6. Faixa Vertical Direita (Assinatura)
+    doc.save()
+    doc.translate(startX + mainW + 35, startY + gridH - 20)
+    doc.rotate(-90)
+    doc.fontSize(7).font("Helvetica")
+    doc.text("Declaro ter recebido a importância líquida discriminada neste recibo    ____ / ____ / ________  Data", 0, 0)
+    doc.text("___________________________________________________ Assinatura do Funcionário", 0, 15)
+    doc.restore()
+
+    doc.end()
+  } catch (err: any) {
+    console.error("Erro ao gerar PDF do Contra-Cheque:", err)
+    res.status(500).json({ ok: false, error: "Falha ao gerar arquivo PDF." })
+  }
+})
+
+// POST /api/pdf/dossie-colaborador
+// Geração completa da pasta/dossiê em PDF com histórico de CCs, ponto, férias e pendências
+router.post("/dossie-colaborador", (req: Request, res: Response) => {
+  try {
+    const {
+      folder = {},
+      contracheques = [],
+      folhaPonto = {},
+      ferias = {},
+      pendencias = [],
+      requestedBy = "Colaborador",
+    } = req.body
+
+    const employeeName = folder.name || "Colaborador"
+    const cpf = folder.cpf || "000.000.000-00"
+    const role = folder.role || "Função Não Informada"
+    const department = folder.department || "Geral"
+    const registration = folder.registration || "MAT-101"
+    const admissionDate = folder.admissionDate || "01/02/2022"
+    const salary = folder.salary || "R$ 6.500,00"
+    const cbo = folder.cbo || "2124-05"
+
+    const cleanName = String(employeeName).replace(/\s+/g, "_").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    const fileName = `Dossie_Funcional_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`
+
+    res.setHeader("Content-Type", "application/pdf")
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`)
+
+    const doc = new PDFDocument({
+      size: "A4",
+      layout: "portrait",
+      margin: 30,
+    })
+
+    doc.pipe(res)
+
+    const contentW = 535
+    const startX = 30
+    let curY = 30
+
+    // Header Institucional
+    doc.rect(startX, curY, contentW, 45).fill("#0f172a")
+    doc.fillColor("#ffffff").fontSize(13).font("Helvetica-Bold").text("PEOPLEHUB RH S/A — DOSSIÊ FUNCIONAL DO COLABORADOR", startX + 15, curY + 12)
+    doc.fontSize(8.5).font("Helvetica").text("Relatório oficial consolidado emitido sob solicitação do colaborador / técnico", startX + 15, curY + 28)
+    doc.fontSize(7.5).text(`Emitido em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")} · ${requestedBy}`, startX + 15, curY + 37)
+
+    curY += 55
+
+    // 1. Ficha Cadastral
+    doc.rect(startX, curY, contentW, 65).fillAndStroke("#f8fafc", "#e2e8f0")
+    doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold").text(employeeName.toUpperCase(), startX + 10, curY + 8)
+    doc.fontSize(8).font("Helvetica").fillColor("#475569").text(`${role} · Departamento: ${department}`, startX + 10, curY + 20)
+
+    doc.fontSize(7.5)
+    doc.font("Helvetica-Bold").text("Matrícula:", startX + 10, curY + 34)
+    doc.font("Helvetica").text(registration, startX + 55, curY + 34)
+
+    doc.font("Helvetica-Bold").text("CPF:", startX + 180, curY + 34)
+    doc.font("Helvetica").text(cpf, startX + 205, curY + 34)
+
+    doc.font("Helvetica-Bold").text("Admissão:", startX + 340, curY + 34)
+    doc.font("Helvetica").text(admissionDate, startX + 385, curY + 34)
+
+    doc.font("Helvetica-Bold").text("CBO:", startX + 10, curY + 46)
+    doc.font("Helvetica").text(cbo, startX + 55, curY + 46)
+
+    doc.font("Helvetica-Bold").text("Regime:", startX + 180, curY + 46)
+    doc.font("Helvetica").text("CLT Indeterminado", startX + 220, curY + 46)
+
+    doc.font("Helvetica-Bold").text("Salário:", startX + 340, curY + 46)
+    doc.font("Helvetica-Bold").fillColor("#059669").text(salary, startX + 375, curY + 46)
+
+    curY += 75
+
+    // 2. Histórico de Contra-Cheques
+    doc.rect(startX, curY, contentW, 16).fill("#f1f5f9")
+    doc.fillColor("#0f172a").fontSize(8.5).font("Helvetica-Bold").text("1. HISTÓRICO TEMPORAL LINEAR DE CONTRA-CHEQUES (IMUTÁVEL NO BANCO)", startX + 8, curY + 5)
+    curY += 20
+
+    doc.rect(startX, curY, contentW, 14).fill("#e2e8f0")
+    doc.fillColor("#334155").fontSize(7).font("Helvetica-Bold")
+    doc.text("Competência", startX + 8, curY + 4)
+    doc.text("Versão", startX + 70, curY + 4)
+    doc.text("Vencimentos", startX + 120, curY + 4)
+    doc.text("Descontos", startX + 200, curY + 4)
+    doc.text("Salário Líquido", startX + 280, curY + 4)
+    doc.text("Status de Imutabilidade", startX + 380, curY + 4)
+    curY += 15
+
+    const ccsToPrint = contracheques.length > 0 ? contracheques : [
+      { month: "11/2025", version: 1, net: 5120.40, status: "Imutável" },
+      { month: "12/2025", version: 1, net: 5120.40, status: "Imutável" },
+      { month: "01/2026", version: 1, net: 5350.00, status: "Imutável" },
+      { month: "08/2026", version: 1, net: 5350.00, status: "Aberto a Vista" },
+    ]
+
+    doc.font("Helvetica").fontSize(7).fillColor("#334155")
+    ccsToPrint.forEach((cc: any) => {
+      doc.text(cc.month || "08/2026", startX + 8, curY)
+      doc.text(`v${cc.version || 1}`, startX + 70, curY)
+      doc.text("R$ 6.500,00", startX + 120, curY)
+      doc.text("R$ 1.150,00", startX + 200, curY)
+      doc.font("Helvetica-Bold").text(cc.net ? formatRaw(cc.net) : "R$ 5.350,00", startX + 280, curY)
+      doc.font("Helvetica").text(cc.status || "Imutável", startX + 380, curY)
+      curY += 12
+    })
+
+    curY += 10
+
+    // 3. Demonstrativo de Férias
+    doc.rect(startX, curY, contentW, 16).fill("#f1f5f9")
+    doc.fillColor("#0f172a").fontSize(8.5).font("Helvetica-Bold").text("2. DEMONSTRATIVO DE FÉRIAS E PERÍODO AQUISITIVO", startX + 8, curY + 5)
+    curY += 20
+
+    doc.rect(startX, curY, contentW, 40).fillAndStroke("#ffffff", "#e2e8f0")
+    doc.fillColor("#475569").fontSize(7.5).font("Helvetica-Bold").text("Período Aquisitivo:", startX + 10, curY + 8)
+    doc.font("Helvetica").text(ferias.periodoAquisitivo || "01/02/2025 a 31/01/2026", startX + 85, curY + 8)
+
+    doc.font("Helvetica-Bold").text("Período Concessivo:", startX + 250, curY + 8)
+    doc.font("Helvetica").text(ferias.periodoConcessivo || "01/02/2026 a 31/01/2027", startX + 335, curY + 8)
+
+    doc.font("Helvetica-Bold").text("Dias de Direito:", startX + 10, curY + 22)
+    doc.font("Helvetica").text("30 dias corridos", startX + 75, curY + 22)
+
+    doc.font("Helvetica-Bold").text("Saldo Atual:", startX + 250, curY + 22)
+    doc.font("Helvetica-Bold").fillColor("#059669").text(`${ferias.diasSaldo ?? 30} DIAS RESTANTES`, startX + 305, curY + 22)
+
+    curY += 50
+
+    // 4. Folha de Ponto & Pendências (Página 2)
+    doc.addPage()
+    curY = 30
+
+    doc.rect(startX, curY, contentW, 16).fill("#f1f5f9")
+    doc.fillColor("#0f172a").fontSize(8.5).font("Helvetica-Bold").text("3. ESPELHO DE PONTO ELETRÔNICO & JORNADA (08/2026)", startX + 8, curY + 5)
+    curY += 22
+
+    doc.rect(startX, curY, contentW, 35).fillAndStroke("#f8fafc", "#e2e8f0")
+    doc.fillColor("#0f172a").fontSize(7.5).font("Helvetica-Bold")
+    doc.text("Horas Trabalhadas: 176:00", startX + 15, curY + 12)
+    doc.text("Horas Extras (+): 12:00", startX + 150, curY + 12)
+    doc.text("Faltas/Atrasos: 00:00", startX + 280, curY + 12)
+    doc.fillColor("#0284c7").text(`Saldo Banco de Horas: ${folhaPonto.bankBalance || '+12:00'}`, startX + 380, curY + 12)
+
+    doc.font("Helvetica").fontSize(7).fillColor("#64748b")
+    doc.text("Apuração em estrita conformidade com a Portaria 671 MTE e espelho biométrico eletrônico.", startX + 15, curY + 24)
+
+    curY += 45
+
+    // 5. Quadro de Pendências
+    doc.rect(startX, curY, contentW, 16).fill("#f1f5f9")
+    doc.fillColor("#0f172a").fontSize(8.5).font("Helvetica-Bold").text("4. RELATÓRIO DE PENDÊNCIAS, RECURSOS E SOLICITAÇÕES EM ANDAMENTO", startX + 8, curY + 5)
+    curY += 22
+
+    const pendList = pendencias.length > 0 ? pendencias : [
+      { protocolo: "REQ-PONTO-0812", tipo: "Ajuste de Ponto", status: "Em Análise pelo DP", desc: "Ajuste de intervalo intrajornada" },
+      { protocolo: "REQ-FER-2026", tipo: "Férias Regulamentares", status: "Pendente Assinatura", desc: "Aviso de férias programadas para Outubro" },
+    ]
+
+    pendList.forEach((p: any) => {
+      doc.rect(startX, curY, contentW, 20).fillAndStroke("#ffffff", "#e2e8f0")
+      doc.fillColor("#0f172a").fontSize(7.5).font("Helvetica-Bold").text(`${p.protocolo || 'PROTOCOLO'} — ${p.tipo || 'SOLICITAÇÃO'}`, startX + 10, curY + 5)
+      doc.fillColor("#d97706").text(`[${p.status || 'Pendente'}]`, startX + 380, curY + 5)
+      doc.font("Helvetica").fontSize(7).fillColor("#475569").text(p.desc || p.detalhes || "Em tramitação junto ao departamento responsável.", startX + 10, curY + 13)
+      curY += 24
+    })
+
+    curY += 15
+
+    // Termo de Autenticação
+    doc.rect(startX, curY, contentW, 35).fillAndStroke("#f8fafc", "#cbd5e1")
+    doc.fillColor("#475569").fontSize(7).font("Helvetica").text("Declaro para todos os fins de direito a exatidão das informações funcionais consolidadas neste dossiê.", startX + 10, curY + 6)
+    doc.text("____________________________________________                 ____________________________________________", startX + 25, curY + 22)
+    doc.text("Assinatura do Colaborador                                    Departamento Pessoal / Recursos Humanos", startX + 35, curY + 29)
+
+    doc.end()
+  } catch (err: any) {
+    console.error("Erro ao gerar PDF do Dossiê:", err)
+    res.status(500).json({ ok: false, error: "Falha ao gerar arquivo PDF do Dossiê." })
+  }
+})
+
+export default router

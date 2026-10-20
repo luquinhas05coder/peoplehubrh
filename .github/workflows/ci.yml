@@ -1,0 +1,54 @@
+name: PeopleHub RH — Continuous Integration (CI)
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+
+jobs:
+  validate-and-test:
+    name: Build, Typecheck & Automated Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install Frontend Dependencies
+        run: npm install
+
+      - name: Install Backend Dependencies
+        run: npm --prefix backend install
+
+      - name: Typecheck Frontend (vue-tsc)
+        run: npx vue-tsc --noEmit
+
+      - name: Typecheck Backend (tsc)
+        run: npx --prefix backend tsc --noEmit
+
+      - name: Run Frontend Tests (Vitest)
+        run: npm run test:frontend
+
+      - name: Run Backend & RBAC Tests
+        run: npm run test:backend
+
+      - name: Run Security Audit Battery
+        run: npm run test:security
+
+      - name: Generate Code Coverage Report
+        run: npm run test:coverage
+
+      - name: Upload Coverage Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
