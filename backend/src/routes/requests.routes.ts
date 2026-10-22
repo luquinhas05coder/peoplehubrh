@@ -188,7 +188,7 @@ router.get("/:id", (req: Request, res: Response) => {
 router.patch("/:id/status", (req: Request, res: Response) => {
   const { id } = req.params
   const tenantId = req.tenantId || "tenant_default"
-  const { status } = req.body
+  const { status, justification, review_notes, note } = req.body
 
   if (!status) {
     res.status(400).json({ ok: false, error: "Status é obrigatório." })
@@ -196,13 +196,23 @@ router.patch("/:id/status", (req: Request, res: Response) => {
   }
 
   const db = getDB()
-  const checkRes = db.exec(`SELECT requester, department, status, details_json FROM requests WHERE id = ? AND tenant_id = ?`, [String(id), String(tenantId)])
+  const checkRes = db.exec(
+    `SELECT requester, department, status, details_json, type, description FROM requests WHERE id = ? AND tenant_id = ?`,
+    [String(id), String(tenantId)]
+  )
   if (!checkRes.length || !checkRes[0].values.length) {
     res.status(404).json({ ok: false, error: "Solicitação não encontrada." })
     return
   }
 
-  const [requester, department, oldStatus, detailsJson] = checkRes[0].values[0] as [string, string, string, string | null]
+  const [requester, department, oldStatus, detailsJson, reqType, reqDesc] = checkRes[0].values[0] as [
+    string,
+    string,
+    string,
+    string | null,
+    string,
+    string
+  ]
   const userRole = req.access?.role || "COLABORADOR"
   const userName = (req.access?.name || "").toLowerCase()
   const userEmail = (req.access?.email || "").toLowerCase()
@@ -220,40 +230,156 @@ router.patch("/:id/status", (req: Request, res: Response) => {
     Boolean(userName && (userName.includes(requester.toLowerCase().trim()) || requester.toLowerCase().trim().includes(userName))) ||
     Boolean(userEmail && requester.toLowerCase().includes(userEmail.split("@")[0]))
 
-  // Aprovação ou rejeição exige permissão requests.approve
-  const isDecision = ["aprovado", "rejeitado", "cancelado"].includes(status.toLowerCase())
-  if (isDecision) {
-    if (!roleHasPermission(userRole, "requests.approve")) {
-      res.status(403).json({
-        ok: false,
-        error: `Acesso negado: Seu perfil (${userRole}) não possui permissão para aprovar ou rejeitar solicitações.`,
-      })
-      return
-    }
+  const targetStatusLower = status.toLowerCase()
+  const decisionNote = (review_notes || justification || note || "").trim()
 
-    // Regra anti auto-aprovação: Ninguém pode aprovar sua própria solicitação
-    if (isSelf && status.toLowerCase() === "aprovado") {
-      res.status(403).json({
-        ok: false,
-        error: "Violação de Governança: Você não tem permissão para aprovar sua própria solicitação.",
-      })
-      return
-    }
-
-    // Se for GESTOR, só pode aprovar solicitações de sua equipe
-    if (req.access?.scope === "TEAM") {
-      const userDept = (req.access?.department || "").toLowerCase()
-      if (department.toLowerCase() !== userDept) {
+  // 1. Regra de Cancelamento por parte do próprio solicitante
+  if (targetStatusLower === "cancelado") {
+    if (isSelf) {
+      const cancellableStatuses = ["pendente", "em análise", "em_analise", "correção solicitada", "pendente de correção"]
+      if (!cancellableStatuses.includes(oldStatus.toLowerCase())) {
+        res.status(400).json({
+          ok: false,
+          error: `Não é possível cancelar uma solicitação que já foi finalizada ou está com status "${oldStatus}".`,
+        })
+        return
+      }
+      // Autorizado o cancelamento pelo solicitante!
+    } else {
+      // Cancelamento por terceiro exige permissão de aprovação
+      if (!roleHasPermission(userRole, "requests.approve")) {
         res.status(403).json({
           ok: false,
-          error: "Acesso negado: Você só pode aprovar solicitações do seu próprio departamento.",
+          error: `Acesso negado: Seu perfil (${userRole}) não possui permissão para cancelar solicitações de outros colaboradores.`,
         })
         return
       }
     }
+  } else {
+    // 2. Aprovação, Rejeição ou Solicitação de Correção
+    const isApprovalOrRejection = ["aprovado", "rejeitado", "correção solicitada", "pendente de correção"].includes(targetStatusLower)
+    if (isApprovalOrRejection) {
+      if (!roleHasPermission(userRole, "requests.approve")) {
+        res.status(403).json({
+          ok: false,
+          error: `Acesso negado: Seu perfil (${userRole}) não possui permissão para aprovar, rejeitar ou solicitar correções.`,
+        })
+        return
+      }
+
+      // Regra anti auto-aprovação: Ninguém pode aprovar sua própria solicitação
+      if (isSelf && targetStatusLower === "aprovado") {
+        res.status(403).json({
+          ok: false,
+          error: "Violação de Governança: Você não tem permissão para aprovar sua própria solicitação.",
+        })
+        return
+      }
+
+      // Rejeição ou Correção Solicitada exige justificativa obrigatória
+      if (["rejeitado", "correção solicitada", "pendente de correção"].includes(targetStatusLower) && !decisionNote) {
+        res.status(400).json({
+          ok: false,
+          error: "Justificativa obrigatória: Informe o motivo da rejeição ou os itens pendentes de correção.",
+        })
+        return
+      }
+
+      // Se for GESTOR, só pode aprovar solicitações de sua equipe
+      if (req.access?.scope === "TEAM") {
+        const userDept = (req.access?.department || "").toLowerCase()
+        if (department.toLowerCase() !== userDept) {
+          res.status(403).json({
+            ok: false,
+            error: "Acesso negado: Você só pode aprovar solicitações do seu próprio departamento.",
+          })
+          return
+        }
+      }
+    }
   }
 
-  db.run(`UPDATE requests SET status = ? WHERE id = ? AND tenant_id = ?`, [status, String(id), String(tenantId)])
+  // 3. Efeito colateral: Se for "Atualização Cadastral" aprovada, aplicar no banco de dados employees
+  if (targetStatusLower === "aprovado" && (reqType.toLowerCase().includes("atualização cadastral") || reqType.toLowerCase().includes("alteração cadastral"))) {
+    const changes = parsedDetails?.changes
+    if (changes && typeof changes === "object" && Object.keys(changes).length > 0) {
+      const allowedKeys = ["phone", "address", "city", "state", "cep", "notes"]
+      const empFields: string[] = []
+      const empParams: any[] = []
+
+      for (const k of Object.keys(changes)) {
+        if (allowedKeys.includes(k) && changes[k] !== undefined) {
+          empFields.push(`${k} = ?`)
+          empParams.push(changes[k])
+        }
+      }
+
+      if (empFields.length > 0) {
+        const targetEmail = (parsedDetails?.employee_email || parsedDetails?.created_by_email || userEmail).toLowerCase()
+        empParams.push(targetEmail, tenantId)
+        db.run(`UPDATE employees SET ${empFields.join(", ")} WHERE lower(email) = ? AND tenant_id = ?`, empParams)
+
+        // Registrar no histórico funcional do colaborador
+        const empId = parsedDetails?.employee_id || `emp_${targetEmail}`
+        const histId = `hist_cad_${Date.now()}`
+        try {
+          db.run(
+            `INSERT INTO employee_history (id, employee_id, tenant_id, type, title, description, old_value, new_value, created_by, created_at)
+             VALUES (?, ?, ?, 'alteracao_cadastral', 'Atualização Cadastral Aprovada', ?, ?, ?, ?, datetime('now'))`,
+            [
+              histId,
+              empId,
+              tenantId,
+              `Dados alterados via chamado ${id}: ${Object.keys(changes).join(", ")}`,
+              JSON.stringify(parsedDetails.original || {}),
+              JSON.stringify(changes),
+              req.access?.name || "RH",
+            ]
+          )
+        } catch (_hErr) {}
+      }
+    }
+  }
+
+  // Atualizar a solicitação
+  const reviewerName = req.access?.name || "Analista de RH"
+  const formattedStatus =
+    targetStatusLower === "aprovado"
+      ? "Aprovado"
+      : targetStatusLower === "rejeitado"
+      ? "Rejeitado"
+      : targetStatusLower === "cancelado"
+      ? "Cancelado"
+      : targetStatusLower.includes("correção")
+      ? "Correção Solicitada"
+      : status
+
+  db.run(
+    `UPDATE requests 
+     SET status = ?, review_notes = ?, reviewed_by = ?, reviewed_at = datetime('now') 
+     WHERE id = ? AND tenant_id = ?`,
+    [formattedStatus, decisionNote || null, reviewerName, String(id), String(tenantId)]
+  )
+
+  // Enviar notificação ao solicitante
+  const notifEmail = parsedDetails?.created_by_email || userEmail
+  const notifId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  try {
+    db.run(
+      `INSERT INTO notifications (id, tenant_id, user_email, title, description, category, priority, link, read, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, '/solicitacoes', 0, datetime('now'))`,
+      [
+        notifId,
+        tenantId,
+        notifEmail,
+        `Solicitação ${id} — ${formattedStatus}`,
+        decisionNote ? `Status alterado para "${formattedStatus}": ${decisionNote}` : `Status da sua solicitação "${reqType}" alterado para "${formattedStatus}".`,
+        "solicitacao",
+        formattedStatus === "Aprovado" ? "alta" : "media",
+      ]
+    )
+  } catch (_e) {}
+
   persist()
 
   recordAuditLog({
@@ -263,11 +389,100 @@ router.patch("/:id/status", (req: Request, res: Response) => {
     action: "REQUEST_STATUS_CHANGE",
     entity: "requests",
     entityId: String(id),
-    details: { oldStatus, newStatus: status, requester },
+    details: { oldStatus, newStatus: formattedStatus, requester, reviewNotes: decisionNote },
     tenantId,
   })
 
-  res.json({ ok: true, message: `Status da solicitação alterado para "${status}".` })
+  res.json({
+    ok: true,
+    message: `Status da solicitação alterado para "${formattedStatus}".`,
+    status: formattedStatus,
+    review_notes: decisionNote,
+  })
+})
+
+// GET /api/requests/:id/comments — Obter linha do tempo e comentários da solicitação
+router.get("/:id/comments", (req: Request, res: Response) => {
+  const { id } = req.params
+  const tenantId = req.tenantId || "tenant_default"
+  const db = getDB()
+
+  const result = db.exec(
+    `SELECT * FROM request_comments WHERE request_id = ? AND tenant_id = ? ORDER BY created_at ASC`,
+    [String(id), String(tenantId)]
+  )
+
+  const comments: any[] = []
+  if (result.length && result[0].values.length) {
+    const cols = result[0].columns
+    result[0].values.forEach((row) => {
+      const c: any = {}
+      cols.forEach((col, idx) => { c[col] = row[idx] })
+      comments.push(c)
+    })
+  }
+
+  res.json({ ok: true, comments })
+})
+
+// POST /api/requests/:id/comments — Adicionar comentário ou pendência na solicitação
+router.post("/:id/comments", (req: Request, res: Response) => {
+  const { id } = req.params
+  const tenantId = req.tenantId || "tenant_default"
+  const { comment } = req.body
+
+  if (!comment || typeof comment !== "string" || !comment.trim()) {
+    res.status(400).json({ ok: false, error: "Comentário não pode ser vazio." })
+    return
+  }
+
+  const db = getDB()
+  const checkRes = db.exec(
+    `SELECT requester, details_json FROM requests WHERE id = ? AND tenant_id = ?`,
+    [String(id), String(tenantId)]
+  )
+  if (!checkRes.length || !checkRes[0].values.length) {
+    res.status(404).json({ ok: false, error: "Solicitação não encontrada." })
+    return
+  }
+
+  const commentId = `cm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  const authorId = req.access?.userId || "user_unknown"
+  const authorName = req.access?.name || "Usuário"
+  const authorRole = req.access?.role || "COLABORADOR"
+
+  db.run(
+    `INSERT INTO request_comments (id, request_id, author_id, author_name, author_role, comment, tenant_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [commentId, String(id), authorId, authorName, authorRole, comment.trim(), String(tenantId)]
+  )
+
+  persist()
+
+  recordAuditLog({
+    userId: authorId,
+    userName: authorName,
+    userRole: authorRole,
+    action: "REQUEST_ADD_COMMENT",
+    entity: "requests",
+    entityId: String(id),
+    details: { comment: comment.trim().slice(0, 100) },
+    tenantId,
+  })
+
+  res.status(201).json({
+    ok: true,
+    comment: {
+      id: commentId,
+      request_id: String(id),
+      author_id: authorId,
+      author_name: authorName,
+      author_role: authorRole,
+      comment: comment.trim(),
+      created_at: new Date().toISOString(),
+    },
+    message: "Comentário registrado com sucesso.",
+  })
 })
 
 // PATCH /api/requests/:id (Atualização genérica de solicitação)

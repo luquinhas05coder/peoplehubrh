@@ -261,6 +261,28 @@ function runMigrations(): void {
       tenant_id   TEXT
     );
   `)
+  try { db.run(`ALTER TABLE requests ADD COLUMN justification TEXT;`) } catch (_e) {}
+  try { db.run(`ALTER TABLE requests ADD COLUMN review_notes TEXT;`) } catch (_e) {}
+  try { db.run(`ALTER TABLE requests ADD COLUMN reviewed_by TEXT;`) } catch (_e) {}
+  try { db.run(`ALTER TABLE requests ADD COLUMN reviewed_at TEXT;`) } catch (_e) {}
+  try { db.run(`ALTER TABLE requests ADD COLUMN attachment_name TEXT;`) } catch (_e) {}
+  try { db.run(`ALTER TABLE requests ADD COLUMN attachment_base64 TEXT;`) } catch (_e) {}
+  try { db.run(`ALTER TABLE requests ADD COLUMN attachment_mime TEXT;`) } catch (_e) {}
+
+  // Request Comments / Pendências e Linha do Tempo de Chamados
+  db.run(`
+    CREATE TABLE IF NOT EXISTS request_comments (
+      id          TEXT PRIMARY KEY,
+      request_id  TEXT NOT NULL,
+      author_id   TEXT NOT NULL,
+      author_name TEXT NOT NULL,
+      author_role TEXT NOT NULL,
+      comment     TEXT NOT NULL,
+      tenant_id   TEXT,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+  `)
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_req_comments_req ON request_comments(request_id);`) } catch (_e) {}
 
   // Documents
   db.run(`
@@ -283,6 +305,21 @@ function runMigrations(): void {
   } catch (_e) {}
   try {
     db.run(`ALTER TABLE documents ADD COLUMN expiryDate TEXT;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE documents ADD COLUMN origin TEXT DEFAULT 'administrativo';`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE documents ADD COLUMN file_base64 TEXT;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE documents ADD COLUMN mime_type TEXT;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE documents ADD COLUMN file_size INTEGER;`)
+  } catch (_e) {}
+  try {
+    db.run(`ALTER TABLE documents ADD COLUMN notes TEXT;`)
   } catch (_e) {}
 
   // Onboarding
@@ -799,6 +836,36 @@ function seedInitialData(): void {
       initials: "AD",
       tenant_id: "tenant_default",
     },
+    {
+      id: "usr_rh",
+      name: "Mariana Alcantara",
+      email: "rh@peoplehub.com.br",
+      password: "admin123",
+      role: "RH",
+      department: "Recursos Humanos",
+      initials: "MA",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_gestor",
+      name: "Gestor TI",
+      email: "gestor@peoplehub.com.br",
+      password: "admin123",
+      role: "GESTOR",
+      department: "TI",
+      initials: "GT",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_colab",
+      name: "Gabriel Santos",
+      email: "colaborador@peoplehub.com.br",
+      password: "admin123",
+      role: "COLABORADOR",
+      department: "TI",
+      initials: "GS",
+      tenant_id: "tenant_default",
+    },
   ]
 
   for (const u of defaultUsers) {
@@ -814,7 +881,19 @@ function seedInitialData(): void {
       } catch (_e) {}
     }
   }
-  console.log("[DB] Usuário administrador configurado com senha 'admin123'.")
+
+  // Garantir cadastro de colaborador para Gabriel Santos (colaborador padrão)
+  try {
+    const colabEmpCheck = db.exec(`SELECT id FROM employees WHERE lower(email) = 'colaborador@peoplehub.com.br'`)
+    if (!colabEmpCheck.length || !colabEmpCheck[0].values.length) {
+      db.run(
+        `INSERT OR IGNORE INTO employees (id, name, role, department, status, email, phone, cpf, hireDate, salary, manager, location, contractType, workSchedule, tenant_id, address, city, state, cep)
+         VALUES ('emp_colab_01', 'Gabriel Santos', 'Desenvolvedor Full-Stack', 'TI', 'Ativo', 'colaborador@peoplehub.com.br', '(11) 98765-4321', '123.456.789-00', '2023-03-15', 'R$ 7.200,00', 'Gestor TI', 'São Paulo, SP', 'CLT', '5x2', 'tenant_default', 'Rua das Flores, 120', 'São Paulo', 'SP', '01310-100')`
+      )
+    }
+  } catch (_e) {}
+
+  console.log("[DB] Usuários padrão e colaborador base configurados com sucesso.")
 
   // Vincular registros legados ao tenant padrão
   const tables = [

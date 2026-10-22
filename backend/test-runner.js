@@ -92,7 +92,13 @@ async function main() {
   if (mode === "security") {
     testFiles = ["test-security-audit.js"]
   } else if (mode === "backend") {
-    testFiles = ["test-cc-immutability.js", "test-rbac-permissions.js", "test-security-audit.js", "test-recruitment.js"]
+    testFiles = [
+      "test-cc-immutability.js",
+      "test-rbac-permissions.js",
+      "test-security-audit.js",
+      "test-recruitment.js",
+      "test-self-service.js",
+    ]
   } else if (mode === "all") {
     testFiles = [
       "test-cc-immutability.js",
@@ -100,6 +106,7 @@ async function main() {
       "test-security-audit.js",
       "test-rh-access-provisioning.js",
       "test-recruitment.js",
+      "test-self-service.js",
     ]
   } else {
     testFiles = [mode]

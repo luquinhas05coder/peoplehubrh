@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
     meta: { tab: "onboarding", requiresRoles: ["ADMIN", "RH", "GESTOR"] as UserRole[] },
   },
   {
+    path: "/autoatendimento",
+    name: "Autoatendimento",
+    component: () => import("../components/SelfServicePortal.vue"),
+    meta: { tab: "autoatendimento" },
+  },
+  {
     path: "/solicitacoes",
     name: "Solicitacoes",
     component: () => import("../components/RequestsModule.vue"),

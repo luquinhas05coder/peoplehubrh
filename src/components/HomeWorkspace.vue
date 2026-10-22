@@ -16,6 +16,7 @@ import {
   GitMerge,
   Calendar as CalendarIcon,
   Award,
+  UserCheck,
 } from "lucide-vue-next"
 import { totalUnread, activeTab, currentUser, userPermissions, activeUserRole } from "../store"
 import { computed, ref, onMounted, watch } from "vue"
@@ -34,6 +35,7 @@ import WorkflowsModule from "./WorkflowsModule.vue"
 import CorporateCalendarModule from "./CorporateCalendarModule.vue"
 import PerformanceModule from "./PerformanceModule.vue"
 import RecruitmentModule from "./RecruitmentModule.vue"
+import SelfServicePortal from "./SelfServicePortal.vue"
 
 const emit = defineEmits<{
   (e: "open-chat"): void
@@ -189,6 +191,8 @@ function syncTabWithRoute() {
     activeTab.value = "relatorios"
   } else if (route.path === "/onboarding") {
     activeTab.value = "onboarding"
+  } else if (route.path === "/autoatendimento") {
+    activeTab.value = "autoatendimento"
   } else if (route.path === "/usuarios") {
     activeTab.value = "usuarios"
   } else if (route.meta?.tab) {
@@ -211,6 +215,7 @@ function onModuleClick(mod: typeof modules[0]) {
     activeTab.value = mod.key
     const routeMap: Record<string, string> = {
       home: "/home",
+      autoatendimento: "/autoatendimento",
       dashboard: "/dashboard",
       people: "/colaboradores",
       recrutamento: "/recrutamento",
@@ -269,6 +274,14 @@ const roleHeaderInfo = computed(() => {
 const visibleModules = computed(() => {
   const currentRole = activeUserRole.value
   const list = [
+    {
+      key: "autoatendimento",
+      title: "Portal do Colaborador",
+      desc: "Autoatendimento, alterações cadastrais, solicitações e documentos pessoais.",
+      icon: UserCheck,
+      color: "#10b981",
+      active: true,
+    },
     {
       key: "dashboard",
       title: "Dashboard",
@@ -399,6 +412,7 @@ const visibleModules = computed(() => {
   <EmployeesModule v-else-if="activeTab === 'people' || activeTab === 'colaboradores'" />
   <RequestsModule v-else-if="activeTab === 'requests' || activeTab === 'solicitacoes'" />
   <RecruitmentModule v-else-if="activeTab === 'recrutamento' || activeTab === 'recruitment'" />
+  <SelfServicePortal v-else-if="activeTab === 'autoatendimento'" />
   <WorkflowsModule v-else-if="activeTab === 'workflows'" />
   <CorporateCalendarModule v-else-if="activeTab === 'calendario'" />
   <PerformanceModule v-else-if="activeTab === 'desempenho'" />

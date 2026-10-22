@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { MessagesSquare, Home, Users, BarChart3, CalendarCheck, FileText, GraduationCap, Settings, LifeBuoy, LogOut, LayoutDashboard, Shield, Sparkles, ShieldAlert, GitMerge, Calendar, Award, Briefcase } from "lucide-vue-next"
+import { MessagesSquare, Home, Users, BarChart3, CalendarCheck, FileText, GraduationCap, Settings, LifeBuoy, LogOut, LayoutDashboard, Shield, Sparkles, ShieldAlert, GitMerge, Calendar, Award, Briefcase, UserCheck } from "lucide-vue-next"
 import { totalUnread, activeTab, logoutUser, currentUser, userPermissions, activeUserRole } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import SettingsModal from "./SettingsModal.vue"
@@ -28,6 +28,7 @@ const router = useRouter()
 const items = computed(() => {
   const list = [
     { key: "home", icon: Home, label: "Início", path: "/home", allowed: true },
+    { key: "autoatendimento", icon: UserCheck, label: "Autoatendimento", path: "/autoatendimento", allowed: true },
     { key: "dashboard", icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", allowed: true },
     {
       key: "people",
@@ -53,6 +54,7 @@ const items = computed(() => {
 
 function isItemActive(itemKey: string): boolean {
   if (activeTab.value === itemKey) return true
+  if (itemKey === "autoatendimento" && activeTab.value === "autoatendimento") return true
   if (itemKey === "dashboard" && activeTab.value === "dashboard") return true
   if (itemKey === "people" && (activeTab.value === "colaboradores" || activeTab.value === "perfil_funcionario")) return true
   if (itemKey === "recrutamento" && (activeTab.value === "recrutamento" || activeTab.value === "recruitment")) return true

@@ -306,8 +306,40 @@ Módulo corporativo completo de Applicant Tracking System (ATS), integrado à au
 
 ---
 
-### 🧪 11. Bateria Completa de Testes Automatizados (CI/CD)
-O projeto conta com suíte integrada de testes unitários, testes de integração, testes RBAC e auditoria de segurança cibernética:
+### 🙋‍♂️ 11. Portal de Autoatendimento do Colaborador (Employee Self-Service)
+Módulo integrado que empodera o colaborador com autonomia para consultar seu dossiê funcional, abrir requerimentos com anexos, gerenciar documentos e solicitar correções cadastrais com governança corporativa:
+
+* **Área Pessoal & Dossiê Funcional (`/autoatendimento`)**:
+  * Consulta do prontuário individual via `GET /api/employees/me` (filtrado estritamente para o usuário autenticado por `scope === 'OWN'`).
+  * Exibição clara de cargo, departamento, gestor imediato, data de admissão e saldo de férias regulamentares.
+  * Botão **"Solicitar Alteração Cadastral"** (`POST /api/employees/me/request-update`):
+    * Permite propor correções em telefone, CEP, endereço residencial, contato de emergência e notas.
+    * **Segurança e Governança**: Dados sensíveis **não são aplicados automaticamente**. O sistema gera uma solicitação formal categorizada como `Atualização Cadastral`, contendo o *diff* estruturado entre os dados vigentes e os dados propostos, notificando o RH para triagem.
+
+* **Fluxo Completo de Solicitações & Linha do Tempo**:
+  * Abertura de requerimentos em categorias regulamentadas: *Atualização Cadastral*, *Declaração de Vínculo*, *Comprovante de Rendimentos*, *Férias*, *Reembolso* e *Ajuste de Ponto*.
+  * Suporte a anexos de comprovantes e documentos (PDF, PNG, JPG, DOCX até 5MB).
+  * **Timeline Interativa & Pendências** (`GET` e `POST /api/requests/:id/comments`): Diálogo transparente entre colaborador e operador de RH dentro do próprio requerimento.
+  * **Cancelamento Autônomo**: O solicitante pode cancelar sua própria solicitação enquanto estiver com status *Pendente* ou *Em Análise*, sem depender de permissões de aprovação de RH. Tentativas de cancelar solicitações de terceiros são estritamente bloqueadas com `HTTP 403`.
+
+* **Área de Governança do RH (Fila de Homologação)**:
+  * Painel consolidado para operadores de RH e gestores avaliarem requerimentos pendentes.
+  * Ações auditadas: **Aprovar**, **Rejeitar** ou **Solicitar Correções** (*"Correção Solicitada"*).
+  * **Justificativa Obrigatória**: Recusas e pedidos de correção exigem justificativa explicativa, adicionada automaticamente à linha do tempo e notificada ao colaborador.
+  * **Prevenção Rígida de Autoaprovação**: Bloqueio sistêmico com `HTTP 403: Violação de Governança` impedindo que qualquer usuário aprove ou homologue sua própria solicitação.
+  * **Aplicação Cadastral Automática na Aprovação**: Quando o RH aprova uma `Atualização Cadastral`, os novos dados são aplicados de forma atômica à tabela `employees` e um evento de auditoria é registrado na `employee_history`.
+
+* **Gestão e Proteção Documental**:
+  * **Partição Documental Clara**:
+    * **Documentos Pessoais**: Certidões, comprovantes de residência e atestados enviados pelo próprio colaborador.
+    * **Documentos Administrativos**: Contratos de trabalho CLT, declarações institucionais e comprovantes emitidos pelo RH.
+  * **Upload Validado**: Endpoint `POST /api/documents/upload` com verificação estrita de MIME types autorizados e limite de tamanho.
+  * **Prevenção contra IDOR (Insecure Direct Object Reference)**: O download (`GET /api/documents/:id/download`) e visualização são protegidos por escopo `OWN`, impedindo que colaboradores acessem ou baixem documentos de outros funcionários.
+
+---
+
+### 🧪 12. Bateria Completa de Testes Automatizados (CI/CD)
+O projeto conta com suíte integrada de testes unitários, testes de integração, testes RBAC, ATS e Autoatendimento:
 
 ```bash
 # Executar todos os testes (Frontend e Backend)
@@ -316,8 +348,11 @@ npm test
 # Executar apenas testes de componentes Vue 3 (Vitest)
 npm run test:frontend
 
-# Executar testes de APIs, RBAC e ATS (Node.js)
+# Executar testes de APIs, RBAC, ATS e Autoatendimento (Node.js)
 npm run test:backend
+
+# Executar suíte específica do Portal de Autoatendimento
+node backend/test-self-service.js
 
 # Executar auditoria de segurança (Headers, OWASP, Anti-Enumeração)
 npm run test:security
@@ -338,10 +373,11 @@ chat-de-rh1808/
 │   │   ├── 📄 NewEmployeeFolderModal.vue   # Provisionamento e edição completa de colaboradores
 │   │   ├── 📄 ExportDossierModal.vue       # Exportação de dossiê completo em PDF
 │   │   ├── 📄 DocumentsModule.vue          # Emissão de holerites e espelho de ponto em PDF
-│   │   ├── 📄 RequestsModule.vue           # Gestão de solicitações (férias, reembolsos)
+│   │   ├── 📄 SelfServicePortal.vue        # Portal de Autoatendimento do Colaborador (dossiê, solicitações, documentos)
+│   │   ├── 📄 RecruitmentModule.vue        # Módulo ATS (vagas, pipeline seletivo, entrevistas, scorecards)
 │   │   ├── 📄 OnboardingModule.vue         # Trilhas e checklists de integração
 │   │   └── 📄 LoginPage.vue                # Login, 2FA e fluxo "Esqueci minha senha"
-│   ├── 📂 router/                          # Rotas: /dashboard, /home, /funcionarios/:id, /colaboradores, etc.
+│   ├── 📂 router/                          # Rotas: /dashboard, /home, /autoatendimento, /recrutamento, etc.
 │   ├── 📄 store.ts                         # Estado reativo, apiFetch autenticado e RBAC
 │   └── 📄 App.vue                          # Componente raiz da aplicação
 ├── 📂 backend/                             # Backend Node.js / Express 5 API
