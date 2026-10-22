@@ -36,6 +36,7 @@ import calendarRoutes from "./routes/calendar.routes.js"
 import performanceRoutes from "./routes/performance.routes.js"
 import customReportsRoutes from "./routes/custom_reports.routes.js"
 import recruitmentRoutes from "./routes/recruitment.routes.js"
+import webhooksRoutes from "./routes/webhooks.routes.js"
 
 import swaggerUi from "swagger-ui-express"
 import { swaggerSpec } from "./swagger.js"
@@ -118,6 +119,7 @@ app.use("/api/calendar", calendarRoutes)
 app.use("/api/performance", performanceRoutes)
 app.use("/api/reports/custom", customReportsRoutes)
 app.use("/api/recruitment", recruitmentRoutes)
+app.use("/api/webhooks", webhooksRoutes)
 
 app.get("/", (_req, res) => {
   res.send(`

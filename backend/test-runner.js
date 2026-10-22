@@ -98,6 +98,7 @@ async function main() {
       "test-security-audit.js",
       "test-recruitment.js",
       "test-self-service.js",
+      "test-integrations-webhooks.js",
     ]
   } else if (mode === "all") {
     testFiles = [
@@ -107,6 +108,7 @@ async function main() {
       "test-rh-access-provisioning.js",
       "test-recruitment.js",
       "test-self-service.js",
+      "test-integrations-webhooks.js",
     ]
   } else {
     testFiles = [mode]

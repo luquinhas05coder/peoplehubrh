@@ -371,4 +371,73 @@ router.post("/email/webhook", (req: Request, res: Response) => {
   res.json({ ok: true, received: true })
 })
 
+/* ─────────────────────────────────────────────────────────────
+ * ADAPTADORES MODULARES & IMPORTAÇÃO/EXPORTAÇÃO CSV
+ * ───────────────────────────────────────────────────────────── */
+
+// GET /api/integrations/adapters — Inventário de adaptadores ativos e testes de conectividade
+router.get("/adapters", async (_req: Request, res: Response) => {
+  const { integrationRegistry } = await import("../integrations/core/registry.js")
+  const adapters = integrationRegistry.list()
+  const health = await integrationRegistry.testAll()
+
+  res.json({
+    ok: true,
+    adapters: adapters.map((a) => ({
+      ...a,
+      health: health[a.id] || { ok: false, message: "Sem status" },
+    })),
+  })
+})
+
+// GET /api/integrations/csv/employees/export — Exportação padronizada CSV de colaboradores
+router.get("/csv/employees/export", async (req: Request, res: Response) => {
+  const tenantId = req.tenantId || "tenant_default"
+  const db = getDB()
+  const result = db.exec(`SELECT * FROM employees WHERE tenant_id = ? ORDER BY name ASC`, [tenantId])
+
+  const employees: any[] = []
+  if (result.length && result[0].values.length) {
+    const cols = result[0].columns
+    result[0].values.forEach((row) => {
+      const emp: any = {}
+      cols.forEach((c, idx) => {
+        emp[c] = row[idx]
+      })
+      employees.push(emp)
+    })
+  }
+
+  const { csvEmployeeAdapter } = await import("../integrations/adapters/csv_employee.adapter.js")
+  const csvContent = csvEmployeeAdapter.exportEmployees(employees)
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8")
+  res.setHeader("Content-Disposition", 'attachment; filename="colaboradores_peoplehub.csv"')
+  res.send(csvContent)
+})
+
+// POST /api/integrations/csv/employees/import — Importação em lote via CSV
+router.post("/csv/employees/import", async (req: Request, res: Response) => {
+  const tenantId = req.tenantId || "tenant_default"
+  const { csvContent } = req.body
+
+  if (!csvContent || typeof csvContent !== "string") {
+    res.status(400).json({ ok: false, error: "Conteúdo do arquivo CSV é obrigatório." })
+    return
+  }
+
+  const { csvEmployeeAdapter } = await import("../integrations/adapters/csv_employee.adapter.js")
+  const importResult = csvEmployeeAdapter.importEmployees(csvContent, tenantId, {
+    id: req.access?.userId,
+    name: req.access?.name,
+    role: req.access?.role,
+  })
+
+  res.json({
+    ok: importResult.errorCount === 0 || importResult.successCount > 0,
+    result: importResult,
+    message: `${importResult.successCount} colaboradores importados com sucesso. ${importResult.errorCount} falhas encontradas.`,
+  })
+})
+
 export default router

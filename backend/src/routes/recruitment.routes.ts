@@ -5,6 +5,8 @@ import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
 import { authenticateRBAC, recordAuditLog } from "../middleware/rbac.js"
 import { roleHasPermission } from "../constants/rbac.js"
+import { dispatchWebhookEvent } from "../integrations/webhooks/dispatcher.js"
+import { buildJobPublishedPayload, buildCandidateStageChangedPayload } from "../integrations/security/sanitizer.js"
 
 const router = Router()
 
@@ -505,6 +507,26 @@ router.post("/jobs", (req: Request, res: Response) => {
     tenantId,
   })
 
+  // Disparar Webhook assíncrono se a vaga for publicada aberta
+  if (status === "aberta") {
+    dispatchWebhookEvent(
+      "job.published",
+      buildJobPublishedPayload({
+        id: jobId,
+        title,
+        department,
+        role,
+        work_model: workModel,
+        contract_type: contractType,
+        location,
+        positions_count: positionsCount,
+        is_public: isPublic,
+        published_at: now,
+      }),
+      tenantId
+    ).catch((wErr) => console.error("[Webhook Error] job.published:", wErr.message))
+  }
+
   res.status(201).json({ ok: true, id: jobId, job: { id: jobId, title }, message: "Vaga criada com sucesso no ATS." })
 })
 
@@ -840,7 +862,7 @@ router.patch("/applications/:id/stage", (req: Request, res: Response) => {
 
   const db = getDB()
   const appRes = db.exec(
-    `SELECT a.stage, c.name, j.title
+    `SELECT a.stage, c.name, j.title, a.candidate_id, a.job_id
      FROM job_applications a
      INNER JOIN candidates c ON c.id = a.candidate_id
      INNER JOIN job_postings j ON j.id = a.job_id
@@ -856,6 +878,8 @@ router.patch("/applications/:id/stage", (req: Request, res: Response) => {
   const currentStage = appRes[0].values[0][0] as string
   const candidateName = appRes[0].values[0][1] as string
   const jobTitle = appRes[0].values[0][2] as string
+  const candId = appRes[0].values[0][3] as string
+  const jId = appRes[0].values[0][4] as string
   const now = new Date().toISOString()
   const hiredAt = stage === "contratado" ? now : null
 
@@ -909,6 +933,23 @@ router.patch("/applications/:id/stage", (req: Request, res: Response) => {
     details: { candidateName, fromStage: currentStage, toStage: stage, notes },
     tenantId,
   })
+
+  // Disparar Webhook assíncrono de mudança de etapa
+  dispatchWebhookEvent(
+    "candidate.stage_changed",
+    buildCandidateStageChangedPayload({
+      application_id: applicationId,
+      candidate_id: candId,
+      candidate_name: candidateName,
+      job_id: jId,
+      job_title: jobTitle,
+      from_stage: currentStage,
+      to_stage: stage,
+      changed_by: req.access?.name || "RH",
+      notes: notes || undefined,
+    }),
+    tenantId
+  ).catch((wErr) => console.error("[Webhook Error] candidate.stage_changed:", wErr.message))
 
   res.json({ ok: true, message: `Candidato movido com sucesso para a etapa '${stage}'.` })
 })

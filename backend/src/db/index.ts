@@ -812,6 +812,52 @@ function runMigrations(): void {
     db.run(`CREATE INDEX IF NOT EXISTS idx_interviews_tenant_date ON interviews(tenant_id, scheduled_at ASC);`)
   } catch (_e) {}
 
+  // 6. MÓDULO: Webhooks de Saída e Integrações Externas
+  db.run(`
+    CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+      id              TEXT PRIMARY KEY,
+      tenant_id       TEXT NOT NULL,
+      name            TEXT NOT NULL,
+      url             TEXT NOT NULL,
+      secret          TEXT NOT NULL,
+      events_json     TEXT NOT NULL,
+      is_active       INTEGER DEFAULT 1,
+      created_by_id   TEXT,
+      created_by_name TEXT,
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now'))
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_wh_sub_tenant ON webhook_subscriptions(tenant_id, is_active);`)
+  } catch (_e) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id                TEXT PRIMARY KEY,
+      tenant_id         TEXT NOT NULL,
+      subscription_id   TEXT NOT NULL,
+      event_id          TEXT NOT NULL,
+      event_type        TEXT NOT NULL,
+      payload_json      TEXT NOT NULL,
+      attempt_count     INTEGER DEFAULT 0,
+      max_attempts      INTEGER DEFAULT 3,
+      next_attempt_at   TEXT DEFAULT (datetime('now')),
+      status            TEXT NOT NULL DEFAULT 'pending',
+      response_code     INTEGER,
+      response_body     TEXT,
+      execution_time_ms INTEGER,
+      last_error        TEXT,
+      created_at        TEXT DEFAULT (datetime('now')),
+      delivered_at      TEXT,
+      FOREIGN KEY (subscription_id) REFERENCES webhook_subscriptions(id) ON DELETE CASCADE
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_wh_del_tenant_status ON webhook_deliveries(tenant_id, status);`)
+    db.run(`CREATE INDEX IF NOT EXISTS idx_wh_del_event ON webhook_deliveries(event_id);`)
+  } catch (_e) {}
+
   console.log("[DB] Tabelas e índices criados/verificados com sucesso.")
 }
 
@@ -881,6 +927,14 @@ function seedInitialData(): void {
       } catch (_e) {}
     }
   }
+
+  // Garantir que as contas canônicas possuam suas roles oficiais restauradas
+  try {
+    db.run(`UPDATE users SET role = 'ADMIN' WHERE lower(email) = 'admin@empresa.com'`)
+    db.run(`UPDATE users SET role = 'RH' WHERE lower(email) = 'rh@peoplehub.com.br'`)
+    db.run(`UPDATE users SET role = 'GESTOR' WHERE lower(email) = 'gestor@peoplehub.com.br'`)
+    db.run(`UPDATE users SET role = 'COLABORADOR' WHERE lower(email) = 'colaborador@peoplehub.com.br'`)
+  } catch (_e) {}
 
   // Garantir cadastro de colaborador para Gabriel Santos (colaborador padrão)
   try {

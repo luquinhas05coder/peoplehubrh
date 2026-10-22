@@ -18,7 +18,9 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  Radio,
 } from "lucide-vue-next"
+import IntegrationsManager from "./IntegrationsManager.vue"
 import {
   showToast,
   conversations,
@@ -35,7 +37,7 @@ const emit = defineEmits<{
   (e: "close"): void
 }>()
 
-type SettingsTab = "chat" | "company" | "sla" | "security"
+type SettingsTab = "chat" | "company" | "sla" | "security" | "integrations"
 const activeTab = ref<SettingsTab>("chat")
 const saving = ref(false)
 
@@ -290,6 +292,14 @@ onMounted(() => {
           @click="activeTab = 'security'"
         >
           <ShieldCheck :size="16" /> Segurança & Backup
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
+          :class="activeTab === 'integrations' ? 'border-primary text-primary bg-background' : 'border-transparent text-muted-foreground hover:text-foreground'"
+          @click="activeTab = 'integrations'"
+        >
+          <Radio :size="16" /> Integrações & Webhooks
         </button>
       </div>
 
@@ -756,6 +766,11 @@ onMounted(() => {
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- ─── TAB 5: INTEGRAÇÕES & WEBHOOKS (ADMIN) ─── -->
+        <div v-if="activeTab === 'integrations'" class="space-y-4">
+          <IntegrationsManager />
         </div>
 
       </div>

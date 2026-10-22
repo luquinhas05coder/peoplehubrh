@@ -8,6 +8,8 @@ import { resolveTenant } from "../middleware/auth.js"
 import { authenticateRBAC, requirePermission, recordAuditLog } from "../middleware/rbac.js"
 import { roleHasPermission } from "../constants/rbac.js"
 import { sendWelcomeEmployeeEmail, generateSecureRandomPassword } from "../services/mail.service.js"
+import { dispatchWebhookEvent } from "../integrations/webhooks/dispatcher.js"
+import { buildEmployeeCreatedPayload } from "../integrations/security/sanitizer.js"
 
 const router = Router()
 
@@ -675,6 +677,23 @@ router.post("/", requirePermission("employees.create"), async (req: Request, res
     details: { name: cleanName, role: userRole, department: userDept, email: cleanEmail },
     tenantId,
   })
+
+  // Disparar Webhook assíncrono de colaborador criado
+  dispatchWebhookEvent(
+    "employee.created",
+    buildEmployeeCreatedPayload({
+      id,
+      name: cleanName,
+      role: userRole,
+      department: userDept,
+      email: cleanEmail,
+      hireDate,
+      status: "Ativo",
+      contractType,
+      workSchedule,
+    }),
+    tenantId
+  ).catch((wErr) => console.error("[Webhook Error] employee.created:", wErr.message))
 
   // 3. Buscar nome do tenant para o e-mail corporativo
   let tenantName = "PeopleHub Matriz"

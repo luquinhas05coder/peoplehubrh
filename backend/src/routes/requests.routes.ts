@@ -6,6 +6,8 @@ import { getDB, persist } from "../db/index.js"
 import { resolveTenant } from "../middleware/auth.js"
 import { authenticateRBAC, requirePermission, recordAuditLog } from "../middleware/rbac.js"
 import { roleHasPermission } from "../constants/rbac.js"
+import { dispatchWebhookEvent } from "../integrations/webhooks/dispatcher.js"
+import { buildRequestApprovedPayload } from "../integrations/security/sanitizer.js"
 
 const router = Router()
 
@@ -392,6 +394,24 @@ router.patch("/:id/status", (req: Request, res: Response) => {
     details: { oldStatus, newStatus: formattedStatus, requester, reviewNotes: decisionNote },
     tenantId,
   })
+
+  // Disparar Webhook assíncrono se a solicitação foi aprovada
+  if (formattedStatus === "Aprovado") {
+    dispatchWebhookEvent(
+      "request.approved",
+      buildRequestApprovedPayload({
+        id: String(id),
+        type: reqType,
+        requester,
+        department,
+        priority: reqDesc || "media",
+        description: reqDesc,
+        reviewed_by: reviewerName,
+        reviewed_at: new Date().toISOString(),
+      }),
+      tenantId
+    ).catch((wErr) => console.error("[Webhook Error] request.approved:", wErr.message))
+  }
 
   res.json({
     ok: true,

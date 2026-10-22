@@ -338,21 +338,73 @@ Módulo integrado que empodera o colaborador com autonomia para consultar seu do
 
 ---
 
-### 🧪 12. Bateria Completa de Testes Automatizados (CI/CD)
-O projeto conta com suíte integrada de testes unitários, testes de integração, testes RBAC, ATS e Autoatendimento:
+---
+
+### 🌐 12. Camada Modular de Integrações Externas & Webhooks de Saída
+Arquitetura corporativa desacoplada e orientada a eventos para integração com sistemas legados, ERPs de folha de pagamento, ATS e plataformas de terceiros, priorizando segurança cibernética e resiliência:
+
+* **Inventário & Interface Comum de Integrações (`IntegrationAdapter`)**:
+  * Contrato unificado `IntegrationAdapter<TConfig, TInput, TOutput>` com métodos de diagnóstico (`testConnection`) e execução (`execute`).
+  * Registro central `integrationRegistry` para descoberta e monitoramento de saúde de adaptadores em tempo real.
+  * **Adaptador CSV de Colaboradores (DP)** (`csv_employee_adapter`):
+    * Exportação completa de funcionários em formato CSV padronizado (com BOM UTF-8 para compatibilidade Excel, delimitador `;` e campos mascarados).
+    * Importação em lote via CSV com validação prévia de schema, checagem de e-mails duplicados e relatório estruturado de inconsistências linha por linha.
+  * **Adaptador CBO ConectaGov / MTE** (`cbo_conecta_gov_adapter`):
+    * Consulta e validação de ocupações oficiais do Ministério do Trabalho via API ConectaGov / Serpro com catálogo local de alta disponibilidade.
+  * Reutilização dos clientes nativos Node.js e configurações existentes (Nodemailer SMTP, Evolution API, ViaCEP).
+
+* **Webhooks de Saída (Arquitetura Event-Driven)**:
+  * Emissão assíncrona dos 4 eventos de negócio reais da plataforma:
+    1. `employee.created`: Notificado na admissão ou cadastro de colaborador no prontuário.
+    2. `request.approved`: Notificado na homologação e aprovação de chamados pelo RH.
+    3. `job.published`: Notificado na abertura e publicação de vagas no portal ATS.
+    4. `candidate.stage_changed`: Notificado na transição de etapas do candidato no funil seletivo.
+    5. `ping.test`: Evento sintético para verificação instantânea de conectividade e validação HMAC.
+  * Envelope padronizado e idempotente: `{ id, type, occurred_at, tenant_id, payload }`.
+  * **Sanitização Estrita**: Filtro automático que elimina senhas, hashes, segredos MFA, cookies e tokens de sessão, além de mascarar dígitos de CPF nos payloads enviados.
+
+* **Segurança Avançada contra Ameaças de Rede**:
+  * **Prevenção Rigorosa de SSRF (Server-Side Request Forgery)**:
+    * Validação sintática e normalização de URLs via módulo `validateSsrfUrl`.
+    * Resolução DNS prévia e bloqueio de destinos em Loopback (`127.0.0.0/8`, `::1`), Redes Privadas (RFC 1918 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), Link-local e Metadados de Nuvem (`169.254.169.254`, AWS, GCP, Azure).
+    * Bloqueio de portas de infraestrutura não autorizadas (21, 22, 23, 25, 110, 3306, 5432, 6379, etc.).
+    * Revalidação de destino em redirecionamentos HTTP (`redirect: 'manual'`), impedindo que endpoints públicos redirecionem para redes corporativas internas.
+  * **Assinatura HMAC SHA-256 em Tempo Constante**:
+    * Cabeçalho oficial `X-PeopleHub-Signature: t=timestamp,v1=signature`.
+    * Validação com `crypto.timingSafeEqual` para mitigação de ataques de temporização (*timing attacks*).
+    * Proteção contra ataques de repetição (*Replay Attacks*) com tolerância temporal de 300 segundos.
+  * **Gestão e Rotação de Segredos**:
+    * Segredos criptográficos fortes (`whsec_...`) com entropia de 32 bytes gerados na criação.
+    * Endpoint administrativo para rotação imediata de segredos (`POST /api/webhooks/subscriptions/:id/rotate-secret`) auditado na `audit_logs`.
+    * Segredos ofuscados na leitura por API e telas (`whsec_••••••••abcd`).
+
+* **Confiabilidade, Fila de Entregas & Resiliência**:
+  * Fila de entregas desacoplada persistida no SQLite (`webhook_subscriptions` e `webhook_deliveries`).
+  * Despacho não-bloqueante (`setImmediate`): Falhas de rede ou lentidão em endpoints terceiros **nunca travam nem bloqueiam** as rotinas operacionais de RH.
+  * Tentativas de reenvio automatizadas com **Backoff Exponencial** (`15s`, `60s`, `240s`, `900s`, `3600s`) e timeout estrito de 8 segundos por requisição.
+  * Histórico detalhado de entregas com código de resposta HTTP, latência em milissegundos e mensagens de erro (sem vazar credenciais).
+  * **Reenvio Manual**: Painel para administradores reprocessarem entregas falhadas em 1 clique (`POST /api/webhooks/deliveries/:id/redeliver`).
+
+---
+
+### 🧪 13. Bateria Completa de Testes Automatizados (CI/CD)
+O projeto conta com suíte integrada de testes unitários, testes de integração, testes RBAC, ATS, Autoatendimento e Webhooks/SSRF:
 
 ```bash
-# Executar todos os testes (Frontend e Backend)
+# Executar todos os testes (Frontend e Backend unificados)
 npm test
 
 # Executar apenas testes de componentes Vue 3 (Vitest)
 npm run test:frontend
 
-# Executar testes de APIs, RBAC, ATS e Autoatendimento (Node.js)
+# Executar testes de APIs, RBAC, ATS, Autoatendimento e Webhooks (Node.js)
 npm run test:backend
 
+# Executar suíte específica da camada de Integrações e Webhooks
+node backend/test-runner.js test-integrations-webhooks.js
+
 # Executar suíte específica do Portal de Autoatendimento
-node backend/test-self-service.js
+node backend/test-runner.js test-self-service.js
 
 # Executar auditoria de segurança (Headers, OWASP, Anti-Enumeração)
 npm run test:security
@@ -372,7 +424,7 @@ chat-de-rh1808/
 │   │   ├── 📄 EmployeesModule.vue          # Gestão de colaboradores com busca, filtros, ordenação e paginação
 │   │   ├── 📄 NewEmployeeFolderModal.vue   # Provisionamento e edição completa de colaboradores
 │   │   ├── 📄 ExportDossierModal.vue       # Exportação de dossiê completo em PDF
-│   │   ├── 📄 DocumentsModule.vue          # Emissão de holerites e espelho de ponto em PDF
+│   │   ├── 📄 IntegrationsManager.vue      # Gestão de Webhooks, Logs de Entrega e Carga CSV (ADMIN)
 │   │   ├── 📄 SelfServicePortal.vue        # Portal de Autoatendimento do Colaborador (dossiê, solicitações, documentos)
 │   │   ├── 📄 RecruitmentModule.vue        # Módulo ATS (vagas, pipeline seletivo, entrevistas, scorecards)
 │   │   ├── 📄 OnboardingModule.vue         # Trilhas e checklists de integração
@@ -382,12 +434,20 @@ chat-de-rh1808/
 │   └── 📄 App.vue                          # Componente raiz da aplicação
 ├── 📂 backend/                             # Backend Node.js / Express 5 API
 │   ├── 📂 src/
+│   │   ├── 📂 integrations/                # Camada Modular de Integrações
+│   │   │   ├── 📂 core/                    # Interfaces IntegrationAdapter, WebhookEvent e Registry
+│   │   │   ├── 📂 security/                # SSRF Shield, Assinatura HMAC SHA-256 e Sanitizador
+│   │   │   ├── 📂 webhooks/                # Dispatcher e Worker com Backoff Exponencial
+│   │   │   └── 📂 adapters/                # Adaptadores CSV (DP) e CBO ConectaGov/MTE
 │   │   ├── 📂 routes/
+│   │   │   ├── 📄 webhooks.routes.ts       # Gestão de webhooks, rotação de segredo e reenvio manual
+│   │   │   ├── 📄 integrations.routes.ts   # Configurações de API e carga/exportação CSV
 │   │   │   ├── 📄 dashboard.routes.ts      # API GET /api/dashboard (métricas consolidadas reais)
-│   │   │   ├── 📄 employees.routes.ts      # API GET/PUT /api/employees e /api/funcionarios
-│   │   │   ├── 📄 auth.routes.ts           # Login, JWT, MFA e recuperação de senha
-│   │   │   └── 📄 ...                      # Demais rotas (requests, documents, contracheques)
-│   │   ├── 📂 db/                          # SQLite (tabelas employees, employee_history, requests, documents)
+│   │   │   ├── 📄 employees.routes.ts      # API GET/PUT /api/employees (com evento employee.created)
+│   │   │   ├── 📄 requests.routes.ts       # API de chamados (com evento request.approved)
+│   │   │   ├── 📄 recruitment.routes.ts    # API ATS (com job.published e candidate.stage_changed)
+│   │   │   └── 📄 ...                      # Demais rotas (auth, documents, contracheques)
+│   │   ├── 📂 db/                          # SQLite (webhook_subscriptions, webhook_deliveries, etc.)
 │   ├── 📄 peoplehub.db                     # Banco de dados SQLite persistente
 │   └── 📄 .env.example                     # Modelo de variáveis de ambiente
 └── 📄 README.md                            # Documentação oficial do projeto
