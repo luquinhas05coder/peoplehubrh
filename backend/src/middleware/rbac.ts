@@ -1,9 +1,16 @@
 /**
- * middleware/rbac.ts — Middleware de Controle de Acesso Baseado em Funções (RBAC) e Escopos
+ * middleware/rbac.ts — Middleware de Controle de Acesso Baseado em Funções (RBAC), Escopos e Matriz Dinâmica
  */
 import type { Request, Response, NextFunction } from "express"
 import { verifySessionToken, type JwtPayload } from "./auth.js"
-import { type Role, type Permission, normalizeRole, roleHasPermission } from "../constants/rbac.js"
+import {
+  type Role,
+  type Permission,
+  normalizeRole,
+  roleHasPermission,
+  getEffectivePermissionsForUser,
+  userHasEffectivePermission,
+} from "../constants/rbac.js"
 import { getDB, persist } from "../db/index.js"
 
 export interface UserAccessContext {
@@ -15,6 +22,7 @@ export interface UserAccessContext {
   department: string
   tenantId: string
   scope: "ALL" | "TEAM" | "OWN"
+  permissions: Permission[]
 }
 
 declare global {
@@ -132,13 +140,16 @@ export function authenticateRBAC(req: Request, res: Response, next: NextFunction
 
   // Determinar o escopo padrão da role
   let scope: "ALL" | "TEAM" | "OWN" = "OWN"
-  if (normalizedRole === "ADMIN" || normalizedRole === "RH") {
+  if (normalizedRole === "ADMIN" || normalizedRole === "RH" || normalizedRole === "DP" || normalizedRole === "AUDITOR") {
     scope = "ALL"
   } else if (normalizedRole === "GESTOR") {
     scope = "TEAM"
   } else {
     scope = "OWN"
   }
+
+  // Carregar permissões dinâmicas efetivas (base da role + customizações)
+  const effectivePermissions = getEffectivePermissionsForUser(id, normalizedRole)
 
   req.user = payload
   req.tenantId = tenantId || payload.tenant_id || "tenant_default"
@@ -151,6 +162,16 @@ export function authenticateRBAC(req: Request, res: Response, next: NextFunction
     department: department || "Geral",
     tenantId: req.tenantId,
     scope,
+    permissions: effectivePermissions,
+  }
+
+  // Salvaguarda: Auditor possui estritamente acesso de LEITURA. Bloquear qualquer mutação HTTP (POST, PUT, PATCH, DELETE).
+  if (normalizedRole === "AUDITOR" && ["POST", "PUT", "PATCH", "DELETE"].includes(req.method.toUpperCase())) {
+    res.status(403).json({
+      ok: false,
+      error: "Acesso negado: Usuário com perfil de Auditor possui exclusivamente acesso de leitura e auditoria. Operações de modificação ou escrita são proibidas.",
+    })
+    return
   }
 
   next()
@@ -180,7 +201,7 @@ export function requireRole(allowedRoles: Role | Role[]) {
 }
 
 /**
- * Middleware que exige uma permissão explícita baseada na matriz de permissões.
+ * Middleware que exige uma permissão explícita baseada na matriz de permissões efetivas.
  */
 export function requirePermission(permission: Permission) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -189,7 +210,10 @@ export function requirePermission(permission: Permission) {
       return
     }
 
-    if (!roleHasPermission(req.access.role, permission)) {
+    const hasPerm = req.access.permissions?.includes(permission) ||
+      userHasEffectivePermission(req.access.userId, req.access.role, permission)
+
+    if (!hasPerm) {
       res.status(403).json({
         ok: false,
         error: `Acesso negado: Seu perfil (${req.access.role}) não possui a permissão '${permission}'.`,

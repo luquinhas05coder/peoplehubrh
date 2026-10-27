@@ -389,10 +389,11 @@ function handlePrint() {
     </div>
 
     <!-- DOCUMENTO DA FOLHA DE PONTO (MODELO IMPRESSO/CLT) -->
-    <div
-      id="folha-ponto-document-pdf"
-      class="bg-white text-black font-sans text-xs border border-black shadow-md mx-auto max-w-4xl p-5 print:shadow-none print:border-black print:p-2"
-    >
+    <div class="overflow-x-auto rounded-xl border border-black/10 scrollbar-thin print:overflow-visible print:border-none">
+      <div
+        id="folha-ponto-document-pdf"
+        class="bg-white text-black font-sans text-xs border border-black shadow-md mx-auto min-w-[650px] max-w-4xl p-5 print:min-w-0 print:shadow-none print:border-black print:p-2"
+      >
       <!-- HEADER DO ESPELHO -->
       <div class="border-b border-black pb-3 mb-3 flex flex-wrap justify-between items-start gap-4">
         <div>
@@ -574,6 +575,7 @@ function handlePrint() {
           </button>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- MODAL DE EDIÇÃO / AJUSTE DE PONTO -->

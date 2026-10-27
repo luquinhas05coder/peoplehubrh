@@ -11,10 +11,16 @@ __v0_jsx-dev-runtime.ts
 .env.*
 !.env.example
 
-# Common ignores
-node_modules
+node_modules/
+backend/node_modules/
 dist/
+backend/dist/
+coverage/
 *.tsbuildinfo
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
 __pycache__/
 *.pyc
 .next/

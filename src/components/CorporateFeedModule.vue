@@ -142,18 +142,18 @@ async function handleDelete(postId: string) {
   <div class="space-y-6">
 
     <!-- CABEÇALHO DO FEED -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-3xl border bg-card p-6 shadow-sm">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-3xl border border-border bg-card p-4 sm:p-6 shadow-sm">
       <div class="space-y-1.5">
         <div class="flex items-center gap-2.5">
-          <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600 border border-teal-500/20 shadow-xs">
+          <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20 shadow-xs shrink-0">
             <Sparkles :size="22" />
           </div>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <h2 class="text-xl sm:text-2xl font-black tracking-tight text-foreground">
                 Feed Corporativo & Mural de Eventos
               </h2>
-              <span class="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
+              <span class="ph-badge-success text-[10px]">
                 Atualizado em Tempo Real
               </span>
             </div>
@@ -166,7 +166,7 @@ async function handleDelete(postId: string) {
 
       <button
         v-if="userPermissions.isRH || userPermissions.isAdmin || userPermissions.isGestor"
-        class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-teal-700 transition-all active:scale-95 cursor-pointer shrink-0"
+        class="ph-btn-primary shrink-0"
         @click="showNewPostModal = true"
       >
         <Plus :size="16" />
@@ -175,22 +175,22 @@ async function handleDelete(postId: string) {
     </div>
 
     <!-- ABAS DE CATEGORIAS E BUSCA -->
-    <div class="flex flex-col md:flex-row gap-3 items-center justify-between border-b pb-4">
+    <div class="flex flex-col md:flex-row gap-3 items-center justify-between border-b border-border pb-4">
       <!-- Pills de Filtro -->
       <div class="flex items-center gap-1.5 overflow-x-auto scrollbar-thin w-full md:w-auto">
         <button
           v-for="cat in categories"
           :key="cat.key"
           class="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-          :class="selectedCategory === cat.key ? 'bg-teal-600 text-white shadow-sm' : 'bg-card border text-muted-foreground hover:bg-muted'"
+          :class="selectedCategory === cat.key ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-card border border-border text-muted-foreground hover:bg-muted hover:text-foreground'"
           @click="setCategory(cat.key)"
         >
           <component :is="cat.icon" :size="14" />
           <span>{{ cat.label }}</span>
           <span
             v-if="cat.key !== 'todos'"
-            class="text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1"
-            :class="selectedCategory === cat.key ? 'bg-white/20 text-white' : 'bg-muted text-foreground'"
+            class="text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1"
+            :class="selectedCategory === cat.key ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-foreground'"
           >
             {{ feedCounts[cat.key as keyof typeof feedCounts] || 0 }}
           </span>
@@ -204,7 +204,7 @@ async function handleDelete(postId: string) {
           v-model="searchQuery"
           type="text"
           placeholder="Buscar no feed por palavra ou tag..."
-          class="w-full rounded-xl border bg-card py-2 pl-9 pr-4 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+          class="ph-input w-full py-2 pl-9 pr-4 text-xs"
           @keyup.enter="handleSearch"
         />
       </div>
@@ -331,12 +331,12 @@ async function handleDelete(postId: string) {
     <!-- MODAL DE NOVO COMUNICADO / EVENTO -->
     <div
       v-if="showNewPostModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-3 sm:p-4 backdrop-blur-sm"
     >
-      <div class="w-full max-w-xl rounded-3xl border bg-card p-6 sm:p-8 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto scrollbar-thin">
-        <div class="flex items-center justify-between border-b pb-4">
+      <div class="w-full max-w-xl rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xl space-y-5 max-h-[90dvh] overflow-y-auto scrollbar-thin text-foreground">
+        <div class="flex items-center justify-between border-b border-border pb-4">
           <div class="flex items-center gap-2.5">
-            <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600 border border-teal-500/20">
+            <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
               <Megaphone :size="20" />
             </div>
             <div>
@@ -357,7 +357,7 @@ async function handleDelete(postId: string) {
               type="text"
               required
               placeholder="Ex: 🎉 Lançamento do Programa de Apoio Emocional"
-              class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+              class="ph-input w-full mt-1 p-3 text-xs"
             />
           </div>
 
@@ -366,7 +366,7 @@ async function handleDelete(postId: string) {
               <label class="font-bold text-foreground">Categoria *</label>
               <select
                 v-model="newPost.category"
-                class="w-full mt-1 rounded-xl border bg-card p-2.5 text-xs outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+                class="ph-select w-full mt-1 p-2.5 text-xs font-semibold"
               >
                 <option value="novidade">🎉 Novidade</option>
                 <option value="medida">🛡️ Medida Corporativa</option>
@@ -379,7 +379,7 @@ async function handleDelete(postId: string) {
               <label class="font-bold text-foreground">Prioridade / Destaque</label>
               <select
                 v-model="newPost.priority"
-                class="w-full mt-1 rounded-xl border bg-card p-2.5 text-xs outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+                class="ph-select w-full mt-1 p-2.5 text-xs font-semibold"
               >
                 <option value="normal">Normal</option>
                 <option value="destaque">Destaque</option>
@@ -389,14 +389,14 @@ async function handleDelete(postId: string) {
           </div>
 
           <!-- Campos especiais para Eventos -->
-          <div v-if="newPost.category === 'evento'" class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-indigo-500/5 border border-indigo-500/20">
+          <div v-if="newPost.category === 'evento'" class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
             <div>
               <label class="font-bold text-indigo-950 dark:text-indigo-200">Data & Hora do Evento</label>
               <input
                 v-model="newPost.event_date"
                 type="text"
                 placeholder="Ex: 05/10/2026 às 15:00"
-                class="w-full mt-1 rounded-xl border bg-card p-2 text-xs outline-none"
+                class="ph-input w-full mt-1 p-2 text-xs"
               />
             </div>
             <div>
@@ -405,7 +405,7 @@ async function handleDelete(postId: string) {
                 v-model="newPost.event_location"
                 type="text"
                 placeholder="Ex: Auditório ou Google Meet"
-                class="w-full mt-1 rounded-xl border bg-card p-2 text-xs outline-none"
+                class="ph-input w-full mt-1 p-2 text-xs"
               />
             </div>
           </div>
@@ -417,7 +417,7 @@ async function handleDelete(postId: string) {
               required
               rows="4"
               placeholder="Escreva a mensagem completa, detalhes da novidade, medida tomada ou instruções do evento..."
-              class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+              class="ph-input w-full mt-1 p-3 text-xs"
             ></textarea>
           </div>
 
@@ -427,7 +427,7 @@ async function handleDelete(postId: string) {
               v-model="newPost.tags"
               type="text"
               placeholder="Ex: DHO, Bem-Estar, Saúde, Benefícios"
-              class="w-full mt-1 rounded-xl border bg-card p-2.5 text-xs outline-none"
+              class="ph-input w-full mt-1 p-2.5 text-xs"
             />
           </div>
 
@@ -437,17 +437,17 @@ async function handleDelete(postId: string) {
               id="pin-post"
               v-model="newPost.is_pinned"
               type="checkbox"
-              class="h-4 w-4 rounded text-teal-600 cursor-pointer"
+              class="h-4 w-4 rounded accent-primary cursor-pointer"
             />
             <label for="pin-post" class="font-semibold text-foreground cursor-pointer">
               Fixar esta publicação no topo do Feed
             </label>
           </div>
 
-          <div class="flex items-center justify-end gap-3 pt-3 border-t">
+          <div class="flex items-center justify-end gap-3 pt-3 border-t border-border">
             <button
               type="button"
-              class="rounded-xl border px-4 py-2 font-bold hover:bg-muted cursor-pointer"
+              class="ph-btn-secondary px-4 py-2"
               @click="showNewPostModal = false"
             >
               Cancelar
@@ -455,7 +455,7 @@ async function handleDelete(postId: string) {
             <button
               type="submit"
               :disabled="isSubmitting"
-              class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 font-bold text-white hover:bg-teal-700 transition-all cursor-pointer shadow-md disabled:opacity-60"
+              class="ph-btn-primary px-5 py-2 disabled:opacity-60"
             >
               <Send :size="14" />
               <span>{{ isSubmitting ? 'Publicando...' : 'Publicar no Feed' }}</span>

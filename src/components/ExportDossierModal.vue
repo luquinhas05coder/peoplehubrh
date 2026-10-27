@@ -777,18 +777,26 @@ async function generateDossierPdf() {
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
-    <div class="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+  <div
+    v-if="isOpen"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto print:hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="export-dossier-title"
+    tabindex="-1"
+    @keydown.esc="emit('close')"
+  >
+    <div class="w-full max-w-2xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
       
       <!-- Top Header -->
       <div class="flex items-start justify-between border-b pb-3">
         <div class="flex items-center gap-3">
           <div class="rounded-xl bg-teal-500/10 p-2.5 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300">
-            <FolderArchive :size="24" />
+            <FolderArchive :size="24" aria-hidden="true" />
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <h3 class="text-base font-bold text-foreground">
+              <h3 id="export-dossier-title" class="text-base font-bold text-foreground">
                 Exportar Pasta de Documentos do Colaborador (PDF)
               </h3>
               <span class="rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 px-2 py-0.5 text-[10px] font-bold">
@@ -801,17 +809,19 @@ async function generateDossierPdf() {
           </div>
         </div>
         <button
+          type="button"
           @click="emit('close')"
+          aria-label="Fechar exportação de dossiê"
           class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
         >
-          <X :size="20" />
+          <X :size="20" aria-hidden="true" />
         </button>
       </div>
 
       <!-- Banner Informativo de Origem da Solicitação -->
       <div class="rounded-xl border border-teal-200 bg-teal-50/60 p-3 text-xs text-teal-900 dark:border-teal-900/40 dark:bg-teal-950/20 dark:text-teal-200 flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <Sparkles :size="15" class="text-teal-600 shrink-0" />
+          <Sparkles :size="15" class="text-teal-600 shrink-0" aria-hidden="true" />
           <span>{{ requesterLabel }}</span>
         </div>
         <span class="text-[11px] font-semibold text-teal-700 dark:text-teal-300">
@@ -821,17 +831,17 @@ async function generateDossierPdf() {
 
       <!-- Checklist de Conteúdos a Incluir no Dossiê PDF -->
       <div class="space-y-2.5">
-        <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        <span class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Selecione as Informações a Compilar na Pasta PDF:
-        </label>
+        </span>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
           <!-- 1. Dados Cadastrais -->
-          <label class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
-            <input type="checkbox" v-model="includeCadastral" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
+          <label for="chk-cadastral" class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
+            <input id="chk-cadastral" type="checkbox" v-model="includeCadastral" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
             <div>
               <span class="font-bold text-foreground flex items-center gap-1.5">
-                <User :size="13" class="text-primary" /> Ficha Cadastral & Contrato
+                <User :size="13" class="text-primary" aria-hidden="true" /> Ficha Cadastral & Contrato
               </span>
               <p class="text-[11px] text-muted-foreground mt-0.5">
                 Dados pessoais, CBO ({{ folder.cbo || '2124-05' }}), admissão, regime CLT e remuneração.
@@ -840,11 +850,11 @@ async function generateDossierPdf() {
           </label>
 
           <!-- 2. Histórico de CCs -->
-          <label class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
-            <input type="checkbox" v-model="includeContraCheques" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
+          <label for="chk-contracheques" class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
+            <input id="chk-contracheques" type="checkbox" v-model="includeContraCheques" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
             <div>
               <span class="font-bold text-foreground flex items-center gap-1.5">
-                <Receipt :size="13" class="text-emerald-600" /> Histórico Linear de CCs
+                <Receipt :size="13" class="text-emerald-600" aria-hidden="true" /> Histórico Linear de CCs
               </span>
               <p class="text-[11px] text-muted-foreground mt-0.5">
                 Competências, proventos, descontos, líquido e selo de imutabilidade ({{ contrachequesLinear.length }} recibos).
@@ -853,11 +863,11 @@ async function generateDossierPdf() {
           </label>
 
           <!-- 3. Folha de Ponto -->
-          <label class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
-            <input type="checkbox" v-model="includeFolhaPonto" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
+          <label for="chk-folha-ponto" class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
+            <input id="chk-folha-ponto" type="checkbox" v-model="includeFolhaPonto" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
             <div>
               <span class="font-bold text-foreground flex items-center gap-1.5">
-                <Clock :size="13" class="text-sky-600" /> Folha de Ponto (Espelho CLT)
+                <Clock :size="13" class="text-sky-600" aria-hidden="true" /> Folha de Ponto (Espelho CLT)
               </span>
               <p class="text-[11px] text-muted-foreground mt-0.5">
                 Registros de frequência, horas extras e saldo de banco de horas ({{ folhaPonto.bankBalance }}).
@@ -866,11 +876,11 @@ async function generateDossierPdf() {
           </label>
 
           <!-- 4. Prontuário de Férias -->
-          <label class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
-            <input type="checkbox" v-model="includeFerias" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
+          <label for="chk-ferias" class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
+            <input id="chk-ferias" type="checkbox" v-model="includeFerias" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
             <div>
               <span class="font-bold text-foreground flex items-center gap-1.5">
-                <CalendarClock :size="13" class="text-amber-600" /> Demonstrativo de Férias
+                <CalendarClock :size="13" class="text-amber-600" aria-hidden="true" /> Demonstrativo de Férias
               </span>
               <p class="text-[11px] text-muted-foreground mt-0.5">
                 Período aquisitivo, período concessivo e saldo regulamentar ({{ feriasInfo.diasSaldo }} dias restantes).
@@ -880,12 +890,12 @@ async function generateDossierPdf() {
         </div>
 
         <!-- 5. Pendências e Recursos -->
-        <label class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
-          <input type="checkbox" v-model="includePendencias" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
+        <label for="chk-pendencias" class="flex items-start gap-2.5 rounded-xl border bg-background p-3 hover:bg-muted/40 transition-colors cursor-pointer select-none">
+          <input id="chk-pendencias" type="checkbox" v-model="includePendencias" class="mt-0.5 rounded border-muted-foreground text-primary focus:ring-0" />
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <span class="font-bold text-foreground flex items-center gap-1.5">
-                <AlertTriangle :size="13" class="text-rose-600" /> Quadro de Pendências & Recursos em Aberto
+                <AlertTriangle :size="13" class="text-rose-600" aria-hidden="true" /> Quadro de Pendências & Recursos em Aberto
               </span>
               <span class="text-[10px] font-bold rounded px-1.5 py-0.5 bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
                 {{ pendenciasList.length }} pendências mapeadas
@@ -900,24 +910,31 @@ async function generateDossierPdf() {
 
       <!-- Opção de Arquivamento Digital -->
       <div class="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs flex items-center justify-between">
-        <label class="flex items-center gap-2 cursor-pointer select-none">
-          <input type="checkbox" v-model="saveToDigitalFolder" class="rounded border-muted-foreground text-primary focus:ring-0" />
+        <label for="chk-save-digital" class="flex items-center gap-2 cursor-pointer select-none">
+          <input id="chk-save-digital" type="checkbox" v-model="saveToDigitalFolder" class="rounded border-muted-foreground text-primary focus:ring-0" />
           <span class="font-medium text-foreground">
             Arquivar automaticamente uma cópia deste PDF na pasta de documentos digitais do colaborador
           </span>
         </label>
-        <FileCheck2 :size="15" class="text-teal-600" />
+        <FileCheck2 :size="15" class="text-teal-600" aria-hidden="true" />
       </div>
 
       <!-- Progresso de Exportação -->
-      <div v-if="isExporting" class="space-y-1.5">
+      <div v-if="isExporting" class="space-y-1.5" role="status" aria-live="polite">
         <div class="flex items-center justify-between text-xs">
           <span class="font-semibold text-foreground flex items-center gap-1.5">
-            <Loader2 :size="13" class="animate-spin text-primary" /> {{ exportStatusText }}
+            <Loader2 :size="13" class="animate-spin text-primary" aria-hidden="true" /> {{ exportStatusText }}
           </span>
           <span class="font-bold text-primary">{{ exportProgress }}%</span>
         </div>
-        <div class="w-full h-2 rounded-full bg-muted overflow-hidden">
+        <div
+          class="w-full h-2 rounded-full bg-muted overflow-hidden"
+          role="progressbar"
+          :aria-valuenow="exportProgress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="exportStatusText"
+        >
           <div class="h-full bg-primary transition-all duration-200" :style="{ width: `${exportProgress}%` }"></div>
         </div>
       </div>
@@ -939,8 +956,8 @@ async function generateDossierPdf() {
           :disabled="isExporting"
           class="flex items-center gap-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white px-5 py-2.5 text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50"
         >
-          <Loader2 v-if="isExporting" :size="15" class="animate-spin" />
-          <Download v-else :size="15" />
+          <Loader2 v-if="isExporting" :size="15" class="animate-spin" aria-hidden="true" />
+          <Download v-else :size="15" aria-hidden="true" />
           <span>{{ isExporting ? 'Compilando Dossiê PDF...' : 'Baixar Dossiê Completo (PDF)' }}</span>
         </button>
       </div>

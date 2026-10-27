@@ -8,7 +8,12 @@
     "client": "vite --host",
     "server": "npm --prefix backend run dev",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "vitest run",
+    "test:backend": "node backend/test-runner.js backend",
+    "test:security": "node backend/test-runner.js security",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
@@ -39,10 +44,14 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vitest/coverage-v8": "^5.0.5",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^21.0.3",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.23.1",
     "typescript": "~5.7.3",
     "vite": "^6.0.7",
+    "vitest": "^5.0.5",
     "vue-tsc": "^2.2.0"
   }
 }

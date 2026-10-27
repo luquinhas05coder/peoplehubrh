@@ -408,89 +408,169 @@ function getInitials(str: string) {
   return str.slice(0, 2).toUpperCase() || "RH"
 }
 
-async function submit() {
-  if (!name.value.trim() || !cpf.value.trim()) return
-  const initials = getInitials(name.value)
-  const reg = registration.value.trim() || generateMatricula()
-  const formattedDate = admissionDate.value.includes("-")
-    ? admissionDate.value.split("-").reverse().join("/")
-    : admissionDate.value
+function isValidCPF(str: string): boolean {
+  const clean = str.replace(/\D/g, "")
+  if (clean.length !== 11) return false
+  if (/^(\d)\1{10}$/.test(clean)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += parseInt(clean[i]) * (10 - i)
+  let rev = 11 - (sum % 11)
+  if (rev === 10 || rev === 11) rev = 0
+  if (rev !== parseInt(clean[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += parseInt(clean[i]) * (11 - i)
+  rev = 11 - (sum % 11)
+  if (rev === 10 || rev === 11) rev = 0
+  return rev === parseInt(clean[10])
+}
 
-  // Format full address for location preview
-  let loc = "São Paulo, SP"
-  if (city.value && state.value) {
-    if (street.value) {
-      loc = `${street.value}${number.value ? ", " + number.value : ""} - ${
-        neighborhood.value ? neighborhood.value + ", " : ""
-      }${city.value}/${state.value}`
-    } else {
-      loc = `${city.value}, ${state.value}`
-    }
+const formErrors = ref<Record<string, string>>({})
+
+function validateForm(): boolean {
+  const errors: Record<string, string> = {}
+  if (!name.value.trim()) {
+    errors.name = "Nome completo é obrigatório."
+  } else if (name.value.trim().length < 3) {
+    errors.name = "O nome deve conter pelo menos 3 caracteres."
   }
 
-  if (props.folderToEdit) {
-    await updateEmployeeFolder(props.folderToEdit.id, {
-      name: name.value.trim(),
-      initials,
-      cpf: cpf.value.trim(),
-      registration: reg,
-      role: role.value.trim() || "Colaborador",
-      department: department.value.trim() || "Recursos Humanos",
-      email: email.value.trim() || `${name.value.toLowerCase().replace(/\s+/g, ".")}@empresa.com`,
-      phone: phone.value.trim() || "+55 11 99999-0000",
-      manager: manager.value.trim() || "Diretoria RH",
-      admissionDate: formattedDate,
-      status: status.value,
-      notes: notes.value.trim() || "Pasta atualizada.",
-      location: loc,
-      cep: cep.value,
-      street: street.value,
-      number: number.value,
-      complement: complement.value,
-      neighborhood: neighborhood.value,
-      city: city.value,
-      state: state.value,
-      cbo: cbo.value,
-      cboTitle: cboTitle.value,
-      salary: salary.value.trim() || "R$ 6.500,00",
-      contractType: contractType.value,
-      workSchedule: workSchedule.value,
-    })
+  const cleanCpf = cpf.value.replace(/\D/g, "")
+  if (!cleanCpf) {
+    errors.cpf = "CPF é obrigatório."
+  } else if (cleanCpf.length !== 11) {
+    errors.cpf = "O CPF deve conter exatamente 11 dígitos numéricos."
+  } else if (!isValidCPF(cleanCpf)) {
+    errors.cpf = "Dígitos verificadores do CPF inválidos."
+  }
 
-    emit("updated", props.folderToEdit.id)
-    emit("close")
-  } else {
-    const created = await createEmployeeFolder({
-      name: name.value.trim(),
-      initials,
-      cpf: cpf.value.trim(),
-      registration: reg,
-      role: role.value.trim() || "Colaborador",
-      department: department.value.trim() || "Recursos Humanos",
-      email: email.value.trim() || `${name.value.toLowerCase().replace(/\s+/g, ".")}@empresa.com`,
-      phone: phone.value.trim() || "+55 11 99999-0000",
-      manager: manager.value.trim() || "Diretoria RH",
-      admissionDate: formattedDate,
-      status: status.value,
-      notes: notes.value.trim() || "Pasta criada via Central de Colaboradores.",
-      location: loc,
-      cep: cep.value,
-      street: street.value,
-      number: number.value,
-      complement: complement.value,
-      neighborhood: neighborhood.value,
-      city: city.value,
-      state: state.value,
-      cbo: cbo.value,
-      cboTitle: cboTitle.value,
-      salary: salary.value.trim() || "R$ 6.500,00",
-      contractType: contractType.value,
-      workSchedule: workSchedule.value,
-      sendEmail: sendAccessEmail.value,
-    })
+  if (!email.value.trim()) {
+    errors.email = "E-mail institucional é obrigatório para login."
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+    errors.email = "Informe um endereço de e-mail válido (ex: colaborador@empresa.com)."
+  }
 
-    emit("created", created.id)
-    emit("close")
+  if (!admissionDate.value) {
+    errors.admissionDate = "Data de admissão é obrigatória."
+  }
+
+  if (!role.value.trim()) {
+    errors.role = "Cargo ou função é obrigatório."
+  }
+
+  if (!department.value.trim()) {
+    errors.department = "Departamento é obrigatório."
+  }
+
+  formErrors.value = errors
+  return Object.keys(errors).length === 0
+}
+
+watch(name, () => { delete formErrors.value.name })
+watch(cpf, () => { delete formErrors.value.cpf })
+watch(email, () => { delete formErrors.value.email })
+watch(admissionDate, () => { delete formErrors.value.admissionDate })
+watch(role, () => { delete formErrors.value.role })
+watch(department, () => { delete formErrors.value.department })
+
+const isSaving = ref(false)
+
+async function submit() {
+  if (isSaving.value) return
+  if (!validateForm()) {
+    const firstKey = Object.keys(formErrors.value)[0]
+    const el = document.getElementById(`field-${firstKey}`)
+    if (el) el.focus()
+    return
+  }
+  isSaving.value = true
+  try {
+    const initials = getInitials(name.value)
+    const reg = registration.value.trim() || generateMatricula()
+    const formattedDate = admissionDate.value.includes("-")
+      ? admissionDate.value.split("-").reverse().join("/")
+      : admissionDate.value
+
+    let loc = "São Paulo, SP"
+    if (city.value && state.value) {
+      if (street.value) {
+        loc = `${street.value}${number.value ? ", " + number.value : ""} - ${
+          neighborhood.value ? neighborhood.value + ", " : ""
+        }${city.value}/${state.value}`
+      } else {
+        loc = `${city.value}, ${state.value}`
+      }
+    }
+
+    if (props.folderToEdit) {
+      const updated = await updateEmployeeFolder(props.folderToEdit.id, {
+        name: name.value.trim(),
+        initials,
+        cpf: cpf.value.trim(),
+        registration: reg,
+        role: role.value.trim() || props.folderToEdit.role || "Colaborador",
+        department: department.value.trim() || props.folderToEdit.department || "Recursos Humanos",
+        email: email.value.trim() || props.folderToEdit.email,
+        phone: phone.value.trim() || props.folderToEdit.phone,
+        manager: manager.value.trim() || props.folderToEdit.manager,
+        admissionDate: formattedDate,
+        status: status.value,
+        notes: notes.value.trim() !== "" ? notes.value.trim() : props.folderToEdit.notes,
+        location: loc,
+        cep: cep.value || props.folderToEdit.cep,
+        street: street.value || props.folderToEdit.street,
+        number: number.value || props.folderToEdit.number,
+        complement: complement.value || props.folderToEdit.complement,
+        neighborhood: neighborhood.value || props.folderToEdit.neighborhood,
+        city: city.value || props.folderToEdit.city,
+        state: state.value || props.folderToEdit.state,
+        cbo: cbo.value || props.folderToEdit.cbo,
+        cboTitle: cboTitle.value || props.folderToEdit.cboTitle,
+        salary: salary.value.trim() || props.folderToEdit.salary || "R$ 6.500,00",
+        contractType: contractType.value,
+        workSchedule: workSchedule.value,
+      })
+
+      if (updated) {
+        emit("updated", props.folderToEdit.id)
+        emit("close")
+      }
+    } else {
+      const created = await createEmployeeFolder({
+        name: name.value.trim(),
+        initials,
+        cpf: cpf.value.trim(),
+        registration: reg,
+        role: role.value.trim() || "Colaborador",
+        department: department.value.trim() || "Recursos Humanos",
+        email: email.value.trim(),
+        phone: phone.value.trim() || "+55 11 99999-0000",
+        manager: manager.value.trim() || "Diretoria RH",
+        admissionDate: formattedDate,
+        status: status.value,
+        notes: notes.value.trim() || "Pasta criada via Central de Colaboradores.",
+        location: loc,
+        cep: cep.value,
+        street: street.value,
+        number: number.value,
+        complement: complement.value,
+        neighborhood: neighborhood.value,
+        city: city.value,
+        state: state.value,
+        cbo: cbo.value,
+        cboTitle: cboTitle.value,
+        salary: salary.value.trim() || "R$ 6.500,00",
+        contractType: contractType.value,
+        workSchedule: workSchedule.value,
+        sendEmail: sendAccessEmail.value,
+      })
+
+      if (created) {
+        emit("created", created.id)
+        emit("close")
+      }
+    }
+  } finally {
+    isSaving.value = false
   }
 }
 </script>
@@ -538,43 +618,56 @@ async function submit() {
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <!-- Nome Completo -->
           <div class="md:col-span-2 lg:col-span-2">
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-name" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Nome Completo do Colaborador <span class="text-red-500">*</span>
             </label>
             <div class="relative">
-              <User :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <User :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-name"
                 v-model="name"
                 type="text"
-                required
                 placeholder="ex: Carlos Eduardo dos Santos"
-                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
+                :aria-invalid="!!formErrors.name"
+                :aria-describedby="formErrors.name ? 'field-name-error' : undefined"
+                :class="[
+                  'w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all',
+                  formErrors.name ? 'border-rose-500 focus:ring-rose-500 text-rose-900 dark:text-rose-200' : ''
+                ]"
                 style="--tw-ring-color: var(--color-ring)"
               />
             </div>
+            <p v-if="formErrors.name" id="field-name-error" role="alert" class="mt-1 text-xs text-rose-500 flex items-center gap-1 font-medium">
+              <AlertCircle :size="12" aria-hidden="true" /> {{ formErrors.name }}
+            </p>
           </div>
 
           <!-- CPF Formatado com Busca ConectaGov -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <label for="field-cpf" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 CPF <span class="text-red-500">*</span>
               </label>
-              <span v-if="cpf.length === 14" class="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 :size="12" /> Formatado
+              <span v-if="cpf.length === 14 && !formErrors.cpf" class="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                <CheckCircle2 :size="12" aria-hidden="true" /> Formatado
               </span>
             </div>
-            <div class="flex rounded-xl border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-teal-500 transition-all">
+            <div :class="[
+              'flex rounded-xl border bg-background overflow-hidden focus-within:ring-2 transition-all',
+              formErrors.cpf ? 'border-rose-500 focus-within:ring-rose-500' : 'focus-within:ring-teal-500'
+            ]">
               <div class="flex items-center pl-3 pr-1 text-muted-foreground">
-                <CreditCard :size="16" />
+                <CreditCard :size="16" aria-hidden="true" />
               </div>
               <input
+                id="field-cpf"
                 :value="cpf"
                 @input="handleCpfInput"
                 type="text"
-                required
                 maxlength="14"
                 placeholder="000.000.000-00"
+                :aria-invalid="!!formErrors.cpf"
+                :aria-describedby="formErrors.cpf ? 'field-cpf-error' : undefined"
                 class="w-full font-mono py-2.5 pr-2 text-sm bg-transparent outline-none"
               />
               <button
@@ -583,26 +676,30 @@ async function submit() {
                 :disabled="isSearchingConectaGov"
                 @click="searchConectaGovCbo"
                 title="Consultar CBO e Relação Trabalhista no ConectaGov Serpro"
+                aria-label="Consultar CBO e Relação Trabalhista no ConectaGov Serpro"
               >
-                <Loader2 v-if="isSearchingConectaGov" :size="13" class="animate-spin text-teal-600" />
-                <Sparkles v-else :size="13" class="text-teal-600" />
+                <Loader2 v-if="isSearchingConectaGov" :size="13" class="animate-spin text-teal-600" aria-hidden="true" />
+                <Sparkles v-else :size="13" class="text-teal-600" aria-hidden="true" />
                 <span>Buscar CBO</span>
               </button>
             </div>
+            <p v-if="formErrors.cpf" id="field-cpf-error" role="alert" class="mt-1 text-xs text-rose-500 flex items-center gap-1 font-medium">
+              <AlertCircle :size="12" aria-hidden="true" /> {{ formErrors.cpf }}
+            </p>
           </div>
 
           <!-- Telefone / WhatsApp com Formatação -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-phone" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Telefone / WhatsApp <span class="text-red-500">*</span>
             </label>
             <div class="relative">
-              <Phone :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Phone :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-phone"
                 :value="phone"
                 @input="handlePhoneInput"
                 type="text"
-                required
                 maxlength="15"
                 placeholder="(11) 98888-0000"
                 class="w-full font-mono rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
@@ -613,21 +710,29 @@ async function submit() {
 
           <!-- E-mail Institucional / Login de Acesso -->
           <div :class="isEditing ? 'md:col-span-2' : ''">
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-email" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               E-mail Institucional (Login de Acesso) <span class="text-red-500">*</span>
             </label>
             <div class="relative">
-              <Mail :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Mail :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-email"
                 v-model="email"
                 @input="onEmailInput"
                 type="email"
-                required
                 placeholder="carlos.santos@empresa.com"
-                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
+                :aria-invalid="!!formErrors.email"
+                :aria-describedby="formErrors.email ? 'field-email-error' : undefined"
+                :class="[
+                  'w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all',
+                  formErrors.email ? 'border-rose-500 focus:ring-rose-500 text-rose-900 dark:text-rose-200' : ''
+                ]"
                 style="--tw-ring-color: var(--color-ring)"
               />
             </div>
+            <p v-if="formErrors.email" id="field-email-error" role="alert" class="mt-1 text-xs text-rose-500 flex items-center gap-1 font-medium">
+              <AlertCircle :size="12" aria-hidden="true" /> {{ formErrors.email }}
+            </p>
           </div>
         </div>
 
@@ -635,11 +740,11 @@ async function submit() {
         <div v-if="!isEditing" class="rounded-xl border border-teal-500/30 bg-teal-50/70 dark:bg-teal-950/20 p-4 space-y-3">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-500/15 pb-2.5">
             <div class="flex items-center gap-2 text-teal-900 dark:text-teal-200">
-              <ShieldCheck :size="18" class="text-teal-600 shrink-0" />
+              <ShieldCheck :size="18" class="text-teal-600 shrink-0" aria-hidden="true" />
               <span class="text-xs font-bold">Geração Automática de Credenciais & Envio via SMTP</span>
             </div>
             <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 self-start sm:self-auto">
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true"></span>
               Servidor SMTP Conectado
             </span>
           </div>
@@ -652,14 +757,15 @@ async function submit() {
           </div>
 
           <div class="pt-1 flex items-center justify-between">
-            <label class="flex items-center gap-2 text-xs font-semibold text-teal-900 dark:text-teal-100 cursor-pointer select-none">
+            <label for="field-send-email" class="flex items-center gap-2 text-xs font-semibold text-teal-900 dark:text-teal-100 cursor-pointer select-none">
               <input
+                id="field-send-email"
                 v-model="sendAccessEmail"
                 type="checkbox"
                 class="rounded border-teal-400 text-teal-600 focus:ring-teal-500 h-4 w-4 cursor-pointer"
               />
               <span class="flex items-center gap-1.5">
-                <Send :size="13" class="text-teal-600" />
+                <Send :size="13" class="text-teal-600" aria-hidden="true" />
                 Disparar e-mail de boas-vindas com a senha inicial via SMTP
               </span>
             </label>
@@ -671,7 +777,7 @@ async function submit() {
       <div class="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
           <div class="flex items-center gap-2">
-            <Briefcase :size="18" class="text-teal-600" />
+            <Briefcase :size="18" class="text-teal-600" aria-hidden="true" />
             <h3 class="font-bold text-sm text-foreground">2. Matrícula & Vínculo Profissional</h3>
           </div>
           <div class="flex items-center gap-2">
@@ -681,9 +787,10 @@ async function submit() {
               :disabled="isSearchingConectaGov"
               @click="searchConectaGovCbo"
               title="Consultar CBO e Relação Trabalhista por CPF na API ConectaGov / Serpro"
+              aria-label="Consultar CBO e Relação Trabalhista por CPF na API ConectaGov"
             >
-              <Loader2 v-if="isSearchingConectaGov" :size="13" class="animate-spin" />
-              <Sparkles v-else :size="13" />
+              <Loader2 v-if="isSearchingConectaGov" :size="13" class="animate-spin" aria-hidden="true" />
+              <Sparkles v-else :size="13" aria-hidden="true" />
               <span>{{ isSearchingConectaGov ? 'Consultando ConectaGov...' : 'Buscar CBO via CPF (ConectaGov API)' }}</span>
             </button>
           </div>
@@ -692,6 +799,8 @@ async function submit() {
         <!-- Banner de Status da Consulta ConectaGov API -->
         <div
           v-if="conectaGovStatus !== 'idle'"
+          role="status"
+          aria-live="polite"
           class="text-xs p-2.5 rounded-xl flex items-center justify-between transition-all"
           :class="
             conectaGovStatus === 'found'
@@ -702,9 +811,9 @@ async function submit() {
           "
         >
           <div class="flex items-center gap-2">
-            <Loader2 v-if="conectaGovStatus === 'loading'" :size="14" class="animate-spin text-sky-600" />
-            <CheckCircle2 v-else-if="conectaGovStatus === 'found'" :size="14" class="text-emerald-600" />
-            <AlertCircle v-else :size="14" class="text-rose-600" />
+            <Loader2 v-if="conectaGovStatus === 'loading'" :size="14" class="animate-spin text-sky-600" aria-hidden="true" />
+            <CheckCircle2 v-else-if="conectaGovStatus === 'found'" :size="14" class="text-emerald-600" aria-hidden="true" />
+            <AlertCircle v-else :size="14" class="text-rose-600" aria-hidden="true" />
             <span class="font-medium">{{ conectaGovMessage }}</span>
           </div>
           <span class="text-[10px] font-mono uppercase bg-background/80 px-2 py-0.5 rounded border">API Serpro Gateway</span>
@@ -714,11 +823,11 @@ async function submit() {
           <!-- Campo com Autocomplete Dinâmico da CBO -->
           <div class="sm:col-span-2 lg:col-span-2 relative">
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <label for="field-cbo" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Classificação Brasileira de Ocupações (CBO)
               </label>
               <span v-if="cbo" class="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <CheckCircle2 :size="12" /> CBO: <span class="font-mono font-bold">{{ cbo }}</span>
+                <CheckCircle2 :size="12" aria-hidden="true" /> CBO: <span class="font-mono font-bold">{{ cbo }}</span>
               </span>
               <span v-else class="text-[11px] text-muted-foreground">
                 Digite código ou nome da ocupação (mín. 2 letras)
@@ -726,8 +835,13 @@ async function submit() {
             </div>
 
             <div class="relative">
-              <Award :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Award :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-cbo"
+                role="combobox"
+                aria-autocomplete="list"
+                :aria-expanded="isCboDropdownOpen"
+                aria-controls="cbo-listbox"
                 :value="cboSearchQuery"
                 @input="onCboInput"
                 @keydown="onCboKeyDown"
@@ -745,14 +859,18 @@ async function submit() {
                 class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded transition-colors cursor-pointer"
                 @click="clearCBO"
                 title="Limpar CBO"
+                aria-label="Limpar ocupação CBO"
               >
-                <X :size="14" />
+                <X :size="14" aria-hidden="true" />
               </button>
             </div>
 
             <!-- Dropdown Flutuante com Sugestões CBO -->
             <div
               v-if="isCboDropdownOpen"
+              id="cbo-listbox"
+              role="listbox"
+              aria-label="Sugestões de ocupações CBO"
               class="absolute z-50 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl border bg-card p-1.5 shadow-2xl scrollbar-thin animate-in fade-in zoom-in-95 duration-150"
             >
               <div v-if="cboSuggestions.length === 0" class="p-4 text-center text-xs text-muted-foreground">
@@ -770,6 +888,8 @@ async function submit() {
                   v-for="(item, idx) in cboSuggestions"
                   :key="item.code"
                   type="button"
+                  role="option"
+                  :aria-selected="idx === selectedCboIndex"
                   class="w-full text-left rounded-lg p-2.5 transition-colors flex items-start justify-between gap-3 cursor-pointer group"
                   :class="idx === selectedCboIndex ? 'bg-teal-500/15 border-teal-500/30' : 'hover:bg-muted'"
                   @mousedown.prevent="selectCBO(item)"
@@ -790,7 +910,7 @@ async function submit() {
                   </div>
 
                   <span class="text-xs font-semibold text-teal-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 flex items-center gap-1">
-                    Selecionar <CheckCircle2 :size="14" />
+                    Selecionar <CheckCircle2 :size="14" aria-hidden="true" />
                   </span>
                 </button>
               </div>
@@ -800,7 +920,7 @@ async function submit() {
           <!-- Matrícula com Botão de Geração Automática -->
           <div class="lg:col-span-1">
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <label for="field-registration" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Matrícula Corporativa
               </label>
               <button
@@ -808,17 +928,19 @@ async function submit() {
                 class="text-[11px] font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1 transition-colors px-1 py-0.5 rounded hover:bg-teal-50 cursor-pointer"
                 @click="handleGenerateRegistration"
                 title="Clique para gerar uma nova matrícula automática"
+                aria-label="Gerar matrícula automática"
               >
-                <Sparkles :size="12" class="text-teal-600 animate-spin-slow" />
+                <Sparkles :size="12" class="text-teal-600 animate-spin-slow" aria-hidden="true" />
                 <span>{{ isRegGenerated ? 'Matrícula Gerada!' : 'Gerar Matrícula' }}</span>
               </button>
             </div>
 
             <div class="flex rounded-xl border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-teal-500">
               <div class="flex items-center pl-3 pr-2 text-muted-foreground">
-                <Hash :size="16" />
+                <Hash :size="16" aria-hidden="true" />
               </div>
               <input
+                id="field-registration"
                 v-model="registration"
                 type="text"
                 placeholder="ex: 101"
@@ -828,8 +950,9 @@ async function submit() {
                 type="button"
                 class="px-3 border-l bg-muted/40 hover:bg-muted text-xs font-semibold text-muted-foreground transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
                 @click="handleGenerateRegistration"
+                aria-label="Gerar matrícula automática"
               >
-                <Sparkles :size="13" class="text-teal-600" />
+                <Sparkles :size="13" class="text-teal-600" aria-hidden="true" />
                 <span class="hidden sm:inline">Auto</span>
               </button>
             </div>
@@ -837,27 +960,46 @@ async function submit() {
 
           <!-- Cargo / Função -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Cargo / Função</label>
+            <label for="field-role" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Cargo / Função <span class="text-red-500">*</span>
+            </label>
             <div class="relative">
-              <Briefcase :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Briefcase :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-role"
                 v-model="role"
                 type="text"
                 placeholder="ex: Engenheiro de Software Pleno"
-                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
+                :aria-invalid="!!formErrors.role"
+                :aria-describedby="formErrors.role ? 'field-role-error' : undefined"
+                :class="[
+                  'w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all',
+                  formErrors.role ? 'border-rose-500 focus:ring-rose-500 text-rose-900 dark:text-rose-200' : ''
+                ]"
                 style="--tw-ring-color: var(--color-ring)"
               />
             </div>
+            <p v-if="formErrors.role" id="field-role-error" role="alert" class="mt-1 text-xs text-rose-500 flex items-center gap-1 font-medium">
+              <AlertCircle :size="12" aria-hidden="true" /> {{ formErrors.role }}
+            </p>
           </div>
 
           <!-- Departamento -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Departamento</label>
+            <label for="field-department" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Departamento <span class="text-red-500">*</span>
+            </label>
             <div class="relative">
-              <Building :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Building :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <select
+                id="field-department"
                 v-model="department"
-                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
+                :aria-invalid="!!formErrors.department"
+                :aria-describedby="formErrors.department ? 'field-department-error' : undefined"
+                :class="[
+                  'w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all',
+                  formErrors.department ? 'border-rose-500 focus:ring-rose-500 text-rose-900 dark:text-rose-200' : ''
+                ]"
                 style="--tw-ring-color: var(--color-ring)"
               >
                 <option value="Tecnologia">Tecnologia</option>
@@ -870,28 +1012,43 @@ async function submit() {
                 <option value="Jurídico">Jurídico</option>
               </select>
             </div>
+            <p v-if="formErrors.department" id="field-department-error" role="alert" class="mt-1 text-xs text-rose-500 flex items-center gap-1 font-medium">
+              <AlertCircle :size="12" aria-hidden="true" /> {{ formErrors.department }}
+            </p>
           </div>
 
           <!-- Data de Admissão -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Data de Admissão</label>
+            <label for="field-admissionDate" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+              Data de Admissão <span class="text-red-500">*</span>
+            </label>
             <div class="relative">
-              <Calendar :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Calendar :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-admissionDate"
                 v-model="admissionDate"
                 type="date"
-                class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all"
+                :aria-invalid="!!formErrors.admissionDate"
+                :aria-describedby="formErrors.admissionDate ? 'field-admissionDate-error' : undefined"
+                :class="[
+                  'w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all',
+                  formErrors.admissionDate ? 'border-rose-500 focus:ring-rose-500 text-rose-900 dark:text-rose-200' : ''
+                ]"
                 style="--tw-ring-color: var(--color-ring)"
               />
             </div>
+            <p v-if="formErrors.admissionDate" id="field-admissionDate-error" role="alert" class="mt-1 text-xs text-rose-500 flex items-center gap-1 font-medium">
+              <AlertCircle :size="12" aria-hidden="true" /> {{ formErrors.admissionDate }}
+            </p>
           </div>
 
           <!-- Salário Bruto (R$) -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Salário Bruto (R$)</label>
+            <label for="field-salary" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Salário Bruto (R$)</label>
             <div class="relative">
-              <DollarSign :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <DollarSign :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-salary"
                 v-model="salary"
                 @input="handleSalaryInput"
                 type="text"
@@ -904,10 +1061,11 @@ async function submit() {
 
           <!-- Gestor Direto -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Gestor Direto</label>
+            <label for="field-manager" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Gestor Direto</label>
             <div class="relative">
-              <UserCheck :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <UserCheck :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="field-manager"
                 v-model="manager"
                 type="text"
                 placeholder="ex: Gestão de RH / Diretoria"
@@ -919,8 +1077,9 @@ async function submit() {
 
           <!-- Status do Colaborador -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Status do Colaborador</label>
+            <label for="field-status" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Status do Colaborador</label>
             <select
+              id="field-status"
               v-model="status"
               class="w-full rounded-xl border bg-background py-2.5 px-3 text-sm outline-none focus:ring-2 transition-all"
               style="--tw-ring-color: var(--color-ring)"
@@ -934,7 +1093,7 @@ async function submit() {
           <!-- Tipo de Contrato de Trabalho -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <label for="field-contractType" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Tipo de Contrato <span class="text-red-500">*</span>
               </label>
               <span class="text-[10px] text-teal-700 font-semibold font-mono">
@@ -942,8 +1101,9 @@ async function submit() {
               </span>
             </div>
             <div class="relative">
-              <FileCheck2 :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <FileCheck2 :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <select
+                id="field-contractType"
                 v-model="contractType"
                 class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all font-medium"
                 style="--tw-ring-color: var(--color-ring)"
@@ -961,7 +1121,7 @@ async function submit() {
           <!-- Sistema de Escala no Brasil -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <label for="field-workSchedule" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Escala de Trabalho <span class="text-red-500">*</span>
               </label>
               <span class="text-[10px] text-teal-700 font-semibold font-mono">
@@ -969,8 +1129,9 @@ async function submit() {
               </span>
             </div>
             <div class="relative">
-              <CalendarClock :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <CalendarClock :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <select
+                id="field-workSchedule"
                 v-model="workSchedule"
                 class="w-full rounded-xl border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 transition-all font-medium"
                 style="--tw-ring-color: var(--color-ring)"
@@ -991,20 +1152,20 @@ async function submit() {
       <div class="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
           <div class="flex items-center gap-2">
-            <MapPin :size="18" class="text-teal-600" />
+            <MapPin :size="18" class="text-teal-600" aria-hidden="true" />
             <h3 class="font-bold text-sm text-foreground">3. Endereço Residencial (Integração ViaCEP)</h3>
           </div>
           
           <!-- Badge de Status do ViaCEP -->
-          <div class="flex items-center gap-1.5 text-xs">
+          <div role="status" aria-live="polite" class="flex items-center gap-1.5 text-xs">
             <span v-if="cepStatus === 'loading'" class="flex items-center gap-1.5 text-sky-600 font-semibold bg-sky-50 px-2.5 py-1 rounded-full">
-              <Loader2 :size="13" class="animate-spin" /> Buscando no ViaCEP...
+              <Loader2 :size="13" class="animate-spin" aria-hidden="true" /> Buscando no ViaCEP...
             </span>
             <span v-else-if="cepStatus === 'found'" class="flex items-center gap-1.5 text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              <CheckCircle2 :size="13" /> {{ cepMessage }}
+              <CheckCircle2 :size="13" aria-hidden="true" /> {{ cepMessage }}
             </span>
             <span v-else-if="cepStatus === 'error'" class="flex items-center gap-1.5 text-rose-600 font-semibold bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
-              <AlertCircle :size="13" /> {{ cepMessage }}
+              <AlertCircle :size="13" aria-hidden="true" /> {{ cepMessage }}
             </span>
             <span v-else class="text-muted-foreground text-[11px]">
               Digite o CEP para preenchimento automático
@@ -1015,14 +1176,15 @@ async function submit() {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <!-- CEP -->
           <div class="sm:col-span-1">
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-cep" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               CEP
             </label>
             <div class="flex rounded-xl border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-teal-500">
               <div class="flex items-center pl-3 pr-1 text-muted-foreground">
-                <MapPin :size="16" />
+                <MapPin :size="16" aria-hidden="true" />
               </div>
               <input
+                id="field-cep"
                 :value="cep"
                 @input="handleCepInput"
                 type="text"
@@ -1036,9 +1198,10 @@ async function submit() {
                 :disabled="isSearchingCep"
                 @click="searchCep"
                 title="Consultar CEP na API ViaCEP"
+                aria-label="Consultar CEP na API ViaCEP"
               >
-                <Loader2 v-if="isSearchingCep" :size="14" class="animate-spin text-teal-600" />
-                <Search v-else :size="14" class="text-teal-600" />
+                <Loader2 v-if="isSearchingCep" :size="14" class="animate-spin text-teal-600" aria-hidden="true" />
+                <Search v-else :size="14" class="text-teal-600" aria-hidden="true" />
                 <span class="hidden sm:inline">Buscar</span>
               </button>
             </div>
@@ -1046,10 +1209,11 @@ async function submit() {
 
           <!-- Logradouro / Rua -->
           <div class="sm:col-span-1 lg:col-span-3">
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-street" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Logradouro / Rua / Avenida
             </label>
             <input
+              id="field-street"
               v-model="street"
               type="text"
               placeholder="ex: Avenida Paulista"
@@ -1060,7 +1224,7 @@ async function submit() {
 
           <!-- Número -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="address-number" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Número
             </label>
             <input
@@ -1075,10 +1239,11 @@ async function submit() {
 
           <!-- Complemento -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-complement" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Complemento
             </label>
             <input
+              id="field-complement"
               v-model="complement"
               type="text"
               placeholder="ex: Bloco B, Apto 42"
@@ -1089,10 +1254,11 @@ async function submit() {
 
           <!-- Bairro -->
           <div>
-            <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+            <label for="field-neighborhood" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Bairro
             </label>
             <input
+              id="field-neighborhood"
               v-model="neighborhood"
               type="text"
               placeholder="ex: Bela Vista"
@@ -1105,10 +1271,11 @@ async function submit() {
           <div>
             <div class="grid grid-cols-3 gap-2">
               <div class="col-span-2">
-                <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                <label for="field-city" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
                   Cidade
                 </label>
                 <input
+                  id="field-city"
                   v-model="city"
                   type="text"
                   placeholder="São Paulo"
@@ -1117,10 +1284,11 @@ async function submit() {
                 />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                <label for="field-state" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
                   UF
                 </label>
                 <input
+                  id="field-state"
                   v-model="state"
                   type="text"
                   maxlength="2"
@@ -1137,16 +1305,17 @@ async function submit() {
       <!-- SEÇÃO 4: ANOTAÇÕES DO RH & PRONTUÁRIO -->
       <div class="rounded-2xl border bg-card p-5 sm:p-6 shadow-sm space-y-4">
         <div class="flex items-center gap-2 border-b pb-3">
-          <FileText :size="18" class="text-teal-600" />
+          <FileText :size="18" class="text-teal-600" aria-hidden="true" />
           <h3 class="font-bold text-sm text-foreground">4. Anotações do RH & Observações</h3>
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+          <label for="field-notes" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
             Observações do Prontuário Digital
           </label>
           <div class="relative">
             <textarea
+              id="field-notes"
               v-model="notes"
               rows="3"
               placeholder="Adicione informações relevantes sobre histórico, contratos anteriores, acordos de jornada híbrida ou pendências documentais..."
@@ -1168,13 +1337,16 @@ async function submit() {
         </button>
         <button
           type="submit"
-          class="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl px-8 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 cursor-pointer"
+          class="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl px-8 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           style="background-color: var(--color-primary)"
-          :disabled="!name.trim() || !cpf.trim()"
+          :disabled="isSaving"
         >
-          <Save v-if="isEditing" :size="18" />
-          <FolderPlus v-else :size="18" />
-          <span>{{ isEditing ? 'Salvar Alterações' : 'Criar Pasta de Colaborador' }}</span>
+          <span v-if="isSaving" class="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+          <template v-else>
+            <Save v-if="isEditing" :size="18" />
+            <FolderPlus v-else :size="18" />
+          </template>
+          <span>{{ isSaving ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Criar Pasta de Colaborador' }}</span>
         </button>
       </div>
 

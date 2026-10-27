@@ -12,13 +12,14 @@ router.use(resolveTenant)
 router.use(authenticateRBAC)
 router.use(requirePermission("reports.view"))
 
-// GET /api/reports/metrics
-router.get("/metrics", (_req: Request, res: Response) => {
+function getReportMetrics(req: Request, res: Response): void {
   const db = getDB()
+  const tenantId = req.tenantId || "tenant_default"
 
-  // Total Conversations count by status
+  // Total Conversations count by status no tenant atual
   const convStats = db.exec(
-    `SELECT status, COUNT(*) as count FROM conversations GROUP BY status`
+    `SELECT status, COUNT(*) as count FROM conversations WHERE tenant_id = ? GROUP BY status`,
+    [tenantId]
   )
 
   const convByStatus: Record<string, number> = { aberto: 0, pendente: 0, resolvido: 0 }
@@ -30,9 +31,10 @@ router.get("/metrics", (_req: Request, res: Response) => {
     })
   }
 
-  // Channel distribution
+  // Channel distribution no tenant atual
   const channelStats = db.exec(
-    `SELECT channel, COUNT(*) as count FROM conversations GROUP BY channel`
+    `SELECT channel, COUNT(*) as count FROM conversations WHERE tenant_id = ? GROUP BY channel`,
+    [tenantId]
   )
 
   const byChannel: Record<string, number> = { whatsapp: 0, email: 0, instagram: 0, telegram: 0 }
@@ -44,9 +46,10 @@ router.get("/metrics", (_req: Request, res: Response) => {
     })
   }
 
-  // Topic distribution
+  // Topic distribution no tenant atual
   const topicStats = db.exec(
-    `SELECT topic, COUNT(*) as count FROM conversations GROUP BY topic`
+    `SELECT topic, COUNT(*) as count FROM conversations WHERE tenant_id = ? GROUP BY topic`,
+    [tenantId]
   )
 
   const byTopic: Record<string, number> = {}
@@ -56,9 +59,10 @@ router.get("/metrics", (_req: Request, res: Response) => {
     })
   }
 
-  // Requests stats
+  // Requests stats no tenant atual
   const reqStats = db.exec(
-    `SELECT status, COUNT(*) as count FROM requests GROUP BY status`
+    `SELECT status, COUNT(*) as count FROM requests WHERE tenant_id = ? GROUP BY status`,
+    [tenantId]
   )
 
   const requestsByStatus: Record<string, number> = {}
@@ -67,6 +71,13 @@ router.get("/metrics", (_req: Request, res: Response) => {
       requestsByStatus[val[0] as string] = val[1] as number
     })
   }
+
+  // Funcionários ativos reais do tenant
+  const empRes = db.exec(
+    `SELECT count(*) FROM employees WHERE tenant_id = ? AND lower(status) = 'ativo'`,
+    [tenantId]
+  )
+  const activeEmployeesCount = empRes.length && empRes[0].values.length ? Number(empRes[0].values[0][0]) : 0
 
   res.json({
     ok: true,
@@ -79,9 +90,13 @@ router.get("/metrics", (_req: Request, res: Response) => {
       slaCompliancePercentage: 96.4,
       avgResponseTimeMinutes: 8.5,
       csatScore: 4.8,
-      activeEmployeesCount: 142,
+      activeEmployeesCount,
     },
   })
-})
+}
+
+// GET /api/reports e GET /api/reports/metrics
+router.get("/", getReportMetrics)
+router.get("/metrics", getReportMetrics)
 
 export default router

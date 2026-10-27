@@ -1,19 +1,13 @@
 {
-	"folders": [
-		{
-			"path": "server"
-		},
-		{
-			"path": "node_modules"
-		},
-		{
-			"path": "dist"
-		},
-		{
-			"path": "src"
-		},
-		{
-			"path": "public"
-		}
-	]
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "css.lint.unknownAtRules": "ignore",
+    "files.associations": {
+      "*.css": "tailwindcss"
+    }
+  }
 }

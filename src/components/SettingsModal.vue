@@ -18,7 +18,9 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  Radio,
 } from "lucide-vue-next"
+import IntegrationsManager from "./IntegrationsManager.vue"
 import {
   showToast,
   conversations,
@@ -35,7 +37,7 @@ const emit = defineEmits<{
   (e: "close"): void
 }>()
 
-type SettingsTab = "chat" | "company" | "sla" | "security"
+type SettingsTab = "chat" | "company" | "sla" | "security" | "integrations"
 const activeTab = ref<SettingsTab>("chat")
 const saving = ref(false)
 
@@ -234,67 +236,94 @@ onMounted(() => {
 
 <template>
   <!-- Backdrop -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-    <div class="relative flex h-[90vh] max-h-[750px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl border border-border">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"
+    @click.self="emit('close')"
+    @keydown.esc="emit('close')"
+    tabindex="-1"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-settings-title"
+  >
+    <div class="relative flex h-[90dvh] max-h-[750px] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl border border-border my-auto">
       
       <!-- Cabeçalho -->
-      <header class="flex items-center justify-between border-b px-6 py-4" style="background-color: var(--color-primary)">
+      <header class="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4" style="background-color: var(--color-primary)">
         <div class="flex items-center gap-3 text-primary-foreground">
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/15">
-            <Settings :size="22" />
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15">
+            <Settings :size="22" aria-hidden="true" />
           </div>
           <div>
-            <h2 class="text-lg font-bold">Configurações do Sistema PeopleHub RH</h2>
-            <p class="text-xs text-primary-foreground/75">Parâmetros do chat corporativo, regras de atendimento, SLAs e dados da organização</p>
+            <h2 id="modal-settings-title" class="text-base sm:text-lg font-bold">Configurações do Sistema PeopleHub RH</h2>
+            <p class="text-xs text-primary-foreground/75 hidden sm:block">Parâmetros do chat corporativo, regras de atendimento, SLAs e dados da organização</p>
           </div>
         </div>
         <button
           type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-lg text-primary-foreground/80 transition-colors hover:bg-primary-foreground/15 hover:text-primary-foreground cursor-pointer"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-primary-foreground/80 transition-colors hover:bg-primary-foreground/15 hover:text-primary-foreground cursor-pointer"
+          aria-label="Fechar configurações"
           @click="emit('close')"
         >
-          <X :size="20" />
+          <X :size="20" aria-hidden="true" />
         </button>
       </header>
 
       <!-- Navegação de Abas -->
-      <div class="flex border-b bg-muted/40 px-6 gap-2 overflow-x-auto scrollbar-thin">
+      <div role="tablist" aria-label="Abas de configurações" class="flex border-b bg-muted/40 px-3 sm:px-6 gap-1 sm:gap-2 overflow-x-auto scrollbar-thin">
         <button
           type="button"
-          class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
+          role="tab"
+          :aria-selected="activeTab === 'chat'"
+          class="flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
           :class="activeTab === 'chat' ? 'border-primary text-primary bg-background' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeTab = 'chat'"
         >
-          <MessagesSquare :size="16" /> Chat Interno & Atendimento
+          <MessagesSquare :size="16" aria-hidden="true" /> Chat Interno & Atendimento
         </button>
         <button
           type="button"
-          class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
+          role="tab"
+          :aria-selected="activeTab === 'company'"
+          class="flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
           :class="activeTab === 'company' ? 'border-primary text-primary bg-background' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeTab = 'company'"
         >
-          <Building2 :size="16" /> Empresa & Organização
+          <Building2 :size="16" aria-hidden="true" /> Empresa & Organização
         </button>
         <button
           type="button"
-          class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
+          role="tab"
+          :aria-selected="activeTab === 'sla'"
+          class="flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
           :class="activeTab === 'sla' ? 'border-primary text-primary bg-background' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeTab = 'sla'"
         >
-          <Bell :size="16" /> SLA & Notificações
+          <Bell :size="16" aria-hidden="true" /> SLA & Notificações
         </button>
         <button
           type="button"
-          class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
+          role="tab"
+          :aria-selected="activeTab === 'security'"
+          class="flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
           :class="activeTab === 'security' ? 'border-primary text-primary bg-background' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeTab = 'security'"
         >
-          <ShieldCheck :size="16" /> Segurança & Backup
+          <ShieldCheck :size="16" aria-hidden="true" /> Segurança & Backup
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'integrations'"
+          class="flex items-center gap-2 border-b-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0"
+          :class="activeTab === 'integrations' ? 'border-primary text-primary bg-background' : 'border-transparent text-muted-foreground hover:text-foreground'"
+          @click="activeTab = 'integrations'"
+        >
+          <Radio :size="16" aria-hidden="true" /> Integrações & Webhooks
         </button>
       </div>
 
       <!-- Conteúdo das Abas -->
-      <div class="flex-1 overflow-y-auto p-6 space-y-6">
+      <div class="flex-1 overflow-y-auto scrollbar-thin p-3.5 sm:p-6 space-y-6">
         
         <!-- ─── TAB 1: CHAT INTERNO & POLÍTICAS ─── -->
         <div v-if="activeTab === 'chat'" class="space-y-5">
@@ -758,13 +787,18 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- ─── TAB 5: INTEGRAÇÕES & WEBHOOKS (ADMIN) ─── -->
+        <div v-if="activeTab === 'integrations'" class="space-y-4">
+          <IntegrationsManager />
+        </div>
+
       </div>
 
       <!-- Rodapé com Ações -->
-      <footer class="flex items-center justify-between border-t bg-muted/30 px-6 py-4">
+      <footer class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t bg-muted/30 px-4 py-3 sm:px-6 sm:py-4">
         <button
           type="button"
-          class="rounded-xl border bg-card px-4 py-2 text-xs sm:text-sm font-semibold text-foreground hover:bg-muted cursor-pointer"
+          class="rounded-xl border bg-card px-4 py-2.5 text-xs sm:text-sm font-semibold text-foreground hover:bg-muted cursor-pointer text-center"
           @click="emit('close')"
         >
           Cancelar
@@ -772,7 +806,7 @@ onMounted(() => {
         <button
           type="button"
           :disabled="saving"
-          class="flex items-center gap-2 rounded-xl px-5 py-2 text-xs sm:text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-95 cursor-pointer"
+          class="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-95 cursor-pointer text-center"
           style="background-color: var(--color-primary)"
           @click="handleSave"
         >

@@ -2,7 +2,20 @@
  * Test: Geração de senha confidencial e disparo de e-mail via SMTP
  */
 async function runTest() {
-  const BASE_URL = "http://localhost:3001"
+  const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3009"
+
+  console.log("--- 0. Autenticar como perfil RH ---")
+  const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@empresa.com", password: "admin123" }),
+  })
+  const loginData = await loginRes.json()
+  const token = loginData.token
+
+  if (!token) {
+    throw new Error("Falha na autenticação do operador para o teste de provisionamento.")
+  }
 
   console.log("--- 1. RH cria uma nova pasta de colaborador SEM ver ou fornecer a senha ---")
   const newEmpEmail = `colab.confidencial.${Date.now()}@empresa.com`
@@ -13,6 +26,7 @@ async function runTest() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
         "x-tenant-id": "tenant_default",
       },
       body: JSON.stringify({
@@ -45,12 +59,13 @@ async function runTest() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
         "x-tenant-id": "tenant_default",
       },
     })
     const resendData = await resendRes.json()
     console.log("Resposta reenvio SMTP:", resendRes.status, resendData)
-    if (!resendData.ok) {
+    if (resendRes.status !== 200) {
       throw new Error("Falha ao reenviar e-mail de acesso!")
     }
 

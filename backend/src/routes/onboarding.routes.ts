@@ -4,11 +4,13 @@
 import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
 import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC } from "../middleware/rbac.js"
 
 const router = Router()
 
-// Aplicar resolução de tenant em todas as rotas de onboarding
+// Aplicar resolução de tenant e autenticação RBAC em todas as rotas de onboarding
 router.use(resolveTenant)
+router.use(authenticateRBAC)
 
 // GET /api/onboarding
 router.get("/", (req: Request, res: Response) => {
@@ -58,6 +60,11 @@ router.get("/", (req: Request, res: Response) => {
 
 // POST /api/onboarding
 router.post("/", (req: Request, res: Response) => {
+  if (!["ADMIN", "RH"].includes(req.access?.role || "")) {
+    res.status(403).json({ ok: false, error: "Apenas RH ou Administradores podem cadastrar novos processos de onboarding." })
+    return
+  }
+
   const { candidateName, role, department, startDate, mentor } = req.body
   const tenantId = req.tenantId || "tenant_default"
 

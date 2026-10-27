@@ -30,6 +30,7 @@ const inputRendimentosTributaveis = ref("R$ 84.500,00")
 
 const signOption = ref<DocumentSignStatus>("assinado")
 const error = ref<string | null>(null)
+const isGenerating = ref(false)
 
 const selectedTemplate = computed(() => {
   return documentTemplates.value.find((t) => t.id === selectedTemplateId.value) || documentTemplates.value[0]
@@ -67,46 +68,66 @@ const formattedTextPreview = computed(() => {
 })
 
 async function handleGenerate() {
+  if (isGenerating.value) return
   error.value = null
   if (!selectedTemplate.value || !selectedEmployee.value) {
     error.value = "Selecione o modelo e o colaborador."
     return
   }
 
-  const doc = await generateDocument({
-    templateId: selectedTemplate.value.id,
-    employeeName: selectedEmployee.value.name,
-    employeeInitials: selectedEmployee.value.initials,
-    employeeRole: selectedEmployee.value.role,
-    department: selectedEmployee.value.department,
-    signStatus: signOption.value,
-    contentSnippet: formattedTextPreview.value.slice(0, 140) + "...",
-  })
+  isGenerating.value = true
+  try {
+    const doc = await generateDocument({
+      templateId: selectedTemplate.value.id,
+      employeeName: selectedEmployee.value.name,
+      employeeInitials: selectedEmployee.value.initials,
+      employeeRole: selectedEmployee.value.role,
+      department: selectedEmployee.value.department,
+      signStatus: signOption.value,
+      contentSnippet: formattedTextPreview.value.slice(0, 140) + "...",
+    })
 
-  emit("generated", `Documento "${doc.code}" gerado com sucesso!`)
-  emit("close")
+    emit("generated", `Documento "${doc.code}" gerado com sucesso!`)
+    emit("close")
+  } catch (err: any) {
+    error.value = err?.message || "Erro ao gerar documento."
+  } finally {
+    isGenerating.value = false
+  }
 }
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="generate-doc-title"
+    tabindex="-1"
+    @keydown.esc="emit('close')"
+  >
     <!-- Backdrop -->
     <div class="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="emit('close')" />
 
     <!-- Modal Container -->
-    <div class="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl bg-card border shadow-2xl z-10 p-6 sm:p-8 text-foreground flex flex-col">
+    <div class="relative w-full max-w-4xl max-h-[90dvh] overflow-y-auto scrollbar-thin rounded-2xl bg-card border shadow-2xl z-10 p-4 sm:p-8 text-foreground flex flex-col my-auto">
       <div class="flex items-center justify-between border-b pb-4">
         <div class="flex items-center gap-3">
           <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Sparkles :size="24" />
+            <Sparkles :size="24" aria-hidden="true" />
           </div>
           <div>
-            <h2 class="text-xl font-bold">Gerador de Documentos Oficiais</h2>
+            <h2 id="generate-doc-title" class="text-xl font-bold">Gerador de Documentos Oficiais</h2>
             <p class="text-xs text-muted-foreground">Preencha as variáveis e gere o documento em papel timbrado com carimbo do RH.</p>
           </div>
         </div>
-        <button class="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" @click="emit('close')">
-          <X :size="20" />
+        <button
+          type="button"
+          class="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted cursor-pointer"
+          aria-label="Fechar gerador de documentos"
+          @click="emit('close')"
+        >
+          <X :size="20" aria-hidden="true" />
         </button>
       </div>
 
@@ -116,8 +137,9 @@ async function handleGenerate() {
         <div class="lg:col-span-5 space-y-4">
           <!-- Selecionar Modelo -->
           <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Modelo do Documento</label>
+            <label for="doc-template-select" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Modelo do Documento</label>
             <select
+              id="doc-template-select"
               v-model="selectedTemplateId"
               class="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
             >
@@ -129,8 +151,9 @@ async function handleGenerate() {
 
           <!-- Selecionar Colaborador -->
           <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Colaborador Destinatário</label>
+            <label for="doc-employee-select" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Colaborador Destinatário</label>
             <select
+              id="doc-employee-select"
               v-model="selectedEmployeeId"
               class="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary"
             >
@@ -146,40 +169,40 @@ async function handleGenerate() {
 
             <div v-if="selectedTemplate?.id === 'tpl-2'" class="space-y-2">
               <div>
-                <label class="block text-[11px] font-medium text-muted-foreground">Período Aquisitivo</label>
-                <input v-model="inputPeriodoAquisitivo" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                <label for="param-periodo" class="block text-[11px] font-medium text-muted-foreground">Período Aquisitivo</label>
+                <input id="param-periodo" v-model="inputPeriodoAquisitivo" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <div>
-                  <label class="block text-[11px] font-medium text-muted-foreground">Início Férias</label>
-                  <input v-model="inputInicioFerias" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                  <label for="param-inicio-ferias" class="block text-[11px] font-medium text-muted-foreground">Início Férias</label>
+                  <input id="param-inicio-ferias" v-model="inputInicioFerias" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
                 </div>
                 <div>
-                  <label class="block text-[11px] font-medium text-muted-foreground">Fim Férias</label>
-                  <input v-model="inputFimFerias" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                  <label for="param-fim-ferias" class="block text-[11px] font-medium text-muted-foreground">Fim Férias</label>
+                  <input id="param-fim-ferias" v-model="inputFimFerias" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
                 </div>
               </div>
             </div>
 
             <div v-if="selectedTemplate?.id === 'tpl-3'" class="space-y-2">
               <div>
-                <label class="block text-[11px] font-medium text-muted-foreground">Modelo de Trabalho</label>
-                <input v-model="inputModeloTrabalho" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                <label for="param-modelo" class="block text-[11px] font-medium text-muted-foreground">Modelo de Trabalho</label>
+                <input id="param-modelo" v-model="inputModeloTrabalho" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
               </div>
               <div>
-                <label class="block text-[11px] font-medium text-muted-foreground">Equipamentos Cedidos</label>
-                <input v-model="inputEquipamentos" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                <label for="param-equipamentos" class="block text-[11px] font-medium text-muted-foreground">Equipamentos Cedidos</label>
+                <input id="param-equipamentos" v-model="inputEquipamentos" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
               </div>
             </div>
 
             <div v-if="selectedTemplate?.id === 'tpl-5'" class="space-y-2">
               <div>
-                <label class="block text-[11px] font-medium text-muted-foreground">Ano Calendário</label>
-                <input v-model="inputAnoCalendario" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                <label for="param-ano" class="block text-[11px] font-medium text-muted-foreground">Ano Calendário</label>
+                <input id="param-ano" v-model="inputAnoCalendario" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
               </div>
               <div>
-                <label class="block text-[11px] font-medium text-muted-foreground">Rendimentos Tributáveis</label>
-                <input v-model="inputRendimentosTributaveis" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
+                <label for="param-rendimentos" class="block text-[11px] font-medium text-muted-foreground">Rendimentos Tributáveis</label>
+                <input id="param-rendimentos" v-model="inputRendimentosTributaveis" type="text" class="w-full rounded-lg border bg-background px-3 py-1.5 text-xs" />
               </div>
             </div>
           </div>
@@ -230,18 +253,25 @@ async function handleGenerate() {
         </div>
       </div>
 
+      <!-- Error Alert -->
+      <div v-if="error" class="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-600">
+        {{ error }}
+      </div>
+
       <!-- Footer Actions -->
       <div class="mt-6 flex items-center justify-end gap-3 border-t pt-4">
-        <button type="button" class="rounded-xl border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted" @click="emit('close')">
+        <button type="button" class="rounded-xl border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted cursor-pointer" @click="emit('close')">
           Cancelar
         </button>
         <button
           type="button"
-          class="rounded-xl py-2.5 px-6 text-sm font-semibold text-primary-foreground shadow transition-transform hover:-translate-y-0.5 flex items-center gap-2"
+          class="rounded-xl py-2.5 px-6 text-sm font-semibold text-primary-foreground shadow transition-transform hover:-translate-y-0.5 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           style="background-color: var(--color-primary)"
+          :disabled="isGenerating"
           @click="handleGenerate"
         >
-          <Sparkles :size="18" /> Gerar e Salvar Documento
+          <Sparkles :size="18" :class="{ 'animate-spin': isGenerating }" />
+          <span>{{ isGenerating ? "Gerando..." : "Gerar e Salvar Documento" }}</span>
         </button>
       </div>
     </div>

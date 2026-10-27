@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, watch } from "vue"
 import {
   GraduationCap,
   Users,
@@ -16,6 +16,9 @@ import {
   Square,
   Edit3,
   UserPlus,
+  ChevronLeft,
+  ChevronRight,
+  RotateCw,
 } from "lucide-vue-next"
 import jsPDF from "jspdf"
 import {
@@ -31,6 +34,9 @@ import {
   employeeFolders,
   userPermissions,
   userRoleType,
+  showToast,
+  refreshAllData,
+  isDataSyncing,
 } from "../store"
 import type { OnboardingItem, OnboardingStatus, OnboardingTrack } from "../data"
 import { onboardingStatusLabels } from "../data"
@@ -79,7 +85,6 @@ const subTabsList = computed(() => {
 const search = ref("")
 const selectedStatus = ref<string>("todos")
 const selectedDepartment = ref<string>("todos")
-const toastText = ref<string | null>(null)
 
 /* ─── Filtros e Busca de Trilhas ─── */
 const trackSearch = ref("")
@@ -344,13 +349,6 @@ const newTrackForm = ref({
   recommendedFor: "",
 })
 
-function showToast(msg: string, _type?: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2500)
-}
-
 /* ─── Computados / Indicadores ─── */
 const totalInOnboarding = computed(() => onboardingItems.value.filter((i) => i.status !== "concluido").length)
 const totalCompleted = computed(() => onboardingItems.value.filter((i) => i.status === "concluido").length)
@@ -388,6 +386,19 @@ const filteredItems = computed(() => {
   })
 })
 
+/* Paginação da Lista de Colaboradores */
+const currentPage = ref(1)
+const itemsPerPage = ref(6)
+const totalPages = computed(() => Math.ceil(filteredItems.value.length / itemsPerPage.value) || 1)
+const paginatedItems = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return filteredItems.value.slice(start, start + itemsPerPage.value)
+})
+
+watch([search, selectedStatus, selectedDepartment], () => {
+  currentPage.value = 1
+})
+
 /* Helper de Progresso por Item */
 function getItemProgress(item: OnboardingItem): number {
   if (!item.checklist || item.checklist.length === 0) return 0
@@ -408,93 +419,98 @@ function getStatusBadgeClass(status: OnboardingStatus) {
   }
 }
 
-function handleToggleStep(itemId: string, stepId: string) {
-  toggleOnboardingStep(itemId, stepId)
-  showToast("Status da tarefa atualizado!")
+async function handleToggleStep(itemId: string, stepId: string) {
+  await toggleOnboardingStep(itemId, stepId)
 }
 
-function handleCreateEmployee() {
+const isSubmittingEmployee = ref(false)
+
+async function handleCreateEmployee() {
+  if (isSubmittingEmployee.value) return
   if (!newEmpForm.value.employeeName || !newEmpForm.value.role) {
-    showToast("Por favor, preencha o nome e o cargo do colaborador.")
+    showToast("Por favor, preencha o nome e o cargo do colaborador.", "warning")
     return
   }
 
-  const initials = newEmpForm.value.employeeInitials || newEmpForm.value.employeeName.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase()
+  isSubmittingEmployee.value = true
+  try {
+    const initials = newEmpForm.value.employeeInitials || newEmpForm.value.employeeName.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase()
 
-  createOnboardingItem({
-    employeeName: newEmpForm.value.employeeName,
-    employeeInitials: initials,
-    role: newEmpForm.value.role,
-    department: newEmpForm.value.department,
-    startDate: newEmpForm.value.startDate,
-    buddy: newEmpForm.value.buddy,
-    trackTitle: newEmpForm.value.trackTitle,
-    notes: newEmpForm.value.notes,
-  })
+    const created = await createOnboardingItem({
+      employeeName: newEmpForm.value.employeeName,
+      employeeInitials: initials,
+      role: newEmpForm.value.role,
+      department: newEmpForm.value.department,
+      startDate: newEmpForm.value.startDate,
+      buddy: newEmpForm.value.buddy,
+      trackTitle: newEmpForm.value.trackTitle,
+      notes: newEmpForm.value.notes,
+    })
 
-  showNewEmployeeModal.value = false
-  newEmpForm.value.employeeName = ""
-  newEmpForm.value.role = ""
-  showToast("Novo processo de Onboarding iniciado!")
+    if (created) {
+      showNewEmployeeModal.value = false
+      newEmpForm.value.employeeName = ""
+      newEmpForm.value.employeeInitials = ""
+      newEmpForm.value.role = ""
+      newEmpForm.value.notes = ""
+    }
+  } catch (err: any) {
+    showToast(err?.message || "Erro ao iniciar onboarding.", "error")
+  } finally {
+    isSubmittingEmployee.value = false
+  }
 }
 
-function handleCreateTrack() {
+const isSubmittingTrack = ref(false)
+
+async function handleCreateTrack() {
+  if (isSubmittingTrack.value) return
   if (!newTrackForm.value.title || !newTrackForm.value.description) {
-    showToast("Por favor, informe o título e a descrição da trilha.")
+    showToast("Por favor, informe o título e a descrição da trilha.", "warning")
     return
   }
 
-  const modules = newTrackForm.value.modulesRaw
-    .split("\n")
-    .map((m) => m.trim())
-    .filter(Boolean)
+  isSubmittingTrack.value = true
+  try {
+    const modules = newTrackForm.value.modulesRaw
+      .split("\n")
+      .map((m) => m.trim())
+      .filter(Boolean)
 
-  createOnboardingTrack({
-    title: newTrackForm.value.title,
-    department: newTrackForm.value.department,
-    durationDays: Number(newTrackForm.value.durationDays) || 7,
-    description: newTrackForm.value.description,
-    modulesList: modules.length > 0 ? modules : ["Treinamento Geral de Boas-Vindas"],
-    recommendedFor: newTrackForm.value.recommendedFor || "Novos colaboradores do departamento",
-  })
+    await createOnboardingTrack({
+      title: newTrackForm.value.title,
+      department: newTrackForm.value.department,
+      durationDays: Number(newTrackForm.value.durationDays) || 7,
+      description: newTrackForm.value.description,
+      modulesList: modules.length > 0 ? modules : ["Treinamento Geral de Boas-Vindas"],
+      recommendedFor: newTrackForm.value.recommendedFor || "Novos colaboradores do departamento",
+    })
 
-  showNewTrackModal.value = false
-  newTrackForm.value.title = ""
-  newTrackForm.value.description = ""
-  newTrackForm.value.modulesRaw = ""
-  showToast("Nova trilha de integração criada com sucesso!")
+    showNewTrackModal.value = false
+    newTrackForm.value.title = ""
+    newTrackForm.value.description = ""
+    newTrackForm.value.modulesRaw = ""
+  } catch (err: any) {
+    showToast(err?.message || "Erro ao criar trilha.", "error")
+  } finally {
+    isSubmittingTrack.value = false
+  }
 }
 
-function handleDeleteItem(id: string) {
+async function handleDeleteItem(id: string) {
   if (confirm("Tem certeza que deseja remover este colaborador do onboarding?")) {
-    deleteOnboardingItem(id)
-    if (selectedDetailItem.value?.id === id) {
+    const ok = await deleteOnboardingItem(id)
+    if (ok && selectedDetailItem.value?.id === id) {
       selectedDetailItem.value = null
     }
-    showToast("Registro de onboarding removido.")
   }
 }
 </script>
 
 <template>
   <div class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative">
-    <!-- Toast de Feedback -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="fixed top-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-xl"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
-
     <!-- Cabeçalho Principal do Módulo -->
-    <header class="border-b bg-card px-5 py-5 sm:px-8">
+    <header class="border-b bg-card px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center gap-2">
@@ -515,6 +531,16 @@ function handleDeleteItem(id: string) {
 
         <!-- Ações do Cabeçalho -->
         <div class="flex flex-wrap items-center gap-2">
+          <button
+            class="flex items-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted cursor-pointer"
+            title="Atualizar dados de onboarding"
+            :disabled="isDataSyncing"
+            @click="refreshAllData"
+          >
+            <RotateCw :size="15" :class="{ 'animate-spin': isDataSyncing }" />
+            <span class="hidden sm:inline">Atualizar</span>
+          </button>
+
           <button
             v-if="userPermissions.canManageTraining"
             class="flex items-center gap-1.5 rounded-xl border bg-card px-3.5 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted cursor-pointer"
@@ -537,7 +563,7 @@ function handleDeleteItem(id: string) {
       </div>
 
       <!-- Navegação por Sub-Tabs -->
-      <nav class="mt-6 flex items-center gap-2 border-b border-border/40 pb-0.5 overflow-x-auto scrollbar-none">
+      <nav class="mt-6 flex items-center gap-2 border-b border-border/40 pb-0.5 overflow-x-auto scrollbar-thin">
         <button
           v-for="st in subTabsList"
           :key="st.id"
@@ -554,44 +580,44 @@ function handleDeleteItem(id: string) {
     </header>
 
     <!-- Conteúdo Principal -->
-    <main class="mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 space-y-6">
+    <main class="mx-auto w-full max-w-7xl px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-6">
 
       <!-- ─── CARDS DE KPI DE TOPO ─── -->
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div class="flex flex-col rounded-2xl border bg-card p-4 shadow-xs">
+        <div class="flex flex-col rounded-2xl border bg-card p-3 sm:p-4 shadow-xs">
           <div class="flex items-center justify-between text-muted-foreground">
             <span class="text-xs font-medium">Em Onboarding</span>
             <Users :size="16" class="text-blue-500" />
           </div>
-          <p class="mt-2 text-2xl font-bold tracking-tight">{{ totalInOnboarding }} <span class="text-xs font-normal text-muted-foreground">colaboradores</span></p>
-          <p class="mt-1 text-[11px] text-muted-foreground">Em processo de integração</p>
+          <p class="mt-2 text-xl sm:text-2xl font-bold tracking-tight">{{ totalInOnboarding }} <span class="text-xs font-normal text-muted-foreground">colab.</span></p>
+          <p class="mt-1 text-[11px] text-muted-foreground truncate">Em processo de integração</p>
         </div>
 
-        <div class="flex flex-col rounded-2xl border bg-card p-4 shadow-xs">
+        <div class="flex flex-col rounded-2xl border bg-card p-3 sm:p-4 shadow-xs">
           <div class="flex items-center justify-between text-muted-foreground">
             <span class="text-xs font-medium">Progresso Médio</span>
             <Award :size="16" class="text-emerald-500" />
           </div>
-          <p class="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{{ avgProgress }}%</p>
-          <p class="mt-1 text-[11px] text-emerald-600 font-medium">Conclusão de tarefas de boas-vindas</p>
+          <p class="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{{ avgProgress }}%</p>
+          <p class="mt-1 text-[11px] text-emerald-600 font-medium truncate">Conclusão de tarefas</p>
         </div>
 
-        <div class="flex flex-col rounded-2xl border bg-card p-4 shadow-xs">
+        <div class="flex flex-col rounded-2xl border bg-card p-3 sm:p-4 shadow-xs">
           <div class="flex items-center justify-between text-muted-foreground">
             <span class="text-xs font-medium">Pendências de TI</span>
             <Laptop :size="16" class="text-amber-500" />
           </div>
-          <p class="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">{{ pendingTiStepsCount }}</p>
-          <p class="mt-1 text-[11px] text-muted-foreground">Notebooks ou acessos pendentes</p>
+          <p class="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">{{ pendingTiStepsCount }}</p>
+          <p class="mt-1 text-[11px] text-muted-foreground truncate">Notebooks ou acessos</p>
         </div>
 
-        <div class="flex flex-col rounded-2xl border bg-card p-4 shadow-xs">
+        <div class="flex flex-col rounded-2xl border bg-card p-3 sm:p-4 shadow-xs">
           <div class="flex items-center justify-between text-muted-foreground">
-            <span class="text-xs font-medium">Integrações Concluídas</span>
+            <span class="text-xs font-medium">Integrações</span>
             <CheckCircle2 :size="16" class="text-teal-500" />
           </div>
-          <p class="mt-2 text-2xl font-bold tracking-tight">{{ totalCompleted }}</p>
-          <p class="mt-1 text-[11px] text-muted-foreground">Finalizados com sucesso no prazo</p>
+          <p class="mt-2 text-xl sm:text-2xl font-bold tracking-tight">{{ totalCompleted }}</p>
+          <p class="mt-1 text-[11px] text-muted-foreground truncate">Concluídas com sucesso</p>
         </div>
       </div>
 
@@ -636,10 +662,25 @@ function handleDeleteItem(id: string) {
           </div>
         </div>
 
+        <!-- Empty State se nenhum colaborador for encontrado -->
+        <div v-if="filteredItems.length === 0" class="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card p-12 text-center">
+          <Users :size="48" class="text-muted-foreground/40 mb-3" />
+          <h3 class="text-lg font-bold">Nenhum colaborador encontrado</h3>
+          <p class="text-sm text-muted-foreground mt-1 max-w-md">
+            Não há colaboradores que correspondam aos filtros selecionados. Tente ajustar os termos da busca ou limpar os filtros.
+          </p>
+          <button
+            class="mt-4 rounded-xl border bg-card px-4 py-2 text-xs font-semibold hover:bg-muted cursor-pointer transition-colors"
+            @click="search = ''; selectedStatus = 'todos'; selectedDepartment = 'todos'"
+          >
+            Limpar Filtros
+          </button>
+        </div>
+
         <!-- Lista de Cards de Colaboradores em Onboarding -->
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+        <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
           <div
-            v-for="item in filteredItems"
+            v-for="item in paginatedItems"
             :key="item.id"
             class="flex flex-col justify-between rounded-2xl border bg-card p-6 shadow-xs transition-all hover:shadow-md"
           >
@@ -717,20 +758,51 @@ function handleDeleteItem(id: string) {
 
               <div class="flex items-center gap-2">
                 <button
-                  class="rounded-lg border px-2.5 py-1 font-semibold text-muted-foreground hover:text-rose-500 hover:bg-muted transition-colors"
+                  class="rounded-lg border px-2.5 py-1 font-semibold text-muted-foreground hover:text-rose-500 hover:bg-muted transition-colors cursor-pointer"
                   title="Remover onboarding"
                   @click="handleDeleteItem(item.id)"
                 >
                   <Trash2 :size="14" />
                 </button>
                 <button
-                  class="flex items-center gap-1 rounded-lg border bg-card px-3 py-1 font-semibold text-foreground hover:bg-muted transition-colors"
+                  class="flex items-center gap-1 rounded-lg border bg-card px-3 py-1 font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer"
                   @click="selectedDetailItem = item"
                 >
                   <Eye :size="14" /> Ver Detalhes
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Barra de Paginação de Colaboradores -->
+        <div
+          v-if="filteredItems.length > itemsPerPage"
+          class="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3 text-xs text-muted-foreground shadow-2xs"
+        >
+          <div>
+            Exibindo <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> até
+            <strong>{{ Math.min(currentPage * itemsPerPage, filteredItems.length) }}</strong> de
+            <strong>{{ filteredItems.length }}</strong> colaboradores
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-lg border bg-background text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              :disabled="currentPage === 1"
+              @click="currentPage--"
+              title="Página Anterior"
+            >
+              <ChevronLeft :size="16" />
+            </button>
+            <span class="px-2 font-medium">Página {{ currentPage }} de {{ totalPages }}</span>
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-lg border bg-background text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              :disabled="currentPage >= totalPages"
+              @click="currentPage++"
+              title="Próxima Página"
+            >
+              <ChevronRight :size="16" />
+            </button>
           </div>
         </div>
       </section>
@@ -1049,9 +1121,9 @@ function handleDeleteItem(id: string) {
     <!-- ─── MODAL 1: INICIAR NOVO ONBOARDING DE COLABORADOR ─── -->
     <div
       v-if="showNewEmployeeModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl space-y-4 my-8">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <Plus :size="20" class="text-primary" />
@@ -1152,11 +1224,13 @@ function handleDeleteItem(id: string) {
             Cancelar
           </button>
           <button
-            class="flex items-center gap-2 rounded-xl py-2 px-5 text-sm font-bold text-primary-foreground shadow transition-transform active:scale-95"
+            class="flex items-center gap-2 rounded-xl py-2 px-5 text-sm font-bold text-primary-foreground shadow transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style="background-color: var(--color-primary)"
+            :disabled="isSubmittingEmployee"
             @click="handleCreateEmployee"
           >
-            Iniciar Processo
+            <span v-if="isSubmittingEmployee">Iniciando...</span>
+            <span v-else>Iniciar Processo</span>
           </button>
         </div>
       </div>
@@ -1165,9 +1239,9 @@ function handleDeleteItem(id: string) {
     <!-- ─── MODAL 2: CRIAR NOVA TRILHA ─── -->
     <div
       v-if="showNewTrackModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl space-y-4 my-8">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <BookOpen :size="20" class="text-primary" />
@@ -1245,11 +1319,13 @@ function handleDeleteItem(id: string) {
             Cancelar
           </button>
           <button
-            class="flex items-center gap-2 rounded-xl py-2 px-5 text-sm font-bold text-primary-foreground shadow transition-transform active:scale-95"
+            class="flex items-center gap-2 rounded-xl py-2 px-5 text-sm font-bold text-primary-foreground shadow transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style="background-color: var(--color-primary)"
+            :disabled="isSubmittingTrack"
             @click="handleCreateTrack"
           >
-            Salvar Trilha
+            <span v-if="isSubmittingTrack">Salvando...</span>
+            <span v-else>Salvar Trilha</span>
           </button>
         </div>
       </div>
@@ -1258,9 +1334,9 @@ function handleDeleteItem(id: string) {
     <!-- ─── MODAL 3: GERENCIAR CHECKLIST E DETALHES DO COLABORADOR ─── -->
     <div
       v-if="selectedDetailItem"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-2xl space-y-6 my-8 max-h-[90vh] overflow-y-auto">
+      <div class="w-full max-w-2xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-6 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-start justify-between border-b pb-4">
           <div class="flex items-center gap-3">
             <UserAvatar :initials="selectedDetailItem.employeeInitials" :size="48" />
@@ -1343,9 +1419,9 @@ function handleDeleteItem(id: string) {
     <!-- ─── MODAL 4: EDITAR TRILHA & GERENCIAR MÓDULOS ─── -->
     <div
       v-if="editingTrack"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-2xl space-y-4 my-8 max-h-[90vh] overflow-y-auto">
+      <div class="w-full max-w-2xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <Edit3 :size="20" class="text-primary" />
@@ -1539,9 +1615,9 @@ function handleDeleteItem(id: string) {
     <!-- ─── MODAL 5: MATRICULAR COLABORADOR NA TRILHA ─── -->
     <div
       v-if="assigningTrack"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl space-y-4">
+      <div class="w-full max-w-md rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <UserPlus :size="20" class="text-emerald-600" />

@@ -30,15 +30,52 @@ import dashboardRoutes from "./routes/dashboard.routes.js"
 import usersRoutes from "./routes/users.routes.js"
 import adverseEventsRoutes from "./routes/adverse_events.routes.js"
 import feedRoutes from "./routes/feed.routes.js"
+import workflowsRoutes from "./routes/workflows.routes.js"
+import notificationsRoutes from "./routes/notifications.routes.js"
+import calendarRoutes from "./routes/calendar.routes.js"
+import performanceRoutes from "./routes/performance.routes.js"
+import customReportsRoutes from "./routes/custom_reports.routes.js"
+import recruitmentRoutes from "./routes/recruitment.routes.js"
+import webhooksRoutes from "./routes/webhooks.routes.js"
 
 import swaggerUi from "swagger-ui-express"
 import { swaggerSpec } from "./swagger.js"
+import helmet from "helmet"
+import rateLimit from "express-rate-limit"
 
 const app = express()
 const PORT = process.env.PORT || 3001
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173"
 
+app.disable("x-powered-by")
 app.set("json spaces", 2)
+
+// Cabeçalhos de Segurança HTTP (Helmet)
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Mantém compatibilidade com Swagger UI e dev tools
+    crossOriginEmbedderPolicy: false,
+  })
+)
+
+// Rate Limiter Global (proteção contra DoS / flood de requisições)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "Muitas requisições enviadas por este IP. Tente novamente mais tarde." },
+})
+app.use(globalLimiter)
+
+// Rate Limiter Estrito para Rotas de Autenticação (proteção contra Brute Force / Credential Stuffing)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: process.env.NODE_ENV === "test" ? 200 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: "Muitas tentativas de autenticação. Por segurança, tente novamente em 15 minutos." },
+})
 
 app.use(
   cors({
@@ -46,7 +83,14 @@ app.use(
     credentials: true,
   })
 )
-app.use(express.json())
+app.use(express.json({ limit: "2mb" }))
+// Intercepta e formata erros de sintaxe de JSON malformado
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && "status" in err && (err as any).status === 400) {
+    return res.status(400).json({ ok: false, error: "Formato de payload JSON inválido na requisição." })
+  }
+  next(err)
+})
 app.use(cookieParser())
 
 // Documentação Swagger UI
@@ -59,8 +103,8 @@ app.use((req, _res, next) => {
   next()
 })
 
-// Registro de rotas
-app.use("/api/auth", authRoutes)
+// Registro de rotas com proteção de taxa aplicada aos endpoints de autenticação
+app.use("/api/auth", authLimiter, authRoutes)
 app.use("/api/conversations", conversationsRoutes)
 app.use("/api/employees", employeesRoutes)
 app.use("/api/funcionarios", employeesRoutes) // Alias em Português conforme solicitado
@@ -76,6 +120,13 @@ app.use("/api/contracheques", contrachequesRoutes)
 app.use("/api/users", usersRoutes)
 app.use("/api/adverse-events", adverseEventsRoutes)
 app.use("/api/feed", feedRoutes)
+app.use("/api/workflows", workflowsRoutes)
+app.use("/api/notifications", notificationsRoutes)
+app.use("/api/calendar", calendarRoutes)
+app.use("/api/performance", performanceRoutes)
+app.use("/api/reports/custom", customReportsRoutes)
+app.use("/api/recruitment", recruitmentRoutes)
+app.use("/api/webhooks", webhooksRoutes)
 
 app.get("/", (_req, res) => {
   res.send(`
@@ -145,10 +196,21 @@ app.use((req, res) => {
   res.status(404).send("Página não encontrada.")
 })
 
-// Middleware global de tratamento de erros
+// Middleware global de tratamento de erros seguro
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("❌ Erro interno no servidor:", err)
-  res.status(500).json({ ok: false, error: err?.message || "Erro interno no servidor de API." })
+  console.error("❌ Erro capturado no servidor:", err)
+  const statusCode = typeof err?.status === "number" && err.status >= 400 && err.status < 600 ? err.status : 500
+  if (statusCode >= 500) {
+    res.status(statusCode).json({
+      ok: false,
+      error: "Ocorreu um erro interno no servidor ao processar a solicitação. Tente novamente mais tarde.",
+    })
+  } else {
+    res.status(statusCode).json({
+      ok: false,
+      error: err?.message || "Requisição inválida.",
+    })
+  }
 })
 
 initDB()

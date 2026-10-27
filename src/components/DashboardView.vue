@@ -360,152 +360,152 @@ const doughnutChartOptions = {
     <!-- 3. CONTEÚDO PRINCIPAL (DADOS REAIS CARREGADOS) -->
     <div v-else-if="data" class="space-y-6">
       <!-- 8 CARDS DE MÉTRICAS OPERACIONAIS -->
-      <div class="grid grid-cols-2 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
         <!-- 1. Total de Funcionários -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Funcionários</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Total Funcionários</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
                 {{ data.totalFuncionarios }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-700">
-              <Users :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-700">
+              <Users :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
             <span class="font-medium text-teal-700">{{ data.funcionariosAtivos }} ativos</span>
             <span>·</span>
-            <span>Base cadastral total</span>
+            <span class="truncate">Base total</span>
           </div>
         </div>
 
         <!-- 2. Funcionários Ativos -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Colaboradores Ativos</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-emerald-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Ativos</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-emerald-600">
                 {{ data.funcionariosAtivos }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
-              <UserCheck :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+              <UserCheck :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <CheckCircle2 :size="13" class="text-emerald-600" />
-            <span>Em exercício regular</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <CheckCircle2 :size="12" class="text-emerald-600 shrink-0" />
+            <span class="truncate">Em exercício regular</span>
           </div>
         </div>
 
         <!-- 3. Funcionários Inativos -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Colaboradores Inativos</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Inativos</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-slate-600">
                 {{ data.funcionariosInativos }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-500/10 text-slate-600">
-              <UserX :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-slate-500/10 text-slate-600">
+              <UserX :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <span>Desligados ou afastados</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <span class="truncate">Desligados/afastados</span>
           </div>
         </div>
 
         <!-- 4. Contratações no Mês -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contratações no Mês</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-blue-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Contratações</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-blue-600">
                 {{ data.contratacoesMes }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
-              <UserPlus :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
+              <UserPlus :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <TrendingUp :size="13" class="text-blue-600" />
-            <span>Admissões recentes</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <TrendingUp :size="12" class="text-blue-600 shrink-0" />
+            <span class="truncate">Admissões recentes</span>
           </div>
         </div>
 
         <!-- 5. Desligamentos no Mês -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Desligamentos no Mês</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-rose-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Desligamentos</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-rose-600">
                 {{ data.desligamentosMes }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600">
-              <UserX :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600">
+              <UserX :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <span>Turnover do período</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <span class="truncate">Turnover do período</span>
           </div>
         </div>
 
         <!-- 6. Solicitações Pendentes -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Solicitações Pendentes</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-amber-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Solicitações</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-amber-600">
                 {{ data.solicitacoesPendentes }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
-              <CalendarCheck :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+              <CalendarCheck :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <span>Aguardando parecer do RH</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <span class="truncate">Parecer pendente</span>
           </div>
         </div>
 
         <!-- 7. Férias Pendentes -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Férias Pendentes</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-indigo-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">Férias</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-indigo-600">
                 {{ data.feriasPendentes }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600">
-              <Palmtree :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600">
+              <Palmtree :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <span>Pedidos em análise/aprovação</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <span class="truncate">Em análise/aprovação</span>
           </div>
         </div>
 
         <!-- 8. Documentos Próximos do Vencimento -->
-        <div class="flex flex-col justify-between rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Documentos a Vencer</p>
-              <h3 class="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-orange-600">
+        <div class="flex flex-col justify-between rounded-2xl border bg-card p-3 sm:p-4 transition-all hover:shadow-sm">
+          <div class="flex items-start justify-between gap-1.5 sm:gap-2">
+            <div class="min-w-0">
+              <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">A Vencer</p>
+              <h3 class="mt-1 text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-orange-600">
                 {{ data.documentosVencendo }}
               </h3>
             </div>
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
-              <FileWarning :size="20" />
+            <span class="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-600">
+              <FileWarning :size="17" class="sm:scale-115" />
             </span>
           </div>
-          <div class="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground border-t pt-2">
-            <span>ASO, CNH ou contratos (< 30d)</span>
+          <div class="mt-2.5 sm:mt-3 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground border-t pt-2">
+            <span class="truncate">ASO / CNH (&lt; 30d)</span>
           </div>
         </div>
       </div>

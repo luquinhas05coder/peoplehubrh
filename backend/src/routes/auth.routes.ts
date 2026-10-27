@@ -15,6 +15,7 @@ import {
   type JwtPayload,
 } from "../middleware/auth.js"
 import { generateSecureRandomPassword, sendForgotPasswordEmail } from "../services/mail.service.js"
+import { normalizeRole, getEffectivePermissionsForUser } from "../constants/rbac.js"
 
 const router = Router()
 
@@ -71,9 +72,11 @@ router.post("/login", async (req: Request, res: Response) => {
     let userObj: { id: string; name: string; email: string; role: string; department: string; initials: string; tenant_id: string; two_factor_enabled: number; must_change_password: number }
 
     if (!result.length || !result[0].values.length) {
+      // Proteção contra timing attack (tempo constante de hashing mesmo para usuário inexistente)
+      await bcrypt.compare(password, "$2a$10$7EqJtq98hPqEX7fNZaFWoOhuR7Y4aI5t1Z.zF4J.j6yX3uO5.s7eq")
       res.status(401).json({
         ok: false,
-        error: "Usuário não encontrado. O acesso à plataforma deve ser cadastrado previamente pelo RH ao criar a pasta do colaborador.",
+        error: "E-mail ou senha incorretos. Verifique suas credenciais de acesso.",
       })
       return
     }
@@ -82,7 +85,7 @@ router.post("/login", async (req: Request, res: Response) => {
     const valid = await bcrypt.compare(password, hash)
 
     if (!valid) {
-      res.status(401).json({ ok: false, error: "E-mail ou senha incorretos." })
+      res.status(401).json({ ok: false, error: "E-mail ou senha incorretos. Verifique suas credenciais de acesso." })
       return
     }
 
@@ -130,11 +133,17 @@ router.post("/login", async (req: Request, res: Response) => {
     })
     persist()
 
+    const normalizedRole = normalizeRole(userObj.role)
+    const permissions = getEffectivePermissionsForUser(userObj.id, normalizedRole)
+
     res.json({
       ok: true,
       token,
       user: {
         ...userObj,
+        role: normalizedRole,
+        userRole: normalizedRole,
+        permissions,
         twoFactorEnabled: false,
         mustChangePassword: userObj.must_change_password === 1,
         tenantId: userObj.tenant_id,
@@ -233,6 +242,9 @@ router.post("/verify-mfa", (req: Request, res: Response) => {
     maxAge: 8 * 60 * 60 * 1000,
   })
 
+  const normalizedRole = normalizeRole(role)
+  const permissions = getEffectivePermissionsForUser(id, normalizedRole)
+
   res.json({
     ok: true,
     token: sessionToken,
@@ -240,7 +252,9 @@ router.post("/verify-mfa", (req: Request, res: Response) => {
       id,
       name,
       email,
-      role,
+      role: normalizedRole,
+      userRole: normalizedRole,
+      permissions,
       department,
       initials,
       twoFactorEnabled: raw2faEnabled === 1,
@@ -364,10 +378,43 @@ router.post("/2fa/enable", requireAuth, (req: Request, res: Response) => {
   })
 })
 
-// POST /api/auth/2fa/disable
-router.post("/2fa/disable", requireAuth, (req: Request, res: Response) => {
+// POST /api/auth/2fa/disable (Exige reautenticação com senha atual ou código TOTP válido)
+router.post("/2fa/disable", requireAuth, async (req: Request, res: Response) => {
   const payload = (req as Request & { user: JwtPayload }).user
+  const { password, code } = req.body as { password?: string; code?: string }
+
   const db = getDB()
+  const userRes = db.exec(`SELECT password, two_factor_secret FROM users WHERE id = ?`, [payload.sub])
+  if (!userRes.length || !userRes[0].values.length) {
+    res.status(404).json({ ok: false, error: "Usuário não encontrado." })
+    return
+  }
+
+  const [hash, secret] = userRes[0].values[0] as [string, string | null]
+
+  let isAuthorized = false
+
+  // 1. Tentar validação por senha atual
+  if (password) {
+    isAuthorized = await bcrypt.compare(password, hash)
+  }
+
+  // 2. Tentar validação por código TOTP
+  if (!isAuthorized && code && secret) {
+    try {
+      isAuthorized = verifySync({ token: code.trim(), secret }).valid
+    } catch (_e) {
+      isAuthorized = false
+    }
+  }
+
+  if (!isAuthorized) {
+    res.status(401).json({
+      ok: false,
+      error: "Reautenticação necessária: informe sua senha atual ou o código do app autenticador para desativar o 2FA.",
+    })
+    return
+  }
 
   db.run(`UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE id = ?`, [payload.sub])
   persist()
@@ -378,7 +425,7 @@ router.post("/2fa/disable", requireAuth, (req: Request, res: Response) => {
   })
 })
 
-// POST /api/auth/resend-mfa
+// POST /api/auth/resend-mfa (Protegido contra vazamento do código no payload JSON)
 router.post("/resend-mfa", (req: Request, res: Response) => {
   const { pendingToken } = req.body as { pendingToken?: string }
 
@@ -389,7 +436,7 @@ router.post("/resend-mfa", (req: Request, res: Response) => {
 
   const payload = decodePendingToken(pendingToken)
   if (!payload) {
-    res.status(401).json({ ok: false, error: "Token expirado. Faça login novamente." })
+    res.status(401).json({ ok: false, error: "Token expirado ou inválido. Faça login novamente." })
     return
   }
 
@@ -407,10 +454,10 @@ router.post("/resend-mfa", (req: Request, res: Response) => {
   ])
   persist()
 
+  // NUNCA retornar o código 2FA no payload da resposta HTTP
   res.json({
     ok: true,
-    mfaCode: code,
-    message: "Novo código 2FA enviado com sucesso.",
+    message: "Novo código de verificação enviado com sucesso.",
   })
 })
 
@@ -439,13 +486,18 @@ router.get("/me", requireAuth, (req: Request, res: Response) => {
     tenantSlug = tRes[0].values[0][1] as string
   }
 
+  const normalizedRole = normalizeRole(role)
+  const permissions = getEffectivePermissionsForUser(id, normalizedRole)
+
   res.json({
     ok: true,
     user: {
       id,
       name,
       email,
-      role,
+      role: normalizedRole,
+      userRole: normalizedRole,
+      permissions,
       department,
       initials,
       twoFactorEnabled: raw2faEnabled === 1,
@@ -528,7 +580,7 @@ router.post("/logout", (_req: Request, res: Response) => {
   res.json({ ok: true, message: "Sessão encerrada com sucesso." })
 })
 
-// POST /api/auth/change-password (Troca obrigatória no primeiro login ou redefinição)
+// POST /api/auth/change-password (Troca obrigatória no primeiro login ou redefinição segura)
 router.post("/change-password", async (req: Request, res: Response) => {
   const { newPassword, currentPassword, email: bodyEmail, userId: bodyUserId } = req.body as {
     newPassword?: string
@@ -537,8 +589,18 @@ router.post("/change-password", async (req: Request, res: Response) => {
     userId?: string
   }
 
-  if (!newPassword || newPassword.trim().length < 6) {
-    res.status(400).json({ ok: false, error: "A nova senha deve ter no mínimo 6 caracteres." })
+  // Política estrita de senhas
+  if (!newPassword || newPassword.trim().length < 8) {
+    res.status(400).json({ ok: false, error: "A nova senha deve ter no mínimo 8 caracteres." })
+    return
+  }
+
+  // Verificação obrigatória da senha atual/temporária (previne Account Takeover não autenticado)
+  if (!currentPassword || !currentPassword.trim()) {
+    res.status(400).json({
+      ok: false,
+      error: "A senha atual ou temporária é obrigatória para prosseguir com a alteração.",
+    })
     return
   }
 
@@ -555,10 +617,7 @@ router.post("/change-password", async (req: Request, res: Response) => {
 
   const db = getDB()
 
-  if (!targetUserId && bodyUserId) {
-    targetUserId = bodyUserId
-  }
-
+  // Se não tem token de sessão ativo, só pode identificar por email se tiver fornecido a senha atual/temporária
   if (!targetUserId && bodyEmail) {
     const uRes = db.exec(`SELECT id FROM users WHERE lower(email) = lower(?)`, [bodyEmail.trim()])
     if (uRes.length && uRes[0].values.length) {
@@ -566,8 +625,12 @@ router.post("/change-password", async (req: Request, res: Response) => {
     }
   }
 
+  if (!targetUserId && bodyUserId && token) {
+    targetUserId = bodyUserId
+  }
+
   if (!targetUserId) {
-    res.status(401).json({ ok: false, error: "Usuário não autenticado ou não identificado." })
+    res.status(401).json({ ok: false, error: "Usuário não autenticado ou não identificado. Informe e-mail corporativo válido." })
     return
   }
 
@@ -580,13 +643,11 @@ router.post("/change-password", async (req: Request, res: Response) => {
 
   const [, hash] = userRes[0].values[0] as [string, string]
 
-  // Se informou a senha atual/temporária, validar
-  if (currentPassword) {
-    const valid = await bcrypt.compare(currentPassword, hash)
-    if (!valid) {
-      res.status(400).json({ ok: false, error: "A senha temporária / atual informada está incorreta." })
-      return
-    }
+  // Validação estrita da senha atual
+  const valid = await bcrypt.compare(currentPassword, hash)
+  if (!valid) {
+    res.status(400).json({ ok: false, error: "A senha temporária / atual informada está incorreta." })
+    return
   }
 
   const newHash = await bcrypt.hash(newPassword.trim(), 10)
@@ -599,7 +660,7 @@ router.post("/change-password", async (req: Request, res: Response) => {
   })
 })
 
-// POST /api/auth/forgot-password (Esqueci a minha senha - Dispara e-mail via SMTP Gmail)
+// POST /api/auth/forgot-password (Esqueci a minha senha - Dispara e-mail via SMTP com proteção anti-enumeração)
 router.post("/forgot-password", async (req: Request, res: Response) => {
   const { email } = req.body as { email?: string }
 
@@ -615,10 +676,13 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
     [cleanEmail]
   )
 
+  // Proteção contra enumeração de contas: responde com a mesma mensagem neutra caso não exista
   if (!userRes.length || !userRes[0].values.length) {
-    res.status(404).json({
-      ok: false,
-      error: "E-mail corporativo não encontrado. Verifique a digitação ou solicite seu acesso ao setor de RH.",
+    res.json({
+      ok: true,
+      email: cleanEmail,
+      simulated: false,
+      message: `Se o e-mail corporativo estiver cadastrado, as instruções e nova senha temporária foram enviadas para ${cleanEmail}.`,
     })
     return
   }

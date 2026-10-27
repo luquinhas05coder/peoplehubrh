@@ -29,10 +29,12 @@ import {
   fetchAllFromBackend,
   updateRequestStatus,
   userRoleType,
+  showToast,
 } from "../store"
 import { channelLabels, topicLabels, requestTypeLabels } from "../data"
 import type { Channel, Topic } from "../data"
 import UserAvatar from "./UserAvatar.vue"
+import CustomReportsBuilder from "./CustomReportsBuilder.vue"
 import {
   Chart as ChartJS,
   Title,
@@ -165,13 +167,12 @@ const reportSubtitle = computed(() => {
 })
 
 /* ─── Tabs Internas ─── */
-type ReportTab = "visao_geral" | "atendimento_sla" | "pessoas_rh" | "ponto_relatorio" | "exportacao"
+type ReportTab = "visao_geral" | "atendimento_sla" | "pessoas_rh" | "ponto_relatorio" | "exportacao" | "custom_builder"
 const activeSubTab = ref<ReportTab>("visao_geral")
 
 /* ─── Filtros de Período & Busca ─── */
 const selectedPeriod = ref<string>("30d")
 const isRefreshing = ref(false)
-const toastText = ref<string | null>(null)
 
 /* ─── Modais ─── */
 const showCustomReportModal = ref(false)
@@ -187,12 +188,6 @@ const customReportConfig = ref({
   includeNotes: true,
 })
 
-function showToast(msg: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2800)
-}
 
 async function refreshData() {
   isRefreshing.value = true
@@ -463,23 +458,9 @@ function handleExportPontoCSV() {
 
 <template>
   <div class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative">
-    <!-- Toast de Feedback -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="fixed top-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-xl"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
 
     <!-- Cabeçalho Principal do Módulo -->
-    <header class="border-b bg-card px-5 py-5 sm:px-8">
+    <header class="border-b bg-card px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center gap-2">
@@ -536,28 +517,29 @@ function handleExportPontoCSV() {
           </button>
 
           <button
-            class="flex items-center gap-1.5 rounded-xl py-2 px-3.5 text-xs font-semibold text-primary-foreground shadow transition-transform hover:-translate-y-0.5"
+            class="flex items-center gap-1.5 rounded-xl py-2 px-3.5 text-xs font-semibold text-primary-foreground shadow transition-transform hover:-translate-y-0.5 cursor-pointer"
             style="background-color: var(--color-primary)"
-            @click="showCustomReportModal = true"
+            @click="activeSubTab = 'custom_builder'"
           >
             <Sparkles :size="15" />
-            <span>Novo Relatório</span>
+            <span>Novo Relatório (BI)</span>
           </button>
         </div>
       </div>
 
       <!-- Navegação por Sub-Tabs -->
-      <nav class="mt-6 flex items-center gap-2 border-b border-border/40 pb-0.5 overflow-x-auto scrollbar-none">
+      <nav class="mt-6 flex items-center gap-2 border-b border-border/40 pb-0.5 overflow-x-auto scrollbar-thin">
         <button
           v-for="st in [
             { id: 'visao_geral', label: 'Visão Geral Executiva', icon: PieChart },
+            { id: 'custom_builder', label: 'Construtor Dinâmico (BI)', icon: Sparkles },
             { id: 'atendimento_sla', label: 'Atendimento & SLA', icon: Clock },
             { id: 'pessoas_rh', label: 'Gestão de Pessoas & RH', icon: Users },
             { id: 'ponto_relatorio', label: 'Folha & Ajustes de Ponto', icon: CalendarCheck },
             { id: 'exportacao', label: 'Central de Exportação', icon: Download },
           ]"
           :key="st.id"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors"
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer"
           :class="activeSubTab === st.id
             ? 'border-primary text-primary font-bold'
             : 'border-transparent text-muted-foreground hover:text-foreground'"
@@ -570,7 +552,12 @@ function handleExportPontoCSV() {
     </header>
 
     <!-- Conteúdo dos Relatórios -->
-    <main class="mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 space-y-6">
+    <main class="mx-auto w-full max-w-7xl px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-6">
+
+      <!-- ─── TAB: CONSTRUTOR DINÂMICO DE RELATÓRIOS (BI) ─── -->
+      <section v-if="activeSubTab === 'custom_builder'" class="space-y-6">
+        <CustomReportsBuilder />
+      </section>
 
       <!-- ─── TAB 1: VISÃO GERAL EXECUTIVA ─── -->
       <section v-if="activeSubTab === 'visao_geral'" class="space-y-6">
@@ -1086,8 +1073,8 @@ function handleExportPontoCSV() {
             </button>
           </div>
 
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
+          <div class="overflow-x-auto scrollbar-thin">
+            <table class="w-full text-left text-sm min-w-[600px]">
               <thead class="border-b bg-muted/40 text-xs font-semibold text-muted-foreground uppercase">
                 <tr>
                   <th class="px-4 py-3">Protocolo</th>
@@ -1367,9 +1354,9 @@ function handleExportPontoCSV() {
     <!-- ─── MODAL 1: GERAR RELATÓRIO CUSTOMIZADO ─── -->
     <div
       v-if="showCustomReportModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin animate-in fade-in zoom-in duration-150">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <Sparkles :size="20" class="text-primary" />
@@ -1455,9 +1442,9 @@ function handleExportPontoCSV() {
     <!-- ─── MODAL 2: PRÉVIA DE IMPRESSÃO / PDF OFFICIAL ─── -->
     <div
       v-if="showPrintModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-3xl rounded-2xl border bg-card p-8 shadow-2xl space-y-6 my-8 max-h-[90vh] overflow-y-auto">
+      <div class="w-full max-w-3xl rounded-2xl border bg-card p-4 sm:p-8 shadow-2xl space-y-6 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <!-- Action Toolbar Topo do Modal -->
         <div class="flex items-center justify-between border-b pb-4">
           <div class="flex items-center gap-2">
@@ -1481,7 +1468,7 @@ function handleExportPontoCSV() {
         </div>
 
         <!-- Documento Timbrado Oficial (Layout A4) -->
-        <div class="rounded-xl border bg-background p-8 shadow-inner space-y-6 font-sans text-foreground">
+        <div class="rounded-xl border bg-background p-4 sm:p-8 shadow-inner space-y-6 font-sans text-foreground overflow-x-auto scrollbar-thin min-w-[550px] print:min-w-0 print:p-0 print:border-none">
           <!-- Cabeçalho Timbrado -->
           <div class="flex items-center justify-between border-b pb-4">
             <div class="flex items-center gap-3">

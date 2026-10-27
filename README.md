@@ -44,38 +44,107 @@ A plataforma integra **atendimento omnichannel imediato**, **gestão documental 
 
 ---
 
-### 🛡️ 2. Sistema Completo de Perfis de Acesso (RBAC — Role-Based Access Control)
-O PeopleHub RH conta com um sistema corporativo rigoroso de controle de acesso baseado em funções, com garantia de bloqueio em nível de backend (HTTP 401 e HTTP 403), isolamento de escopos de dados em SQL e trilha de auditoria:
+### 🛡️ 2. Sistema Completo de Perfis de Acesso & Permissões (RBAC Dinâmico & Granular)
+O PeopleHub RH conta com um sistema corporativo completo e reestruturado de **Controle de Acesso Baseado em Funções (RBAC)**, com proteção ponta a ponta no backend (HTTP 401/403), navegação adaptativa no frontend, isolamento de escopo de dados em SQL, gestão dinâmica de permissões e trilha de auditoria imutável.
 
-* **As 4 Funções Oficiais (Roles)**:
-  * **`ADMIN` (Administrador Geral)**: Acesso irrestrito a todas as configurações, painéis, auditoria, alteração de perfis e gestão de usuários (`/usuarios`).
-  * **`RH` (Recursos Humanos & DP)**: Acesso integral a todos os colaboradores da empresa (`ALL`), criação e exclusão de pastas funcionais, gestão completa de folha de pagamento, contracheques, documentos, férias e aprovações.
-  * **`GESTOR` (Gestão de Equipe)**: Acesso restrito ao escopo da sua equipe e liderados diretos (`TEAM`). Pode visualizar colaboradores do seu departamento, gerenciar escalas mensais, e aprovar solicitações de seus liderados (com bloqueio estrito contra aprovação do próprio requerimento).
-  * **`COLABORADOR` (Autoatendimento)**: Acesso estritamente pessoal (`OWN`). Visualiza unicamente o seu próprio prontuário, espelho de ponto, contracheques emitidos e solicitações abertas. Bloqueado de criar funcionários, alterar dados de outros ou aprovar solicitações.
+#### 👥 Os 7 Perfis Oficiais (Canonical Roles):
+1. **`ADMIN` (Administrador Geral)**:
+   * **Escopo de Dados**: `ALL` (todos os registros da organização).
+   * **Atribuições**: Gestão completa da plataforma, usuários, cargos, matriz de permissões (`/usuarios`), configurações globais de sistema e auditoria.
+   * **Salvaguardas**: Protegido contra auto-despromoção, auto-desativação e com regra de **Anti-Lockout** (impossível rebaixar ou inativar o único administrador ativo).
+2. **`RH` (Recursos Humanos — Estratégico & DHO)**:
+   * **Escopo de Dados**: `ALL` (visão operacional corporativa integral).
+   * **Atribuições**: Gestão estratégica de pessoas, desenvolvimento organizacional, programas de onboarding/desenvolvimento, gestão do ATS/vagas, ciclos de avaliação de desempenho e metas corporativas.
+   * **Restrições**: Sem acesso à gestão administrativa de usuários (`/usuarios`) ou alteração de matriz sistêmica.
+3. **`DP` (Departamento Pessoal — Burocrático, Legal & Operacional)**:
+   * **Escopo de Dados**: `ALL` (visão corporativa para cumprimento de obrigações legais e trabalhistas).
+   * **4 Pilares de Permissões e Acessos**:
+     1. **Administração de Vínculos e Documentação**: Admissão digital de colaboradores (`employees.create`), rescisões e desligamentos (`employees.update`, `employees.delete`, `workflows.execute`), gestão de dados sensíveis em conformidade com a LGPD (`employees.view_sensitive`, visualização irrestrita de CPFs e salários contratuais, gestão de dossiês e documentos admissionais).
+     2. **Rotinas de Folha de Pagamento e Encargos**: Cálculo e validação da folha (`payroll.view`, `payroll.manage`), holerites, controle de proventos e descontos, obrigações eSocial/FGTS/INSS (`reports.export`, `reports.custom_build`) e gestão de benefícios (`requests.approve`).
+     3. **Controle de Jornada e Frequência**: Apuração e auditoria de ponto (`schedules.view`, `schedules.manage`), escalas de trabalho CLT, controle de faltas, atrasos e banco de horas; gestão de ausências (`vacations.view`, `vacations.request`, `vacations.approve`, `vacations.reject`), atestados médicos e licenças legais.
+     4. **Saúde e Segurança do Trabalho (SST)**: Registro e arquivamento de eventos de SST (`documents.create`, `documents.upload`), laudos periciais, ASO (Atestado de Saúde Ocupacional NR-7) e comunicações de CAT.
+   * **Restrições**: Sem acesso à exclusão ou fechamento de vagas de ATS (`recruitment.delete`), criação de ciclos de avaliação de desempenho nem governança de acessos/usuários do sistema.
+4. **`GESTOR` (Gestão de Equipe & Liderança)**:
+   * **Escopo de Dados**: `TEAM` (estritamente seu departamento ou subordinados diretos).
+   * **Atribuições**: Visualização da equipe direta, acompanhamento de metas, avaliações de desempenho, aprovação de solicitações de liderados e gestão de escalas.
+   * **Restrições**: Salários e CPFs de terceiros são ofuscados automaticamente. Bloqueado de aprovar suas próprias solicitações (Anti-Autoaprovação).
+5. **`RECRUTADOR` (Recrutamento & Seleção — ATS)**:
+   * **Escopo de Dados**: `OWN` / Recrutamento.
+   * **Atribuições**: Gestão de vagas (abrir, pausar, publicar), triagem de candidatos, pipeline seletivo, agendamento de entrevistas e preenchimento de scorecards.
+   * **Restrições**: Sem acesso a dados salariais globais, folha de pagamento ou configurações corporativas.
+6. **`AUDITOR` (Auditoria & Compliance)**:
+   * **Escopo de Dados**: `ALL` (visão global para fins de conformidade e fiscalização).
+   * **Atribuições**: Acesso irrestrito de **LEITURA** e exportação a todos os módulos, relatórios, históricos e trilhas de auditoria.
+   * **Invariante Crítico de Segurança**: **Bloqueio absoluto de qualquer operação de escrita ou mutação** (`POST`, `PUT`, `PATCH`, `DELETE`). Qualquer tentativa de alteração resulta em `HTTP 403 Forbidden`.
+7. **`COLABORADOR` (Autoatendimento & Portal Pessoal)**:
+   * **Escopo de Dados**: `OWN` (estritamente seus próprios dados pessoais).
+   * **Atribuições**: Consulta ao dossiê pessoal (`/api/employees/me`), solicitações de alteração cadastral, upload de documentos pessoais, acompanhamento de chamados e visualização do próprio contracheque e férias.
+   * **Restrições**: Bloqueio total a registros de outros funcionários (Proteção contra IDOR). Acesso a rotas administrativas redireciona amigavelmente ou bloqueia (`/acesso-negado`).
 
-* **Escopos de Dados em Nível de Banco de Dados**:
-  * **`ALL`** (Admin e RH): Consultas executam sem restrição departmental.
-  * **`TEAM`** (Gestor): Consultas filtram automaticamente por `department = ? OR manager = ?`.
-  * **`OWN`** (Colaborador): Consultas filtram estritamente pelo e-mail/identificador do usuário autenticado.
+---
 
-* **Mascaramento Automático de Dados Sensíveis**:
-  * Usuários sem a permissão `employees.view_sensitive` (Gestores e Colaboradores) têm campos sensíveis como **Salário Base** exibidos como `"Confidencial"` e **CPF** ofuscado (`123.***.***-**`), com exceção do colaborador consultando o seu próprio perfil pessoal.
+#### 📊 Matriz de Permissões por Módulo e Ação:
 
-* **Governança & Anti-Autoaprovação**:
-  * Nenhum usuário (mesmo Gestores ou Administradores) pode aprovar ou rejeitar suas próprias solicitações de férias ou contracheques (`HTTP 403: Violação de Governança`).
+| Módulo | Ação / Permissão | ADMIN | RH | DP | GESTOR | RECRUTADOR | AUDITOR | COLABORADOR |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Dashboard** | `dashboard.view` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **Usuários & RBAC** | `users.view`, `users.manage_roles` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Colaboradores** | `employees.view_all` / `export` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (Leitura) | ❌ |
+| | `employees.view_sensitive` (CPF/Salário) | ✅ | ✅ | ✅ | ❌ (Ofuscado) | ❌ | ❌ (Ofuscado) | ❌ (Próprio) |
+| | `employees.create` (Admissão CLT) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| | `employees.update`, `delete` (Rescisão) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| | `employees.view_team` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| | `employees.view_own` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Folha & Encargos** | `payroll.view`, `payroll.manage` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (Leitura) | ❌ |
+| **Ponto & Jornada** | `schedules.view`, `schedules.manage` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Leitura) | ❌ (Próprio) |
+| **Férias & Ausências** | `vacations.view`, `vacations.approve` | ✅ | ✅ | ✅ | ✅ (Equipe) | ❌ | ✅ (Leitura) | ❌ (Próprio) |
+| **Documentos & SST** | `documents.view`, `create`, `export` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (Leitura) | ❌ (Próprio) |
+| **Relatórios / eSocial**| `reports.view`, `reports.custom_build` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Leitura) | ❌ |
+| **Solicitações** | `requests.create`, `requests.view` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (Leitura) | ✅ (Próprias) |
+| | `requests.approve`, `requests.reject` | ✅ | ✅ | ✅ | ✅ (Equipe) | ❌ | ❌ | ❌ |
+| **Workflows / Rescisões**| `workflows.view`, `workflows.execute` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Leitura) | ❌ |
+| **Recrutamento (ATS)** | `recruitment.manage`, `delete` | ✅ | ✅ | ❌ | ✅ (Scorecard) | ✅ | ✅ (Leitura) | ❌ |
+| **Auditoria** | `audit.view` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 
-* **Módulo Administrativo de Usuários (`/usuarios`)**:
-  * Painel restrito ao `ADMIN` para listar, criar, editar dados cadastrais, alterar funções e ativar/desativar contas.
-  * Modal com aviso de segurança explícito e confirmação antes de alterar a role de qualquer membro da organização.
-  * Bloqueio contra auto-despromoção e auto-desativação do administrador ativo.
+---
 
-* **Trilha de Auditoria Imutável (`/api/users/audit`)**:
-  * Tabela `audit_logs` que registra de forma definitiva todas as ações críticas: `ALTERAR_ROLE`, `ATIVAR_USUARIO`, `DESATIVAR_USUARIO`, `EMPLOYEE_CREATE`, `EMPLOYEE_DELETE`, `REQUEST_STATUS_CHANGE`, acompanhado do autor, timestamp e endereço IP.
+#### 🎛️ Gestão Administrativa de Acessos & Matriz Dinâmica (`/usuarios`):
+O sistema conta com uma interface administrativa interativa na aba **"Matriz de Acessos & Perfis RBAC"** do módulo de Usuários:
+* **Seletor de Cargos**: Permite escolher qualquer um dos perfis para inspecionar e personalizar suas permissões.
+* **Matriz Visual de Switches**: Organizada por módulo funcional e tipo de ação (`view`, `create`, `edit`, `delete`, `approve`, `export`, `admin`).
+* **Salvamento Auditado**: Ao salvar alterações, o sistema solicita confirmação do administrador e registra a mudança com payload diff na trilha de auditoria.
+* **Inspetor de Permissões Efetivas**: Permite selecionar um usuário específico para visualizar exatamente quais permissões ele possui (herdadas do cargo ou aplicadas por override individual pontual).
+* **Salvaguardas de Segurança**:
+  * O perfil `AUDITOR` é blindado contra concessão acidental de permissões de escrita/mutação.
+  * O perfil `ADMIN` não pode perder permissões críticas de governança.
+  * O último `ADMIN` da organização não pode ser rebaixado nem inativado (Anti-Lockout).
 
-* **Execução dos Testes Automatizados de Segurança**:
-  ```bash
-  cd backend && node test-rbac-permissions.js
-  ```
+---
+
+#### 🗄️ Estrutura de Tabelas RBAC no SQLite:
+* `role_permissions (role TEXT, permission TEXT, created_at TEXT, PRIMARY KEY(role, permission))`
+* `user_permissions (user_id TEXT, permission TEXT, granted INTEGER, created_at TEXT, PRIMARY KEY(user_id, permission))`
+* `audit_logs (id TEXT PRIMARY KEY, user_id, user_name, user_role, action, entity, entity_id, details_json, tenant_id, ip_address, created_at)`
+
+---
+
+#### 🧪 Bateria de Testes Automatizados RBAC (15 Cenários Cobertos):
+Para executar a suíte completa de testes automatizados:
+```bash
+# Executa todos os testes de backend e frontend
+npm test
+
+# Executa especificamente os testes de permissões e reestruturação RBAC
+node backend/test-runner.js test-rbac-permissions-restructure.js
+```
+
+**Credenciais Pré-Configuradas para Teste Manual de Cada Perfil (Senha Padrão: `admin123`)**:
+* **ADMIN**: `admin@empresa.com`
+* **RH**: `rh@peoplehub.com.br`
+* **GESTOR**: `gestor@peoplehub.com.br`
+* **RECRUTADOR**: `recrutador@peoplehub.com.br`
+* **AUDITOR**: `auditor@peoplehub.com.br`
+* **COLABORADOR**: `colaborador@peoplehub.com.br`
 
 ---
 
@@ -237,9 +306,25 @@ A aplicação estará disponível em:
 
 ---
 
+### 👤 8. Perfil Completo do Funcionário & Dossiê (`/funcionarios/:id`)
+* **Rota Dedicada**: `/funcionarios/:id` acessível diretamente através do botão `[Ver Perfil]` na listagem de colaboradores.
+* **Header do Funcionário**:
+  * Foto/Avatar, nome completo, cargo, departamento, status cadastral com badge padronizada, ID/matrícula e botões de ação ("Editar Funcionário" e "Dossiê PDF").
+* **Navegação por 7 Abas Especializadas**:
+  1. **Aba Resumo**: Cargo, departamento, data de admissão, tempo de empresa calculado, status, salário base (respeitando RBAC), gestor imediato, email e telefone corporativo. Acompanha 4 cards resumidos (Férias disponíveis, Chamados pendentes, Documentos cadastrados e Tempo de casa).
+  2. **Aba Dados Pessoais**: Nome completo, CPF (com proteção e mascaramento de dígitos para usuários sem privilégio de folha), data de nascimento, email, telefone, CEP e endereço completo.
+  3. **Aba Dados Profissionais**: Parâmetros contratuais CLT (tipo de contrato com badge, escala de trabalho, admissão, desligamento, salário base e gestor imediato).
+  4. **Aba Documentos**: Repositório de documentos digitais com tipo de arquivo, nome, data de upload, validade, status de validade (*Válido*, *Próximo do vencimento* ou *Expirado*), além de botões de **Visualizar** e **Download**.
+  5. **Aba Férias**: Painel dos 30 dias regulamentares de férias (dias disponíveis, dias usufruídos e próximo período aquisitivo) acompanhado do histórico detalhado de solicitações de férias e seus pareceres.
+  6. **Aba Solicitações**: Linha de chamados funcionais (férias, ponto, atestados, reembolsos) com protocolo, status, responsável e filtro seletivo por status.
+  7. **Aba Histórico & Auditoria**: Linha do tempo visual (*Timeline*) auditada pela tabela `employee_history`, rastreando promoções de cargo, reajustes salariais, transferências de departamento, alterações de status cadastral e admissão.
+* **Listagem Integrada de Colaboradores**:
+  * Botão `[Ver Perfil]` em cada card de colaborador e na tabela.
+  * **Busca em tempo real**, **Filtro por departamento**, **Filtro por status**, **Filtro por contrato**, **Filtro por escala**, **Ordenação dinâmica** (A-Z, Z-A, Admissão Recente, Matrícula) e **Paginação responsiva**.
+
 ---
 
-### 📊 8. Dashboard Executivo de RH (Dados Reais do SQLite)
+### 📊 9. Dashboard Executivo de RH (Dados Reais do SQLite)
 * **Endpoint Dedicado**: `GET /api/dashboard` consolidando métricas da organização em tempo real:
   * **8 Cards de Métricas Operacionais**:
     1. Total de Funcionários
@@ -260,21 +345,139 @@ A aplicação estará disponível em:
 
 ---
 
-### 👤 9. Perfil Completo do Funcionário & Dossiê (`/funcionarios/:id`)
-* **Rota Dedicada**: `/funcionarios/:id` acessível diretamente através do botão `[Ver Perfil]` na listagem de colaboradores.
-* **Header do Funcionário**:
-  * Foto/Avatar, nome completo, cargo, departamento, status cadastral com badge padronizada, ID/matrícula e botões de ação ("Editar Funcionário" e "Dossiê PDF").
-* **Navegação por 7 Abas Especializadas**:
-  1. **Aba Resumo**: Cargo, departamento, data de admissão, tempo de empresa calculado, status, salário base (respeitando RBAC), gestor imediato, email e telefone corporativo. Acompanha 4 cards resumidos (Férias disponíveis, Chamados pendentes, Documentos cadastrados e Tempo de casa).
-  2. **Aba Dados Pessoais**: Nome completo, CPF (com proteção e mascaramento de dígitos para usuários sem privilégio de folha), data de nascimento, email, telefone, CEP e endereço completo.
-  3. **Aba Dados Profissionais**: Parâmetros contratuais CLT (tipo de contrato com badge, escala de trabalho, admissão, desligamento, salário base e gestor imediato).
-  4. **Aba Documentos**: Repositório de documentos digitais com tipo de arquivo, nome, data de upload, validade, status de validade (*Válido*, *Próximo do vencimento* ou *Expirado*), além de botões de **Visualizar** e **Download**.
-  5. **Aba Férias**: Painel dos 30 dias regulamentares de férias (dias disponíveis, dias usufruídos e próximo período aquisitivo) acompanhado do histórico detalhado de solicitações de férias e seus pareceres.
-  6. **Aba Solicitações**: Linha de chamados funcionais (férias, ponto, atestados, reembolsos) com protocolo, status, responsável e filtro seletivo por status.
-  7. **Aba Histórico & Auditoria**: Linha do tempo visual (*Timeline*) auditada pela tabela `employee_history`, rastreando promoções de cargo, reajustes salariais, transferências de departamento, alterações de status cadastral e admissão.
-* **Listagem Integrada de Colaboradores**:
-  * Botão `[Ver Perfil]` em cada card de colaborador e na tabela.
-  * **Busca em tempo real**, **Filtro por departamento**, **Filtro por status**, **Filtro por contrato**, **Filtro por escala**, **Ordenação dinâmica** (A-Z, Z-A, Admissão Recente, Matrícula) e **Paginação responsiva**.
+### 🎯 10. Módulo Profissional de Recrutamento & Seleção (ATS Pro)
+Módulo corporativo completo de Applicant Tracking System (ATS), integrado à autenticação RBAC, calendário corporativo e banco de dados SQLite:
+
+* **Gestão de Vagas**:
+  * Criação, edição, publicação, pausa e encerramento de posições com controle de data de abertura e fechamento.
+  * Suporte a modalidades (Remoto, Híbrido, Presencial), contratos (CLT, PJ, Estágio), quantidade de vagas e benefícios.
+  * **Salários Confidenciais**: Quando marcado como confidencial, valores monetários são estritamente mascarados na API pública.
+* **Portal Público de Carreiras (`/vagas-publicas`)**:
+  * Vitrine moderna de oportunidades acessível sem necessidade de login.
+  * Busca em tempo real por cargo, palavra-chave, departamento e modalidade de trabalho.
+  * Modal de candidatura online com upload de currículo (PDF/DOCX/TXT até 5MB) e validação de MIME type.
+  * **Conformidade LGPD**: Consentimento obrigatório e registrado com timestamp para auditoria de proteção de dados.
+  * **Prevenção de Duplicidades**: Restrição por chave única `tenant_id + job_id + candidate_id` com HTTP 409 em tentativas repetidas.
+* **Pipeline Seletivo (Kanban Visual)**:
+  * Etapas organizadas: *Inscrição*, *Triagem*, *Entrevista*, *Teste Técnico*, *Aprovado*, *Reprovado* e *Contratado*.
+  * Movimentação de candidatos entre etapas com parecer/feedback da transição e persistência na timeline do dossiê.
+  * Notificações internas automáticas para o time de RH a cada nova candidatura ou contratação.
+* **Entrevistas & Scorecards Estruturados**:
+  * Agendamento de entrevistas integrado automaticamente ao **Calendário Corporativo** (`calendar_events`).
+  * Scorecard com notas de 1 a 5 estrelas para competências técnicas, comportamentais e aderência cultural.
+  * Recomendação formal (*Aprovar*, *Reprovar*, *Neutro*) e parecer detalhado.
+* **Download Seguro de Documentos**:
+  * Download de currículos protegido por RBAC (`GET /api/recruitment/candidates/:id/resume`), sem links públicos estáticos desprotegidos.
+* **Indicadores ATS (Analytics)**:
+  * Funil visual de conversão entre etapas.
+  * Tempo Médio de Contratação (*Time to Hire* em dias).
+  * Distribuição de candidatos por canais de atração (LinkedIn, Site de Carreiras, Indicação, Gupy).
+
+---
+
+### 🙋‍♂️ 11. Portal de Autoatendimento do Colaborador (Employee Self-Service)
+Módulo integrado que empodera o colaborador com autonomia para consultar seu dossiê funcional, abrir requerimentos com anexos, gerenciar documentos e solicitar correções cadastrais com governança corporativa:
+
+* **Área Pessoal & Dossiê Funcional (`/autoatendimento`)**:
+  * Consulta do prontuário individual via `GET /api/employees/me` (filtrado estritamente para o usuário autenticado por `scope === 'OWN'`).
+  * Exibição clara de cargo, departamento, gestor imediato, data de admissão e saldo de férias regulamentares.
+  * Botão **"Solicitar Alteração Cadastral"** (`POST /api/employees/me/request-update`):
+    * Permite propor correções em telefone, CEP, endereço residencial, contato de emergência e notas.
+    * **Segurança e Governança**: Dados sensíveis **não são aplicados automaticamente**. O sistema gera uma solicitação formal categorizada como `Atualização Cadastral`, contendo o *diff* estruturado entre os dados vigentes e os dados propostos, notificando o RH para triagem.
+
+* **Fluxo Completo de Solicitações & Linha do Tempo**:
+  * Abertura de requerimentos em categorias regulamentadas: *Atualização Cadastral*, *Declaração de Vínculo*, *Comprovante de Rendimentos*, *Férias*, *Reembolso* e *Ajuste de Ponto*.
+  * Suporte a anexos de comprovantes e documentos (PDF, PNG, JPG, DOCX até 5MB).
+  * **Timeline Interativa & Pendências** (`GET` e `POST /api/requests/:id/comments`): Diálogo transparente entre colaborador e operador de RH dentro do próprio requerimento.
+  * **Cancelamento Autônomo**: O solicitante pode cancelar sua própria solicitação enquanto estiver com status *Pendente* ou *Em Análise*, sem depender de permissões de aprovação de RH. Tentativas de cancelar solicitações de terceiros são estritamente bloqueadas com `HTTP 403`.
+
+* **Área de Governança do RH (Fila de Homologação)**:
+  * Painel consolidado para operadores de RH e gestores avaliarem requerimentos pendentes.
+  * Ações auditadas: **Aprovar**, **Rejeitar** ou **Solicitar Correções** (*"Correção Solicitada"*).
+  * **Justificativa Obrigatória**: Recusas e pedidos de correção exigem justificativa explicativa, adicionada automaticamente à linha do tempo e notificada ao colaborador.
+  * **Prevenção Rígida de Autoaprovação**: Bloqueio sistêmico com `HTTP 403: Violação de Governança` impedindo que qualquer usuário aprove ou homologue sua própria solicitação.
+  * **Aplicação Cadastral Automática na Aprovação**: Quando o RH aprova uma `Atualização Cadastral`, os novos dados são aplicados de forma atômica à tabela `employees` e um evento de auditoria é registrado na `employee_history`.
+
+* **Gestão e Proteção Documental**:
+  * **Partição Documental Clara**:
+    * **Documentos Pessoais**: Certidões, comprovantes de residência e atestados enviados pelo próprio colaborador.
+    * **Documentos Administrativos**: Contratos de trabalho CLT, declarações institucionais e comprovantes emitidos pelo RH.
+  * **Upload Validado**: Endpoint `POST /api/documents/upload` com verificação estrita de MIME types autorizados e limite de tamanho.
+  * **Prevenção contra IDOR (Insecure Direct Object Reference)**: O download (`GET /api/documents/:id/download`) e visualização são protegidos por escopo `OWN`, impedindo que colaboradores acessem ou baixem documentos de outros funcionários.
+
+---
+
+---
+
+### 🌐 12. Camada Modular de Integrações Externas & Webhooks de Saída
+Arquitetura corporativa desacoplada e orientada a eventos para integração com sistemas legados, ERPs de folha de pagamento, ATS e plataformas de terceiros, priorizando segurança cibernética e resiliência:
+
+* **Inventário & Interface Comum de Integrações (`IntegrationAdapter`)**:
+  * Contrato unificado `IntegrationAdapter<TConfig, TInput, TOutput>` com métodos de diagnóstico (`testConnection`) e execução (`execute`).
+  * Registro central `integrationRegistry` para descoberta e monitoramento de saúde de adaptadores em tempo real.
+  * **Adaptador CSV de Colaboradores (DP)** (`csv_employee_adapter`):
+    * Exportação completa de funcionários em formato CSV padronizado (com BOM UTF-8 para compatibilidade Excel, delimitador `;` e campos mascarados).
+    * Importação em lote via CSV com validação prévia de schema, checagem de e-mails duplicados e relatório estruturado de inconsistências linha por linha.
+  * **Adaptador CBO ConectaGov / MTE** (`cbo_conecta_gov_adapter`):
+    * Consulta e validação de ocupações oficiais do Ministério do Trabalho via API ConectaGov / Serpro com catálogo local de alta disponibilidade.
+  * Reutilização dos clientes nativos Node.js e configurações existentes (Nodemailer SMTP, Evolution API, ViaCEP).
+
+* **Webhooks de Saída (Arquitetura Event-Driven)**:
+  * Emissão assíncrona dos 4 eventos de negócio reais da plataforma:
+    1. `employee.created`: Notificado na admissão ou cadastro de colaborador no prontuário.
+    2. `request.approved`: Notificado na homologação e aprovação de chamados pelo RH.
+    3. `job.published`: Notificado na abertura e publicação de vagas no portal ATS.
+    4. `candidate.stage_changed`: Notificado na transição de etapas do candidato no funil seletivo.
+    5. `ping.test`: Evento sintético para verificação instantânea de conectividade e validação HMAC.
+  * Envelope padronizado e idempotente: `{ id, type, occurred_at, tenant_id, payload }`.
+  * **Sanitização Estrita**: Filtro automático que elimina senhas, hashes, segredos MFA, cookies e tokens de sessão, além de mascarar dígitos de CPF nos payloads enviados.
+
+* **Segurança Avançada contra Ameaças de Rede**:
+  * **Prevenção Rigorosa de SSRF (Server-Side Request Forgery)**:
+    * Validação sintática e normalização de URLs via módulo `validateSsrfUrl`.
+    * Resolução DNS prévia e bloqueio de destinos em Loopback (`127.0.0.0/8`, `::1`), Redes Privadas (RFC 1918 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), Link-local e Metadados de Nuvem (`169.254.169.254`, AWS, GCP, Azure).
+    * Bloqueio de portas de infraestrutura não autorizadas (21, 22, 23, 25, 110, 3306, 5432, 6379, etc.).
+    * Revalidação de destino em redirecionamentos HTTP (`redirect: 'manual'`), impedindo que endpoints públicos redirecionem para redes corporativas internas.
+  * **Assinatura HMAC SHA-256 em Tempo Constante**:
+    * Cabeçalho oficial `X-PeopleHub-Signature: t=timestamp,v1=signature`.
+    * Validação com `crypto.timingSafeEqual` para mitigação de ataques de temporização (*timing attacks*).
+    * Proteção contra ataques de repetição (*Replay Attacks*) com tolerância temporal de 300 segundos.
+  * **Gestão e Rotação de Segredos**:
+    * Segredos criptográficos fortes (`whsec_...`) com entropia de 32 bytes gerados na criação.
+    * Endpoint administrativo para rotação imediata de segredos (`POST /api/webhooks/subscriptions/:id/rotate-secret`) auditado na `audit_logs`.
+    * Segredos ofuscados na leitura por API e telas (`whsec_••••••••abcd`).
+
+* **Confiabilidade, Fila de Entregas & Resiliência**:
+  * Fila de entregas desacoplada persistida no SQLite (`webhook_subscriptions` e `webhook_deliveries`).
+  * Despacho não-bloqueante (`setImmediate`): Falhas de rede ou lentidão em endpoints terceiros **nunca travam nem bloqueiam** as rotinas operacionais de RH.
+  * Tentativas de reenvio automatizadas com **Backoff Exponencial** (`15s`, `60s`, `240s`, `900s`, `3600s`) e timeout estrito de 8 segundos por requisição.
+  * Histórico detalhado de entregas com código de resposta HTTP, latência em milissegundos e mensagens de erro (sem vazar credenciais).
+  * **Reenvio Manual**: Painel para administradores reprocessarem entregas falhadas em 1 clique (`POST /api/webhooks/deliveries/:id/redeliver`).
+
+---
+
+### 🧪 13. Bateria Completa de Testes Automatizados (CI/CD)
+O projeto conta com suíte integrada de testes unitários, testes de integração, testes RBAC, ATS, Autoatendimento e Webhooks/SSRF:
+
+```bash
+# Executar todos os testes (Frontend e Backend unificados)
+npm test
+
+# Executar apenas testes de componentes Vue 3 (Vitest)
+npm run test:frontend
+
+# Executar testes de APIs, RBAC, ATS, Autoatendimento e Webhooks (Node.js)
+npm run test:backend
+
+# Executar suíte específica da camada de Integrações e Webhooks
+node backend/test-runner.js test-integrations-webhooks.js
+
+# Executar suíte específica do Portal de Autoatendimento
+node backend/test-runner.js test-self-service.js
+
+# Executar auditoria de segurança (Headers, OWASP, Anti-Enumeração)
+npm run test:security
+```
 
 ---
 
@@ -290,21 +493,30 @@ chat-de-rh1808/
 │   │   ├── 📄 EmployeesModule.vue          # Gestão de colaboradores com busca, filtros, ordenação e paginação
 │   │   ├── 📄 NewEmployeeFolderModal.vue   # Provisionamento e edição completa de colaboradores
 │   │   ├── 📄 ExportDossierModal.vue       # Exportação de dossiê completo em PDF
-│   │   ├── 📄 DocumentsModule.vue          # Emissão de holerites e espelho de ponto em PDF
-│   │   ├── 📄 RequestsModule.vue           # Gestão de solicitações (férias, reembolsos)
+│   │   ├── 📄 IntegrationsManager.vue      # Gestão de Webhooks, Logs de Entrega e Carga CSV (ADMIN)
+│   │   ├── 📄 SelfServicePortal.vue        # Portal de Autoatendimento do Colaborador (dossiê, solicitações, documentos)
+│   │   ├── 📄 RecruitmentModule.vue        # Módulo ATS (vagas, pipeline seletivo, entrevistas, scorecards)
 │   │   ├── 📄 OnboardingModule.vue         # Trilhas e checklists de integração
 │   │   └── 📄 LoginPage.vue                # Login, 2FA e fluxo "Esqueci minha senha"
-│   ├── 📂 router/                          # Rotas: /dashboard, /home, /funcionarios/:id, /colaboradores, etc.
+│   ├── 📂 router/                          # Rotas: /dashboard, /home, /autoatendimento, /recrutamento, etc.
 │   ├── 📄 store.ts                         # Estado reativo, apiFetch autenticado e RBAC
 │   └── 📄 App.vue                          # Componente raiz da aplicação
 ├── 📂 backend/                             # Backend Node.js / Express 5 API
 │   ├── 📂 src/
+│   │   ├── 📂 integrations/                # Camada Modular de Integrações
+│   │   │   ├── 📂 core/                    # Interfaces IntegrationAdapter, WebhookEvent e Registry
+│   │   │   ├── 📂 security/                # SSRF Shield, Assinatura HMAC SHA-256 e Sanitizador
+│   │   │   ├── 📂 webhooks/                # Dispatcher e Worker com Backoff Exponencial
+│   │   │   └── 📂 adapters/                # Adaptadores CSV (DP) e CBO ConectaGov/MTE
 │   │   ├── 📂 routes/
+│   │   │   ├── 📄 webhooks.routes.ts       # Gestão de webhooks, rotação de segredo e reenvio manual
+│   │   │   ├── 📄 integrations.routes.ts   # Configurações de API e carga/exportação CSV
 │   │   │   ├── 📄 dashboard.routes.ts      # API GET /api/dashboard (métricas consolidadas reais)
-│   │   │   ├── 📄 employees.routes.ts      # API GET/PUT /api/employees e /api/funcionarios
-│   │   │   ├── 📄 auth.routes.ts           # Login, JWT, MFA e recuperação de senha
-│   │   │   └── 📄 ...                      # Demais rotas (requests, documents, contracheques)
-│   │   ├── 📂 db/                          # SQLite (tabelas employees, employee_history, requests, documents)
+│   │   │   ├── 📄 employees.routes.ts      # API GET/PUT /api/employees (com evento employee.created)
+│   │   │   ├── 📄 requests.routes.ts       # API de chamados (com evento request.approved)
+│   │   │   ├── 📄 recruitment.routes.ts    # API ATS (com job.published e candidate.stage_changed)
+│   │   │   └── 📄 ...                      # Demais rotas (auth, documents, contracheques)
+│   │   ├── 📂 db/                          # SQLite (webhook_subscriptions, webhook_deliveries, etc.)
 │   ├── 📄 peoplehub.db                     # Banco de dados SQLite persistente
 │   └── 📄 .env.example                     # Modelo de variáveis de ambiente
 └── 📄 README.md                            # Documentação oficial do projeto

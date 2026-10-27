@@ -8,6 +8,8 @@ import { resolveTenant } from "../middleware/auth.js"
 import { authenticateRBAC, requirePermission, recordAuditLog } from "../middleware/rbac.js"
 import { roleHasPermission } from "../constants/rbac.js"
 import { sendWelcomeEmployeeEmail, generateSecureRandomPassword } from "../services/mail.service.js"
+import { dispatchWebhookEvent } from "../integrations/webhooks/dispatcher.js"
+import { buildEmployeeCreatedPayload } from "../integrations/security/sanitizer.js"
 
 const router = Router()
 
@@ -91,6 +93,304 @@ router.get("/", (req: Request, res: Response) => {
   })
 
   res.json({ ok: true, employees })
+})
+
+// GET /api/employees/me — Dossiê do próprio colaborador autenticado
+router.get("/me", (req: Request, res: Response) => {
+  const tenantId = req.tenantId || "tenant_default"
+  const db = getDB()
+  const userEmail = (req.access?.email || "").toLowerCase().trim()
+  const userName = (req.access?.name || "").toLowerCase().trim()
+
+  // Buscar colaborador pelo e-mail do usuário autenticado ou pelo nome
+  let empRes = db.exec(`SELECT * FROM employees WHERE tenant_id = ? AND lower(email) = ?`, [tenantId, userEmail])
+  if (!empRes.length || !empRes[0].values.length) {
+    empRes = db.exec(`SELECT * FROM employees WHERE tenant_id = ? AND lower(name) = ?`, [tenantId, userName])
+  }
+
+  if (!empRes.length || !empRes[0].values.length) {
+    // Se o usuário ainda não tiver uma ficha criada, retornar dados mínimos derivados do login
+    const minimalEmp = {
+      id: `emp_${req.access?.userId || "unknown"}`,
+      name: req.access?.name || "Colaborador",
+      email: req.access?.email || "",
+      department: req.access?.department || "Geral",
+      role: req.access?.role === "COLABORADOR" ? "Colaborador" : (req.access?.role || "Geral"),
+      status: "Ativo",
+      phone: "",
+      location: "Matriz",
+      manager: "",
+      hireDate: "",
+      tenure: "Recém-chegado",
+    }
+    res.json({
+      ok: true,
+      employee: minimalEmp,
+      documents: [],
+      personalDocuments: [],
+      administrativeDocuments: [],
+      requests: [],
+      vacation: {
+        diasDisponiveis: 30,
+        diasUtilizados: 0,
+        solicitacoesFerias: [],
+        proximoPeriodo: "Período Aquisitivo Vigente",
+        temFeriasPendentes: false,
+      },
+      history: [],
+    })
+    return
+  }
+
+  const columns = empRes[0].columns
+  const emp: any = {}
+  empRes[0].values[0].forEach((val, idx) => {
+    emp[columns[idx]] = val
+  })
+
+  // Permissões
+  const canViewSensitive = roleHasPermission(req.access?.role || "COLABORADOR", "employees.view_sensitive")
+  // Colaborador pode visualizar seus próprios dados pessoais; se for confidencial para terceiros, mantém mascarado
+  if (!emp.role) delete emp.role
+  if (!emp.department) delete emp.department
+  if (!emp.manager) delete emp.manager
+  if (!emp.hireDate) delete emp.hireDate
+
+  if (emp.customSchedulePattern && typeof emp.customSchedulePattern === "string") {
+    try { emp.customSchedulePattern = JSON.parse(emp.customSchedulePattern) } catch (_e) {}
+  }
+  if (emp.customMonthlyOverrides && typeof emp.customMonthlyOverrides === "string") {
+    try { emp.customMonthlyOverrides = JSON.parse(emp.customMonthlyOverrides) } catch (_e) {}
+  }
+
+  // 1. Documentos vinculados
+  const docsRes = db.exec(
+    `SELECT * FROM documents 
+     WHERE tenant_id = ? AND (employee_id = ? OR lower(employeeName) = ? OR lower(employeeName) = ?)
+     ORDER BY date DESC`,
+    [tenantId, emp.id, (emp.name || "").toLowerCase(), userEmail]
+  )
+  const documents: any[] = []
+  const personalDocuments: any[] = []
+  const administrativeDocuments: any[] = []
+
+  if (docsRes.length && docsRes[0].values.length) {
+    const docCols = docsRes[0].columns
+    docsRes[0].values.forEach((row) => {
+      const docItem: any = {}
+      docCols.forEach((col, idx) => { docItem[col] = row[idx] })
+      documents.push(docItem)
+      if (docItem.origin === "pessoal") {
+        personalDocuments.push(docItem)
+      } else {
+        administrativeDocuments.push(docItem)
+      }
+    })
+  }
+
+  // 2. Solicitações relacionadas
+  const reqRes = db.exec(
+    `SELECT * FROM requests 
+     WHERE tenant_id = ? AND (lower(requester) = ? OR lower(requester) = ?)
+     ORDER BY id DESC`,
+    [tenantId, (emp.name || "").toLowerCase(), userEmail]
+  )
+  const requests: any[] = []
+  const vacationRequests: any[] = []
+  if (reqRes.length && reqRes[0].values.length) {
+    const reqCols = reqRes[0].columns
+    reqRes[0].values.forEach((row) => {
+      const rItem: any = {}
+      reqCols.forEach((col, idx) => { rItem[col] = row[idx] })
+      if (rItem.details_json && typeof rItem.details_json === "string") {
+        try { rItem.details = JSON.parse(rItem.details_json) } catch (_e) {}
+      }
+      requests.push(rItem)
+      if (rItem.type?.toLowerCase().includes("ferias") || rItem.type?.toLowerCase().includes("férias")) {
+        vacationRequests.push(rItem)
+      }
+    })
+  }
+
+  // 3. Férias consolidadas
+  const diasAprovados = vacationRequests
+    .filter((r) => r.status?.toLowerCase() === "aprovado")
+    .reduce((acc, curr) => acc + (curr.details?.days || 15), 0)
+
+  const vacation = {
+    diasDisponiveis: Math.max(30 - diasAprovados, 0),
+    diasUtilizados: diasAprovados,
+    solicitacoesFerias: vacationRequests,
+    proximoPeriodo: "Período Aquisitivo Vigente",
+    temFeriasPendentes: vacationRequests.some((r) => ["pendente", "em análise", "em_analise", "correção solicitada"].includes(r.status?.toLowerCase())),
+  }
+
+  // 4. Histórico funcional
+  const histRes = db.exec(
+    `SELECT * FROM employee_history 
+     WHERE tenant_id = ? AND employee_id = ?
+     ORDER BY created_at DESC`,
+    [tenantId, emp.id]
+  )
+  const history: any[] = []
+  if (histRes.length && histRes[0].values.length) {
+    const histCols = histRes[0].columns
+    histRes[0].values.forEach((row) => {
+      const hItem: any = {}
+      histCols.forEach((col, idx) => { hItem[col] = row[idx] })
+      history.push(hItem)
+    })
+  }
+
+  // 5. Cálculo do tempo de empresa
+  let tenure = "Menos de 1 ano"
+  if (emp.hireDate) {
+    try {
+      const hireTime = new Date(emp.hireDate).getTime()
+      if (!isNaN(hireTime)) {
+        const diffMonths = Math.floor((Date.now() - hireTime) / (1000 * 60 * 60 * 24 * 30.4))
+        const years = Math.floor(diffMonths / 12)
+        const months = diffMonths % 12
+        if (years > 0) {
+          tenure = `${years} ano${years > 1 ? "s" : ""}${months > 0 ? ` e ${months} m${months > 1 ? "eses" : "ês"}` : ""}`
+        } else {
+          tenure = `${Math.max(months, 1)} m${months > 1 ? "eses" : "ês"}`
+        }
+      }
+    } catch (_e) {}
+  }
+  emp.tenure = tenure
+
+  res.json({
+    ok: true,
+    employee: emp,
+    documents,
+    personalDocuments,
+    administrativeDocuments,
+    requests,
+    vacation,
+    history,
+  })
+})
+
+// POST /api/employees/me/request-update — Solicitar alterações cadastrais (não aplicadas automaticamente)
+router.post("/me/request-update", (req: Request, res: Response) => {
+  const tenantId = req.tenantId || "tenant_default"
+  const db = getDB()
+  const userEmail = (req.access?.email || "").toLowerCase().trim()
+  const userName = req.access?.name || "Colaborador"
+
+  const { changes, justification, attachment } = req.body
+
+  if (!changes || typeof changes !== "object" || Object.keys(changes).length === 0) {
+    res.status(400).json({ ok: false, error: "Nenhuma alteração cadastral informada." })
+    return
+  }
+
+  // Buscar colaborador correspondente
+  let empRes = db.exec(`SELECT * FROM employees WHERE tenant_id = ? AND lower(email) = ?`, [tenantId, userEmail])
+  if (!empRes.length || !empRes[0].values.length) {
+    empRes = db.exec(`SELECT * FROM employees WHERE tenant_id = ? AND lower(name) = ?`, [tenantId, userName.toLowerCase()])
+  }
+
+  let emp: any = {}
+  if (empRes.length && empRes[0].values.length) {
+    const cols = empRes[0].columns
+    empRes[0].values[0].forEach((val, idx) => { emp[cols[idx]] = val })
+  } else {
+    emp = { id: `emp_${req.access?.userId}`, name: userName, email: userEmail, department: req.access?.department || "Geral" }
+  }
+
+  const allowedKeys = ["phone", "address", "city", "state", "cep", "notes", "emergencyContact", "bankInfo"]
+  const cleanChanges: Record<string, any> = {}
+  const originalValues: Record<string, any> = {}
+
+  for (const key of Object.keys(changes)) {
+    if (allowedKeys.includes(key) && changes[key] !== undefined) {
+      cleanChanges[key] = changes[key]
+      originalValues[key] = emp[key] || ""
+    }
+  }
+
+  if (Object.keys(cleanChanges).length === 0) {
+    res.status(400).json({ ok: false, error: "Campos informados não são permitidos para alteração cadastral direta." })
+    return
+  }
+
+  const requestId = `REQ-CAD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+  const date = new Date().toISOString().split("T")[0]
+  const status = "Em Análise"
+  const priority = "Média"
+  const type = "Atualização Cadastral"
+  const desc = justification || `Solicitação de alteração cadastral: ${Object.keys(cleanChanges).join(", ")}`
+
+  const detailsObj = {
+    created_by_id: req.access?.userId,
+    created_by_email: userEmail,
+    created_by_name: userName,
+    employee_id: emp.id,
+    employee_email: emp.email || userEmail,
+    changes: cleanChanges,
+    original: originalValues,
+    justification: justification || "",
+    attachment_name: attachment?.name || null,
+  }
+
+  db.run(
+    `INSERT INTO requests (id, type, requester, department, date, status, priority, description, details_json, tenant_id, justification, attachment_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      requestId,
+      type,
+      emp.name || userName,
+      emp.department || req.access?.department || "Geral",
+      date,
+      status,
+      priority,
+      desc,
+      JSON.stringify(detailsObj),
+      tenantId,
+      justification || null,
+      attachment?.name || null,
+    ]
+  )
+
+  // Criar notificação para o RH
+  const notifId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+  try {
+    db.run(
+      `INSERT INTO notifications (id, tenant_id, title, description, category, priority, link, read, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      [
+        notifId,
+        tenantId,
+        `Nova Solicitação Cadastral — ${emp.name || userName}`,
+        `Colaborador solicitou alteração de dados cadastrais (${Object.keys(cleanChanges).join(", ")}).`,
+        "solicitacao",
+        "alta",
+        "/solicitacoes",
+      ]
+    )
+  } catch (_e) {}
+
+  persist()
+
+  recordAuditLog({
+    userId: req.access?.userId,
+    userName: req.access?.name,
+    userRole: req.access?.role,
+    action: "EMPLOYEE_REQUEST_UPDATE",
+    entity: "employees",
+    entityId: emp.id,
+    details: { requestId, fields: Object.keys(cleanChanges) },
+    tenantId,
+  })
+
+  res.status(201).json({
+    ok: true,
+    id: requestId,
+    message: "Solicitação de alteração cadastral enviada com sucesso para análise do RH.",
+  })
 })
 
 // GET /api/employees/:id (ou /api/funcionarios/:id) — Perfil Completo Consolidado
@@ -377,6 +677,23 @@ router.post("/", requirePermission("employees.create"), async (req: Request, res
     details: { name: cleanName, role: userRole, department: userDept, email: cleanEmail },
     tenantId,
   })
+
+  // Disparar Webhook assíncrono de colaborador criado
+  dispatchWebhookEvent(
+    "employee.created",
+    buildEmployeeCreatedPayload({
+      id,
+      name: cleanName,
+      role: userRole,
+      department: userDept,
+      email: cleanEmail,
+      hireDate,
+      status: "Ativo",
+      contractType,
+      workSchedule,
+    }),
+    tenantId
+  ).catch((wErr) => console.error("[Webhook Error] employee.created:", wErr.message))
 
   // 3. Buscar nome do tenant para o e-mail corporativo
   let tenantName = "PeopleHub Matriz"

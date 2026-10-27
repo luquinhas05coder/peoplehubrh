@@ -61,25 +61,37 @@ function handleToast(msg: string) {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="generate-contracheque-title"
+    tabindex="-1"
+    @keydown.esc="emit('close')"
+  >
     <!-- Backdrop -->
     <div class="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="emit('close')" />
 
     <!-- Modal Container -->
-    <div class="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl bg-card border shadow-2xl z-10 p-6 sm:p-8 text-foreground flex flex-col">
+    <div class="relative w-full max-w-4xl max-h-[90dvh] overflow-y-auto scrollbar-thin rounded-2xl bg-card border shadow-2xl z-10 p-4 sm:p-8 text-foreground flex flex-col my-auto">
       <!-- Header do Modal -->
       <div class="flex items-center justify-between border-b pb-4">
         <div class="flex items-center gap-3">
           <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-500/10 text-teal-700 font-bold">
-            <Sparkles :size="24" />
+            <Sparkles :size="24" aria-hidden="true" />
           </div>
           <div>
-            <h2 class="text-xl font-bold">Gerador de Contra-Cheque por Inteligência Artificial</h2>
+            <h2 id="generate-contracheque-title" class="text-xl font-bold">Gerador de Contra-Cheque por Inteligência Artificial</h2>
             <p class="text-xs text-muted-foreground">Selecione um colaborador do backend para calcular impostos CLT e baixar o holerite em PDF.</p>
           </div>
         </div>
-        <button class="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" @click="emit('close')">
-          <X :size="20" />
+        <button
+          type="button"
+          class="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted cursor-pointer"
+          aria-label="Fechar gerador de contra-cheque"
+          @click="emit('close')"
+        >
+          <X :size="20" aria-hidden="true" />
         </button>
       </div>
 
@@ -87,10 +99,11 @@ function handleToast(msg: string) {
       <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 bg-muted/30 p-4 rounded-2xl border">
         <!-- Colaborador -->
         <div class="sm:col-span-2">
-          <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
-            <User :size="14" class="text-teal-600" /> Colaborador (Banco de Dados do Backend)
+          <label for="contracheque-employee" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
+            <User :size="14" class="text-teal-600" aria-hidden="true" /> Colaborador (Banco de Dados do Backend)
           </label>
           <select
+            id="contracheque-employee"
             v-model="selectedEmployeeId"
             class="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
@@ -102,10 +115,11 @@ function handleToast(msg: string) {
 
         <!-- Mês/Ano -->
         <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
-            <Calendar :size="14" class="text-teal-600" /> Competência (Mês/Ano)
+          <label for="contracheque-month" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
+            <Calendar :size="14" class="text-teal-600" aria-hidden="true" /> Competência (Mês/Ano)
           </label>
           <select
+            id="contracheque-month"
             v-model="selectedMonth"
             class="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
@@ -122,7 +136,7 @@ function handleToast(msg: string) {
           style="background-color: var(--color-primary)"
           @click="handleGenerateWithAI"
         >
-          <Sparkles :size="18" /> Processar & Gerar Contra-Cheque com IA
+          <Sparkles :size="18" aria-hidden="true" /> Processar & Gerar Contra-Cheque com IA
         </button>
       </div>
 

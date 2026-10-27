@@ -68,13 +68,14 @@ export function getMailTransporter(): Transporter {
       })
     }
 
+    const isProd = process.env.NODE_ENV === "production"
     return nodemailer.createTransport({
       host,
       port,
       secure,
       auth: { user, pass: cleanPass },
       tls: {
-        rejectUnauthorized: false, // Evita falhas em certificados auto-assinados de intranet
+        rejectUnauthorized: isProd, // Validação estrita de certificado TLS em produção
       },
     })
   }
@@ -192,7 +193,7 @@ export async function sendWelcomeEmployeeEmail(params: SendWelcomeEmailParams): 
     } else {
       console.log(`[SMTP SIMULADO] Disparo de e-mail realizado para ${to}:`)
       console.log(`  -> Para: ${to} (${name})`)
-      console.log(`  -> Senha Gerada: ${temporaryPassword}`)
+      console.log(`  -> Credencial gerada e enviada via canal corporativo seguro [Ocultada por LGPD]`)
       console.log(`  -> Assunto: [PeopleHub] Credenciais de Acesso à Plataforma — ${name}`)
       console.log(`  -> (Para envio real pela internet, preencha SMTP_HOST, SMTP_USER e SMTP_PASS no arquivo .env)`)
       return { ok: true, simulated: true, messageId: "simulated_" + Date.now() }
@@ -314,7 +315,7 @@ export async function sendForgotPasswordEmail(params: SendForgotPasswordEmailPar
     } else {
       console.log(`[SMTP SIMULADO] Disparo de redefinição de senha para ${to}:`)
       console.log(`  -> Para: ${to} (${name})`)
-      console.log(`  -> Senha Temporária: ${temporaryPassword}`)
+      console.log(`  -> Nova credencial gerada e transmitida ao destinatário [Ocultada por LGPD]`)
       return { ok: true, simulated: true, messageId: "simulated_" + Date.now() }
     }
   } catch (err: any) {

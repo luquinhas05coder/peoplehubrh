@@ -26,6 +26,7 @@ import {
   resolveConversation,
   reopenConversation,
   deleteConversation,
+  showToast,
 } from "../store"
 import ChannelBadge from "./ChannelBadge.vue"
 import UserAvatar from "./UserAvatar.vue"
@@ -40,14 +41,10 @@ const emit = defineEmits<{
 }>()
 
 const showTopicSelect = ref(false)
-const toastText = ref<string | null>(null)
 const showDeleteConfirm = ref(false)
 
 function triggerToast(msg: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2500)
+  showToast(msg, "success")
 }
 
 function handleAction(type: string) {
@@ -97,19 +94,6 @@ const statusOptions: { value: "aberto" | "pendente" | "resolvido"; label: string
 <template>
   <aside class="flex h-full flex-col bg-card relative" aria-label="Detalhes do colaborador">
     <!-- Toast local -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="absolute top-3 left-1/2 z-50 -translate-x-1/2 w-[90%] rounded-lg bg-foreground px-3 py-1.5 text-center text-xs font-medium text-background shadow-lg"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
 
     <header class="flex items-center justify-between border-b px-4 py-3">
       <h3 class="font-semibold">Detalhes</h3>

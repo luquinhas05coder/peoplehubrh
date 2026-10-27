@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
-import { currentUser, showToast, hasRole, isAuthenticated, type UserRole } from "../store"
+import { currentUser, showToast, hasRole, hasPermission, isAuthenticated, type UserRole } from "../store"
 
 const routes: RouteRecordRaw[] = [
   {
@@ -28,37 +28,76 @@ const routes: RouteRecordRaw[] = [
     path: "/colaboradores",
     name: "Colaboradores",
     component: () => import("../components/EmployeesModule.vue"),
-    meta: { tab: "colaboradores" },
+    meta: {
+      tab: "colaboradores",
+      requiresRoles: ["ADMIN", "RH", "DP", "GESTOR", "AUDITOR"] as UserRole[],
+      permission: "employees.view_all",
+    },
   },
   {
     path: "/documentos",
     name: "Documentos",
     component: () => import("../components/DocumentsModule.vue"),
-    meta: { tab: "documentos" },
+    meta: { tab: "documentos", permission: "documents.view" },
   },
   {
     path: "/onboarding",
     name: "Onboarding",
     component: () => import("../components/OnboardingModule.vue"),
-    meta: { tab: "onboarding", requiresRoles: ["ADMIN", "RH", "GESTOR"] as UserRole[] },
+    meta: {
+      tab: "onboarding",
+      requiresRoles: ["ADMIN", "RH", "DP", "GESTOR"] as UserRole[],
+    },
+  },
+  {
+    path: "/autoatendimento",
+    name: "Autoatendimento",
+    component: () => import("../components/SelfServicePortal.vue"),
+    meta: { tab: "autoatendimento" },
   },
   {
     path: "/solicitacoes",
     name: "Solicitacoes",
     component: () => import("../components/RequestsModule.vue"),
-    meta: { tab: "solicitacoes" },
+    meta: { tab: "solicitacoes", permission: "requests.view" },
   },
   {
     path: "/relatorios",
     name: "Relatorios",
     component: () => import("../components/ReportsModule.vue"),
-    meta: { tab: "relatorios", requiresRoles: ["ADMIN", "RH", "GESTOR"] as UserRole[] },
+    meta: {
+      tab: "relatorios",
+      requiresRoles: ["ADMIN", "RH", "DP", "GESTOR", "AUDITOR"] as UserRole[],
+      permission: "reports.view",
+    },
+  },
+  {
+    path: "/workflows",
+    name: "Workflows",
+    component: () => import("../components/WorkflowsModule.vue"),
+    meta: { tab: "workflows", permission: "workflows.view" },
+  },
+  {
+    path: "/calendario",
+    name: "Calendario",
+    component: () => import("../components/CorporateCalendarModule.vue"),
+    meta: { tab: "calendario", permission: "calendar.view" },
+  },
+  {
+    path: "/desempenho",
+    name: "Desempenho",
+    component: () => import("../components/PerformanceModule.vue"),
+    meta: { tab: "desempenho", permission: "performance.view" },
   },
   {
     path: "/dashboard",
     name: "Dashboard",
     component: () => import("../components/HomeWorkspace.vue"),
-    meta: { tab: "dashboard" },
+    meta: {
+      tab: "dashboard",
+      requiresRoles: ["ADMIN", "RH", "DP", "GESTOR", "AUDITOR"] as UserRole[],
+      permission: "dashboard.view",
+    },
   },
   {
     path: "/feed",
@@ -76,25 +115,52 @@ const routes: RouteRecordRaw[] = [
     path: "/usuarios",
     name: "Usuarios",
     component: () => import("../components/UsersModule.vue"),
-    meta: { tab: "usuarios", requiresRoles: ["ADMIN"] as UserRole[] },
+    meta: {
+      tab: "usuarios",
+      requiresRoles: ["ADMIN"] as UserRole[],
+      permission: "users.manage_roles",
+    },
   },
   {
     path: "/acesso-negado",
     name: "AcessoNegado",
     component: () => import("../components/AccessDeniedView.vue"),
-    meta: { tab: "acesso-negado" },
+    meta: { tab: "acesso-negado", isPublic: true },
   },
   {
     path: "/funcionarios/:id",
     name: "FuncionarioPerfil",
     component: () => import("../components/EmployeeProfilePage.vue"),
-    meta: { tab: "perfil_funcionario" },
+    meta: {
+      tab: "perfil_funcionario",
+      requiresRoles: ["ADMIN", "RH", "DP", "GESTOR", "AUDITOR"] as UserRole[],
+    },
   },
   {
     path: "/login",
     name: "Login",
     component: () => import("../components/LoginPage.vue"),
-    meta: { tab: "login" },
+    meta: { tab: "login", isPublic: true },
+  },
+  {
+    path: "/recrutamento",
+    name: "Recrutamento",
+    component: () => import("../components/RecruitmentModule.vue"),
+    meta: {
+      tab: "recrutamento",
+      requiresRoles: ["ADMIN", "RH", "RECRUTADOR", "GESTOR", "AUDITOR"] as UserRole[],
+      permission: "recruitment.view",
+    },
+  },
+  {
+    path: "/vagas-publicas",
+    name: "VagasPublicas",
+    component: () => import("../components/PublicJobsPage.vue"),
+    meta: { tab: "vagas_publicas", isPublic: true },
+  },
+  {
+    path: "/vagas",
+    redirect: "/vagas-publicas",
   },
   {
     path: "/:pathMatch(.*)*",
@@ -114,22 +180,37 @@ router.beforeEach((to, _from, next) => {
     return next("/home")
   }
 
+  const isPublicRoute = to.meta.isPublic === true || to.path === "/login" || to.path === "/vagas-publicas" || to.path === "/acesso-negado"
+
   // 2. Se o usuário NÃO está logado e tenta acessar rotas internas, vai para /login
-  if (!isAuthenticated.value && to.path !== "/login") {
+  if (!isAuthenticated.value && !isPublicRoute) {
     return next("/login")
   }
 
   // 3. Usuário com redefinição de senha obrigatória
-  if (currentUser.value?.mustChangePassword && to.path !== "/login") {
+  if (currentUser.value?.mustChangePassword && !isPublicRoute) {
     showToast("Ação bloqueada: você deve redefinir sua senha obrigatória antes de navegar na plataforma.", "warning")
     return next(false)
   }
 
-  // 4. Verificação de permissões RBAC por perfil
+  // 4. Verificação de permissões granulares e roles RBAC
   const requiredRoles = to.meta.requiresRoles as UserRole[] | undefined
+  const requiredPermission = to.meta.permission as string | undefined
+
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    // Redirecionamento amigável para colaboradores comuns que tentam acessar /colaboradores
+    if (to.path === "/colaboradores" && currentUser.value?.userRole === "COLABORADOR") {
+      return next("/autoatendimento")
+    }
+    showToast(`Acesso negado: seu perfil não possui a permissão '${requiredPermission}' para acessar esta página.`, "error")
+    return next("/acesso-negado")
+  }
+
   if (requiredRoles && requiredRoles.length > 0) {
-    if (!hasRole(requiredRoles)) {
-      showToast(`Acesso negado: esta página requer o perfil ${requiredRoles.join(" ou ")}.`, "error")
+    // Se a rota define uma permissão específica e o usuário a possui (via role ou override), prevalece a permissão granular
+    const hasExplicitPerm = requiredPermission ? hasPermission(requiredPermission) : false
+    if (!hasExplicitPerm && !hasRole(requiredRoles)) {
+      showToast(`Acesso negado: esta página requer um dos perfis: ${requiredRoles.join(", ")}.`, "error")
       return next("/acesso-negado")
     }
   }

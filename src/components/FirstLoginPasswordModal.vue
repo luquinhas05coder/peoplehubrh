@@ -66,19 +66,25 @@ async function handleSubmit() {
 
 <template>
   <!-- Backdrop Blur escuro bloqueando interação de fundo -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md transition-all">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 sm:p-4 backdrop-blur-md transition-all overflow-y-auto"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="first-login-title"
+    tabindex="-1"
+  >
     <div
-      class="w-full max-w-md overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl shadow-teal-950/20 transition-all animate-in fade-in zoom-in-95 duration-200"
+      class="w-full max-w-md overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl shadow-teal-950/20 transition-all animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin"
     >
       <!-- Header com gradiente sutil -->
       <div class="relative bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-700 px-6 py-6 text-white text-center">
         <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 shadow-inner backdrop-blur-sm border border-white/25">
-          <ShieldCheck :size="26" class="text-white" />
+          <ShieldCheck :size="26" class="text-white" aria-hidden="true" />
         </div>
         <span class="inline-block rounded-full bg-white/15 px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white/90 backdrop-blur-xs border border-white/20 mb-1.5">
           ✦ Primeiro Acesso Obrigatório
         </span>
-        <h2 class="text-xl font-bold tracking-tight text-white">
+        <h2 id="first-login-title" class="text-xl font-bold tracking-tight text-white">
           Defina sua Nova Senha Pessoal
         </h2>
         <p class="mt-1 text-xs text-white/80 max-w-xs mx-auto">
@@ -95,8 +101,8 @@ async function handleSubmit() {
           enter-from-class="opacity-0 -translate-y-1"
           leave-to-class="opacity-0 -translate-y-1"
         >
-          <div v-if="errorMessage" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-            <AlertCircle :size="16" class="shrink-0 text-red-500" />
+          <div v-if="errorMessage" id="first-login-error" role="alert" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+            <AlertCircle :size="16" class="shrink-0 text-red-500" aria-hidden="true" />
             <span>{{ errorMessage }}</span>
           </div>
         </transition>
@@ -104,30 +110,34 @@ async function handleSubmit() {
         <form class="space-y-4" @submit.prevent="handleSubmit">
           <!-- Campo: Nova Senha -->
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <label for="first-login-new-password" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Nova Senha
             </label>
             <div class="relative">
-              <Lock :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Lock :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="first-login-new-password"
                 v-model="newPassword"
                 :type="showNewPassword ? 'text' : 'password'"
                 required
                 placeholder="Defina sua nova senha"
+                :aria-invalid="!isLengthValid && !!newPassword"
+                :aria-describedby="errorMessage ? 'first-login-error' : undefined"
                 class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-11 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-teal-500"
               />
               <button
                 type="button"
                 class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+                :aria-label="showNewPassword ? 'Ocultar nova senha' : 'Exibir nova senha'"
                 @click="showNewPassword = !showNewPassword"
               >
-                <EyeOff v-if="showNewPassword" :size="16" />
-                <Eye v-else :size="16" />
+                <EyeOff v-if="showNewPassword" :size="16" aria-hidden="true" />
+                <Eye v-else :size="16" aria-hidden="true" />
               </button>
             </div>
 
             <!-- Barra de Força da Senha -->
-            <div v-if="newPassword" class="space-y-1 pt-1">
+            <div v-if="newPassword" class="space-y-1 pt-1" aria-live="polite">
               <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                 <div class="h-full transition-all duration-300 rounded-full" :class="strengthLabel.bar"></div>
               </div>
@@ -140,33 +150,37 @@ async function handleSubmit() {
 
           <!-- Campo: Confirmar Nova Senha -->
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <label for="first-login-confirm-password" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Confirmar Nova Senha
             </label>
             <div class="relative">
-              <Lock :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Lock :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
+                id="first-login-confirm-password"
                 v-model="confirmPassword"
                 :type="showConfirmPassword ? 'text' : 'password'"
                 required
                 placeholder="Digite a nova senha novamente"
+                :aria-invalid="!isMatchValid && !!confirmPassword"
+                :aria-describedby="errorMessage ? 'first-login-error' : undefined"
                 class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-11 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-teal-500"
               />
               <button
                 type="button"
                 class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+                :aria-label="showConfirmPassword ? 'Ocultar confirmação de senha' : 'Exibir confirmação de senha'"
                 @click="showConfirmPassword = !showConfirmPassword"
               >
-                <EyeOff v-if="showConfirmPassword" :size="16" />
-                <Eye v-else :size="16" />
+                <EyeOff v-if="showConfirmPassword" :size="16" aria-hidden="true" />
+                <Eye v-else :size="16" aria-hidden="true" />
               </button>
             </div>
             <!-- Validação visual se coincidem -->
             <p v-if="confirmPassword && isMatchValid" class="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1">
-              <CheckCircle2 :size="13" /> As senhas coincidem perfeitamente.
+              <CheckCircle2 :size="13" aria-hidden="true" /> Senhas conferem perfeitamente
             </p>
             <p v-else-if="confirmPassword && !isMatchValid" class="text-[11px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1">
-              <AlertCircle :size="13" /> As senhas ainda não coincidem.
+              <AlertCircle :size="13" aria-hidden="true" /> As senhas ainda não coincidem.
             </p>
           </div>
 

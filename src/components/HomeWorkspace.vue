@@ -12,33 +12,35 @@ import {
   Shield,
   Sparkles,
   ShieldAlert,
+  Briefcase,
+  GitMerge,
+  Calendar as CalendarIcon,
+  Award,
+  UserCheck,
 } from "lucide-vue-next"
-import { totalUnread, activeTab, currentUser, userPermissions, activeUserRole } from "../store"
-import { computed, ref, onMounted, watch } from "vue"
+import { totalUnread, activeTab, currentUser, activeUserRole, hasPermission, showToast } from "../store"
+import { computed, onMounted, watch, defineAsyncComponent } from "vue"
 import { useRouter, useRoute } from "vue-router"
-import EmployeesModule from "./EmployeesModule.vue"
-import RequestsModule from "./RequestsModule.vue"
-import DocumentsModule from "./DocumentsModule.vue"
-import ReportsModule from "./ReportsModule.vue"
-import OnboardingModule from "./OnboardingModule.vue"
-import DashboardView from "./DashboardView.vue"
-import EmployeeProfilePage from "./EmployeeProfilePage.vue"
-import UsersModule from "./UsersModule.vue"
-import CorporateFeedModule from "./CorporateFeedModule.vue"
-import AdverseEventsModule from "./AdverseEventsModule.vue"
+
+const EmployeesModule = defineAsyncComponent(() => import("./EmployeesModule.vue"))
+const RequestsModule = defineAsyncComponent(() => import("./RequestsModule.vue"))
+const DocumentsModule = defineAsyncComponent(() => import("./DocumentsModule.vue"))
+const ReportsModule = defineAsyncComponent(() => import("./ReportsModule.vue"))
+const OnboardingModule = defineAsyncComponent(() => import("./OnboardingModule.vue"))
+const DashboardView = defineAsyncComponent(() => import("./DashboardView.vue"))
+const EmployeeProfilePage = defineAsyncComponent(() => import("./EmployeeProfilePage.vue"))
+const UsersModule = defineAsyncComponent(() => import("./UsersModule.vue"))
+const CorporateFeedModule = defineAsyncComponent(() => import("./CorporateFeedModule.vue"))
+const AdverseEventsModule = defineAsyncComponent(() => import("./AdverseEventsModule.vue"))
+const WorkflowsModule = defineAsyncComponent(() => import("./WorkflowsModule.vue"))
+const CorporateCalendarModule = defineAsyncComponent(() => import("./CorporateCalendarModule.vue"))
+const PerformanceModule = defineAsyncComponent(() => import("./PerformanceModule.vue"))
+const RecruitmentModule = defineAsyncComponent(() => import("./RecruitmentModule.vue"))
+const SelfServicePortal = defineAsyncComponent(() => import("./SelfServicePortal.vue"))
 
 const emit = defineEmits<{
   (e: "open-chat"): void
 }>()
-
-const toastText = ref<string | null>(null)
-
-function showToast(msg: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2500)
-}
 
 const modules = [
   {
@@ -66,11 +68,43 @@ const modules = [
     active: true,
   },
   {
+    key: "recrutamento",
+    title: "Recrutamento & Seleção",
+    desc: "Pipeline de candidatos, vagas abertas, agendamento de entrevistas e métricas ATS.",
+    icon: Briefcase,
+    color: "#a855f7",
+    active: true,
+  },
+  {
     key: "requests",
     title: "Solicitações",
     desc: "Férias, benefícios e folha em um fluxo de aprovação organizado.",
     icon: CalendarCheck,
     color: "var(--color-instagram)",
+    active: true,
+  },
+  {
+    key: "workflows",
+    title: "Workflows RH",
+    desc: "Esteiras de aprovação multinível, admissão, rescisão e mudanças de função.",
+    icon: GitMerge,
+    color: "#3b82f6",
+    active: true,
+  },
+  {
+    key: "calendario",
+    title: "Calendário Corporativo",
+    desc: "Visão unificada de férias, feriados, treinamentos, entrevistas e marcos da empresa.",
+    icon: CalendarIcon,
+    color: "#06b6d4",
+    active: true,
+  },
+  {
+    key: "desempenho",
+    title: "Desempenho & Metas",
+    desc: "Ciclos de avaliação de desempenho 360°, autoavaliação, feedbacks e metas/OKRs.",
+    icon: Award,
+    color: "#f59e0b",
     active: true,
   },
   {
@@ -131,6 +165,28 @@ function syncTabWithRoute() {
     activeTab.value = "feed"
   } else if (route.path === "/eventos-adversos") {
     activeTab.value = "eventos-adversos"
+  } else if (route.path === "/workflows") {
+    activeTab.value = "workflows"
+  } else if (route.path === "/recrutamento") {
+    activeTab.value = "recrutamento"
+  } else if (route.path === "/calendario") {
+    activeTab.value = "calendario"
+  } else if (route.path === "/desempenho") {
+    activeTab.value = "desempenho"
+  } else if (route.path === "/colaboradores") {
+    activeTab.value = "colaboradores"
+  } else if (route.path === "/solicitacoes") {
+    activeTab.value = "solicitacoes"
+  } else if (route.path === "/documentos") {
+    activeTab.value = "documentos"
+  } else if (route.path === "/relatorios") {
+    activeTab.value = "relatorios"
+  } else if (route.path === "/onboarding") {
+    activeTab.value = "onboarding"
+  } else if (route.path === "/autoatendimento") {
+    activeTab.value = "autoatendimento"
+  } else if (route.path === "/usuarios") {
+    activeTab.value = "usuarios"
   } else if (route.meta?.tab) {
     activeTab.value = route.meta.tab as string
   }
@@ -151,9 +207,14 @@ function onModuleClick(mod: typeof modules[0]) {
     activeTab.value = mod.key
     const routeMap: Record<string, string> = {
       home: "/home",
+      autoatendimento: "/autoatendimento",
       dashboard: "/dashboard",
       people: "/colaboradores",
+      recrutamento: "/recrutamento",
       requests: "/solicitacoes",
+      workflows: "/workflows",
+      calendario: "/calendario",
+      desempenho: "/desempenho",
       docs: "/documentos",
       reports: "/relatorios",
       onboarding: "/onboarding",
@@ -163,9 +224,6 @@ function onModuleClick(mod: typeof modules[0]) {
     }
     if (routeMap[mod.key] && router) {
       router.push(routeMap[mod.key])
-    }
-    if (mod.key !== "people" && mod.key !== "requests" && mod.key !== "docs" && mod.key !== "reports" && mod.key !== "onboarding" && mod.key !== "dashboard" && mod.key !== "users" && mod.key !== "feed" && mod.key !== "adverse_events") {
-      showToast(`Módulo "${mod.title}" selecionado`)
     }
   }
 }
@@ -187,12 +245,33 @@ const roleHeaderInfo = computed(() => {
         title: "Plataforma de RH — PeopleHub",
         subtitle: "Gestão do clima, pastas de colaboradores, contracheques, férias e comunicados.",
       }
+    case "DP":
+      return {
+        badge: "Departamento Pessoal",
+        badgeClass: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30",
+        title: "Painel de Departamento Pessoal & Rotinas Trabalhistas",
+        subtitle: "Gestão burocrática, admissões, rescisões, cálculo da folha, ponto, férias e SST.",
+      }
     case "GESTOR":
       return {
         badge: "Gestor de Equipe",
         badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
         title: "Painel de Gestão de Equipe",
         subtitle: "Acompanhamento da sua equipe, aprovação de solicitações de férias e escala mensal.",
+      }
+    case "RECRUTADOR":
+      return {
+        badge: "Recrutamento & Seleção (ATS)",
+        badgeClass: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
+        title: "Painel de Atração & Seleção — ATS",
+        subtitle: "Gestão do pipeline de candidatos, publicação de vagas, condução de entrevistas e scorecards.",
+      }
+    case "AUDITOR":
+      return {
+        badge: "Auditoria & Compliance",
+        badgeClass: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+        title: "Painel de Auditoria, Conformidade & Logs",
+        subtitle: "Acesso unificado de consulta a registros funcionais, trilhas de auditoria e relatórios analíticos.",
       }
     case "COLABORADOR":
     default:
@@ -209,12 +288,20 @@ const visibleModules = computed(() => {
   const currentRole = activeUserRole.value
   const list = [
     {
+      key: "autoatendimento",
+      title: "Portal do Colaborador",
+      desc: "Autoatendimento, alterações cadastrais, solicitações e documentos pessoais.",
+      icon: UserCheck,
+      color: "#10b981",
+      active: true,
+    },
+    {
       key: "dashboard",
       title: "Dashboard",
       desc: "Visão executiva com indicadores de RH, movimentações e métricas em tempo real.",
       icon: LayoutDashboard,
       color: "var(--color-primary)",
-      active: true,
+      active: hasPermission("dashboard.view"),
     },
     {
       key: "chat",
@@ -232,7 +319,15 @@ const visibleModules = computed(() => {
         : "Ferramenta de criação e gestão de pastas com os dados e documentos de cada colaborador.",
       icon: Users,
       color: "var(--color-telegram)",
-      active: true,
+      active: hasPermission("employees.view_all") || hasPermission("employees.view_team") || currentRole === "COLABORADOR",
+    },
+    {
+      key: "recrutamento",
+      title: "Recrutamento & Seleção",
+      desc: "Pipeline de candidatos, publicação de vagas abertas, entrevistas e métricas do ATS.",
+      icon: Briefcase,
+      color: "#a855f7",
+      active: hasPermission("recruitment.view"),
     },
     {
       key: "requests",
@@ -240,7 +335,31 @@ const visibleModules = computed(() => {
       desc: "Férias, benefícios e folha em um fluxo de aprovação organizado.",
       icon: CalendarCheck,
       color: "var(--color-instagram)",
-      active: true,
+      active: hasPermission("requests.view"),
+    },
+    {
+      key: "workflows",
+      title: "Workflows RH",
+      desc: "Esteiras de aprovação multinível, admissão, rescisão e movimentações com SLA.",
+      icon: GitMerge,
+      color: "#3b82f6",
+      active: hasPermission("workflows.view") && currentRole !== "COLABORADOR",
+    },
+    {
+      key: "calendario",
+      title: "Calendário Corporativo",
+      desc: "Visão integrada de férias, feriados, treinamentos, entrevistas e eventos da empresa.",
+      icon: CalendarIcon,
+      color: "#06b6d4",
+      active: hasPermission("calendar.view"),
+    },
+    {
+      key: "desempenho",
+      title: "Desempenho & Metas",
+      desc: "Ciclos de avaliação de desempenho, autoavaliações, feedback 1:1 e metas/OKRs.",
+      icon: Award,
+      color: "#f59e0b",
+      active: hasPermission("performance.view"),
     },
     {
       key: "docs",
@@ -248,15 +367,15 @@ const visibleModules = computed(() => {
       desc: "Declarações, contratos e modelos gerados automaticamente.",
       icon: FileText,
       color: "var(--color-email)",
-      active: userPermissions.value.canManageDocs,
+      active: hasPermission("documents.view") && currentRole !== "COLABORADOR",
     },
     {
       key: "reports",
       title: "Relatórios",
-      desc: "Indicadores de atendimento, SLA e satisfação da equipe.",
+      desc: "Indicadores de atendimento, SLA, custos e construtor dinâmico.",
       icon: BarChart3,
       color: "var(--color-accent)",
-      active: userPermissions.value.canViewReports,
+      active: hasPermission("reports.view"),
     },
     {
       key: "onboarding",
@@ -264,15 +383,15 @@ const visibleModules = computed(() => {
       desc: "Trilhas de integração e checklists para novos colaboradores.",
       icon: GraduationCap,
       color: "var(--color-success)",
-      active: currentRole !== "COLABORADOR",
+      active: ["ADMIN", "RH", "GESTOR"].includes(currentRole),
     },
     {
       key: "users",
-      title: "Gestão de Usuários (RBAC)",
+      title: "Gestão de Usuários & RBAC",
       desc: "Controle de acessos baseado em perfis, alteração de funções e auditoria.",
       icon: Shield,
       color: "#f43f5e",
-      active: currentRole === "ADMIN",
+      active: hasPermission("users.view"),
     },
     {
       key: "feed",
@@ -293,45 +412,42 @@ const visibleModules = computed(() => {
   ]
   return list.filter((m) => m.active)
 })
+
+const activeModuleComponent = computed(() => {
+  if (activeTab.value === "perfil_funcionario" || isEmployeeProfileRoute.value) return EmployeeProfilePage
+  if (activeTab.value === "people" || activeTab.value === "colaboradores") return EmployeesModule
+  if (activeTab.value === "requests" || activeTab.value === "solicitacoes") return RequestsModule
+  if (activeTab.value === "recrutamento" || activeTab.value === "recruitment") return RecruitmentModule
+  if (activeTab.value === "autoatendimento") return SelfServicePortal
+  if (activeTab.value === "workflows") return WorkflowsModule
+  if (activeTab.value === "calendario") return CorporateCalendarModule
+  if (activeTab.value === "desempenho") return PerformanceModule
+  if (activeTab.value === "docs" || activeTab.value === "documentos") return DocumentsModule
+  if (activeTab.value === "reports" || activeTab.value === "relatorios") return ReportsModule
+  if (activeTab.value === "onboarding") return OnboardingModule
+  if (activeTab.value === "users" || activeTab.value === "usuarios") return UsersModule
+  if (activeTab.value === "feed") return CorporateFeedModule
+  if (activeTab.value === "adverse_events" || activeTab.value === "eventos-adversos") return AdverseEventsModule
+  return null
+})
 </script>
 
 <template>
   <!-- Módulos Específicos -->
-  <main v-if="activeTab === 'dashboard'" class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-5 sm:p-8">
+  <main v-if="activeTab === 'dashboard'" class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-3.5 sm:p-6 lg:p-8">
     <div class="mx-auto w-full max-w-6xl">
       <DashboardView />
     </div>
   </main>
-  <EmployeeProfilePage v-else-if="activeTab === 'perfil_funcionario' || isEmployeeProfileRoute" />
-  <EmployeesModule v-else-if="activeTab === 'people' || activeTab === 'colaboradores'" />
-  <RequestsModule v-else-if="activeTab === 'requests' || activeTab === 'solicitacoes'" />
-  <DocumentsModule v-else-if="activeTab === 'docs' || activeTab === 'documentos'" />
-  <ReportsModule v-else-if="activeTab === 'reports' || activeTab === 'relatorios'" />
-  <OnboardingModule v-else-if="activeTab === 'onboarding'" />
-  <UsersModule v-else-if="activeTab === 'users' || activeTab === 'usuarios'" />
-  <CorporateFeedModule v-else-if="activeTab === 'feed'" />
-  <AdverseEventsModule v-else-if="activeTab === 'adverse_events' || activeTab === 'eventos-adversos'" />
+  <KeepAlive v-else-if="activeModuleComponent" :max="6">
+    <component :is="activeModuleComponent" :key="activeTab" />
+  </KeepAlive>
 
   <!-- Workspace Padrão / Início apenas com os Módulos (como estava antes) -->
   <main v-else class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative">
-    <!-- Toast local -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="fixed top-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-xl"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
-
     <!-- Cabeçalho -->
-    <header class="border-b bg-card px-5 py-5 sm:px-8">
-      <div class="flex items-center gap-2">
+    <header class="border-b bg-card px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+      <div class="flex items-center gap-2 flex-wrap">
         <p class="text-sm text-muted-foreground">Olá, <strong>{{ currentUser?.name || 'Usuário' }}</strong> 👋</p>
         <span
           class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border shadow-2xs"
@@ -340,32 +456,32 @@ const visibleModules = computed(() => {
           {{ roleHeaderInfo.badge }}
         </span>
       </div>
-      <h1 class="mt-0.5 text-balance text-2xl font-bold tracking-tight sm:text-3xl">
+      <h1 class="mt-0.5 text-balance text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">
         {{ roleHeaderInfo.title }}
       </h1>
-      <p class="mt-1 max-w-2xl text-pretty text-sm text-muted-foreground">
+      <p class="mt-1 max-w-2xl text-pretty text-xs sm:text-sm text-muted-foreground">
         {{ roleHeaderInfo.subtitle }}
       </p>
     </header>
 
-    <div class="mx-auto w-full max-w-6xl px-5 py-6 sm:px-8">
+    <div class="mx-auto w-full max-w-6xl px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
       <!-- Módulos -->
       <section aria-label="Módulos da plataforma">
         <div class="mb-3 flex items-center justify-between">
-          <h2 class="text-lg font-semibold">Módulos</h2>
+          <h2 class="text-base sm:text-lg font-semibold">Módulos</h2>
           <button
-            class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted"
+            class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground transition-colors hover:bg-muted cursor-pointer"
             @click="showToast('Adição de novos módulos personalizada disponível no plano Enterprise.')"
           >
             <Plus :size="16" /> Novo módulo
           </button>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="grid gap-3.5 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <button
             v-for="m in visibleModules"
             :key="m.key"
-            class="group flex flex-col items-start rounded-2xl border bg-card p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+            class="group flex flex-col items-start rounded-2xl border bg-card p-4 sm:p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
             :class="activeTab === m.key || (m.key === 'chat' && activeTab === 'home') ? 'ring-2' : ''"
             :style="activeTab === m.key || (m.key === 'chat' && activeTab === 'home') ? { '--tw-ring-color': m.color } : {}"
             :aria-label="m.title"

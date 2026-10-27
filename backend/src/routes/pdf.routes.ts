@@ -3,8 +3,14 @@
  */
 import { Router, type Request, type Response } from "express"
 import PDFDocument from "pdfkit"
+import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC } from "../middleware/rbac.js"
 
 const router = Router()
+
+// Proteger rota de emissão de PDF de holerite com autenticação
+router.use(resolveTenant)
+router.use(authenticateRBAC)
 
 interface HoleriteItem {
   code: string
@@ -58,6 +64,16 @@ router.post("/holerite", (req: Request, res: Response) => {
       salary = "R$ 6.500,00",
       month = "08/2026",
     } = req.body
+
+    // Verificação de escopo: COLABORADOR só pode emitir PDF para si mesmo
+    const scope = req.access?.scope || "OWN"
+    const userName = (req.access?.name || "").toLowerCase()
+    const targetName = String(employeeName).toLowerCase().trim()
+
+    if (scope === "OWN" && targetName !== userName && !userName.includes(targetName)) {
+      res.status(403).json({ ok: false, error: "Acesso negado: Você só pode emitir contra-cheques em seu próprio nome." })
+      return
+    }
 
     const cleanSal = parseFloat(String(salary).replace(/[^\d,-]/g, "").replace(",", "."))
     const salarioBase = isNaN(cleanSal) || cleanSal <= 0 ? 6500.00 : cleanSal

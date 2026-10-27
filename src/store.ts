@@ -51,6 +51,15 @@ export interface ToastNotification {
 export const activeToasts = ref<ToastNotification[]>([])
 
 export function showToast(title: string, type: "success" | "info" | "warning" | "error" = "success") {
+  // Evita notificações duplicadas idênticas ativas simultaneamente
+  const exists = activeToasts.value.some((t) => t.title === title && t.type === type)
+  if (exists) return
+
+  // Limita o máximo de toasts concorrentes a 4 para não poluir a tela
+  if (activeToasts.value.length >= 4) {
+    activeToasts.value.shift()
+  }
+
   const id = Date.now() + Math.random()
   activeToasts.value.push({ id, title, type })
   setTimeout(() => {
@@ -59,8 +68,8 @@ export function showToast(title: string, type: "success" | "info" | "warning" | 
 }
 
 /* ─── Auth State & RBAC (Perfis de Acesso) ──────────────── */
-export type UserRoleType = "rh" | "dp" | "ti" | "colaborador"
-export type UserRole = "ADMIN" | "RH" | "GESTOR" | "COLABORADOR"
+export type UserRoleType = "rh" | "dp" | "ti" | "colaborador" | "recrutador" | "auditor"
+export type UserRole = "ADMIN" | "RH" | "DP" | "GESTOR" | "COLABORADOR" | "RECRUTADOR" | "AUDITOR"
 
 export interface AuthUser {
   id: string
@@ -77,6 +86,7 @@ export interface AuthUser {
   twoFactorEnabled?: boolean
   mustChangePassword?: boolean
   status?: string
+  permissions?: string[]
 }
 
 export const PRESET_USERS: Record<string, AuthUser> = {
@@ -124,7 +134,7 @@ export const PRESET_USERS: Record<string, AuthUser> = {
     name: "Carlos Eduardo Souza",
     email: "dp@peoplehub.com.br",
     role: "Especialista em DP & Folha",
-    userRole: "RH",
+    userRole: "DP",
     roleType: "dp",
     initials: "CS",
     department: "Departamento Pessoal",
@@ -154,6 +164,32 @@ export const PRESET_USERS: Record<string, AuthUser> = {
     roleType: "colaborador",
     initials: "GS",
     department: "TI",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
+  },
+  recrutador: {
+    id: "usr_recrutador",
+    name: "Renata Recrutadora",
+    email: "recrutador@peoplehub.com.br",
+    role: "Especialista em Atração & Seleção",
+    userRole: "RECRUTADOR",
+    roleType: "recrutador",
+    initials: "RR",
+    department: "Recrutamento & Seleção",
+    tenantId: "tenant_default",
+    tenantName: "PeopleHub Matriz",
+    tenantSlug: "matriz",
+  },
+  auditor: {
+    id: "usr_auditor",
+    name: "Arthur Auditor",
+    email: "auditor@peoplehub.com.br",
+    role: "Auditor Interno & Compliance",
+    userRole: "AUDITOR",
+    roleType: "auditor",
+    initials: "AA",
+    department: "Compliance & Auditoria",
     tenantId: "tenant_default",
     tenantName: "PeopleHub Matriz",
     tenantSlug: "matriz",
@@ -215,10 +251,21 @@ export function getAuthHeaders(): Record<string, string> {
   return headers
 }
 
+export function handleSessionExpired(): void {
+  if (!isAuthenticated.value) return
+  clearAuthSession()
+  sessionToken.value = ""
+  pendingToken.value = ""
+  isAuthenticated.value = false
+  currentUser.value = null
+  authStep.value = "login"
+  showToast("Sua sessão expirou por inatividade. Faça login novamente.", "warning")
+}
+
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const authHeaders = getAuthHeaders()
   const customHeaders = (options.headers || {}) as Record<string, string>
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     credentials: "include",
     headers: {
@@ -226,34 +273,107 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
       ...customHeaders,
     },
   })
+
+  // Intercepta 401 em chamadas autenticadas da aplicação (não em rotas de tentativa de login/registro)
+  if (
+    res.status === 401 &&
+    isAuthenticated.value &&
+    !url.includes("/api/auth/login") &&
+    !url.includes("/api/auth/register")
+  ) {
+    handleSessionExpired()
+  }
+
+  return res
 }
 
 
 export const ROLE_PERMISSIONS_FRONTEND: Record<UserRole, readonly string[]> = {
   ADMIN: [
-    "dashboard.view", "users.view", "users.create", "users.update", "users.delete", "users.manage_roles",
-    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.delete", "employees.view_sensitive",
+    "dashboard.view", "users.view", "users.create", "users.update", "users.delete", "users.manage", "users.manage_roles", "users.manage_permissions",
+    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.delete", "employees.view_sensitive", "employees.export",
     "schedules.view", "schedules.manage", "payroll.view", "payroll.manage",
-    "documents.view", "documents.create", "documents.upload", "documents.delete",
-    "reports.view", "reports.export", "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
-    "requests.view", "requests.create", "requests.approve", "requests.reject", "audit.view", "settings.view", "settings.update",
+    "documents.view", "documents.create", "documents.upload", "documents.delete", "documents.export",
+    "reports.view", "reports.export", "reports.custom_build", "reports.saved_manage",
+    "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
+    "requests.view", "requests.create", "requests.approve", "requests.reject", "requests.delete",
+    "workflows.view", "workflows.create", "workflows.execute", "workflows.manage",
+    "notifications.view", "notifications.manage",
+    "calendar.view", "calendar.manage",
+    "performance.view", "performance.create_cycle", "performance.evaluate", "performance.manage_goals",
+    "recruitment.view", "recruitment.manage", "recruitment.evaluate", "recruitment.delete",
+    "audit.view", "settings.view", "settings.update",
   ],
   RH: [
     "dashboard.view",
-    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.delete", "employees.view_sensitive",
+    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.delete", "employees.view_sensitive", "employees.export",
     "schedules.view", "schedules.manage", "payroll.view", "payroll.manage",
-    "documents.view", "documents.create", "documents.upload", "documents.delete",
-    "reports.view", "reports.export", "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
-    "requests.view", "requests.create", "requests.approve", "requests.reject", "audit.view", "settings.view",
+    "documents.view", "documents.create", "documents.upload", "documents.delete", "documents.export",
+    "reports.view", "reports.export", "reports.custom_build", "reports.saved_manage",
+    "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
+    "requests.view", "requests.create", "requests.approve", "requests.reject",
+    "workflows.view", "workflows.create", "workflows.execute", "workflows.manage",
+    "notifications.view", "notifications.manage",
+    "calendar.view", "calendar.manage",
+    "performance.view", "performance.create_cycle", "performance.evaluate", "performance.manage_goals",
+    "recruitment.view", "recruitment.manage", "recruitment.evaluate", "recruitment.delete",
+    "audit.view", "settings.view",
+  ],
+  DP: [
+    "dashboard.view",
+    "employees.view_all", "employees.view_team", "employees.view_own", "employees.create", "employees.update", "employees.view_sensitive", "employees.export",
+    "schedules.view", "schedules.manage", "payroll.view", "payroll.manage",
+    "documents.view", "documents.create", "documents.upload", "documents.delete", "documents.export",
+    "reports.view", "reports.export", "reports.custom_build",
+    "vacations.view", "vacations.request", "vacations.approve", "vacations.reject",
+    "requests.view", "requests.create", "requests.approve", "requests.reject",
+    "workflows.view", "workflows.execute",
+    "notifications.view",
+    "calendar.view",
   ],
   GESTOR: [
     "dashboard.view",
     "employees.view_team", "employees.view_own",
     "schedules.view", "schedules.manage",
     "documents.view", "documents.upload",
-    "reports.view",
+    "reports.view", "reports.custom_build",
     "vacations.view", "vacations.approve", "vacations.reject",
     "requests.view", "requests.create", "requests.approve", "requests.reject",
+    "workflows.view", "workflows.execute",
+    "notifications.view",
+    "calendar.view",
+    "performance.view", "performance.evaluate", "performance.manage_goals",
+    "recruitment.view", "recruitment.evaluate",
+  ],
+  RECRUTADOR: [
+    "recruitment.view", "recruitment.manage", "recruitment.evaluate", "recruitment.delete",
+    "employees.view_own",
+    "schedules.view",
+    "payroll.view",
+    "documents.view", "documents.upload",
+    "vacations.view", "vacations.request",
+    "requests.view", "requests.create",
+    "calendar.view",
+    "notifications.view",
+    "performance.view",
+  ],
+  AUDITOR: [
+    "dashboard.view",
+    "users.view",
+    "employees.view_all", "employees.view_team", "employees.view_own", "employees.view_sensitive", "employees.export",
+    "schedules.view",
+    "payroll.view",
+    "documents.view", "documents.export",
+    "reports.view", "reports.export",
+    "vacations.view",
+    "requests.view",
+    "workflows.view",
+    "notifications.view",
+    "calendar.view",
+    "performance.view",
+    "recruitment.view",
+    "audit.view",
+    "settings.view",
   ],
   COLABORADOR: [
     "employees.view_own",
@@ -262,6 +382,10 @@ export const ROLE_PERMISSIONS_FRONTEND: Record<UserRole, readonly string[]> = {
     "documents.view", "documents.upload",
     "vacations.view", "vacations.request",
     "requests.view", "requests.create",
+    "workflows.view",
+    "notifications.view",
+    "calendar.view",
+    "performance.view", "performance.evaluate",
   ],
 }
 
@@ -269,7 +393,10 @@ export function normalizeUserRole(rawRole?: string | null): UserRole {
   if (!rawRole) return "COLABORADOR"
   const upper = rawRole.trim().toUpperCase()
   if (upper === "ADMIN" || upper.includes("ADMINISTRADOR") || upper === "TI") return "ADMIN"
-  if (upper === "RH" || upper.includes("RECURSOS HUMANOS") || upper.includes("DHO") || upper === "DP") return "RH"
+  if (upper === "AUDITOR" || upper.includes("AUDITORIA") || upper.includes("COMPLIANCE")) return "AUDITOR"
+  if (upper === "RECRUTADOR" || upper.includes("RECRUITER") || upper.includes("SELECAO") || upper.includes("R&S")) return "RECRUTADOR"
+  if (upper === "DP" || upper.includes("DEPARTAMENTO PESSOAL") || upper.includes("FOLHA") || upper.includes("PESSOAL")) return "DP"
+  if (upper === "RH" || upper.includes("RECURSOS HUMANOS") || upper.includes("DHO")) return "RH"
   if (upper === "GESTOR" || upper.includes("GERENTE") || upper.includes("COORDENADOR") || upper.includes("LIDER")) return "GESTOR"
   return "COLABORADOR"
 }
@@ -286,6 +413,9 @@ export function hasRole(requiredRoles: UserRole | UserRole[]): boolean {
 }
 
 export function hasPermission(permission: string): boolean {
+  if (currentUser.value?.permissions && Array.isArray(currentUser.value.permissions)) {
+    return currentUser.value.permissions.includes(permission)
+  }
   const permissions = ROLE_PERMISSIONS_FRONTEND[activeUserRole.value] || []
   return permissions.includes(permission)
 }
@@ -299,6 +429,8 @@ export const userRoleType = computed<UserRoleType>(() => {
   const d = (currentUser.value.department || "").toLowerCase()
   const e = (currentUser.value.email || "").toLowerCase()
   if (e.includes("admin@") || e.includes("ti@") || r.includes("admin") || r.includes("ti") || r.includes("sistemas") || d.includes("tecnologia") || d.includes("t.i")) return "ti"
+  if (e.includes("auditor@") || r.includes("auditor") || d.includes("compliance") || d.includes("auditoria")) return "auditor"
+  if (e.includes("recrutador@") || r.includes("recrutador") || d.includes("recrutamento") || d.includes("seleção") || d.includes("selecao")) return "recrutador"
   if (e.includes("dp@") || r.includes("dp") || r.includes("pessoal") || r.includes("folha") || d.includes("departamento pessoal")) return "dp"
   if (e.includes("colaborador@") || r.includes("colaborador") || r.includes("desenvolvedor") || r.includes("designer")) return "colaborador"
   return "rh"
@@ -311,7 +443,9 @@ export const userPermissions = computed(() => {
   const isAnalistaOuGestor =
     currentRole === "ADMIN" ||
     currentRole === "RH" ||
+    currentRole === "DP" ||
     currentRole === "GESTOR" ||
+    currentRole === "AUDITOR" ||
     role === "rh" ||
     role === "dp" ||
     userTitle.includes("analista") ||
@@ -328,32 +462,43 @@ export const userPermissions = computed(() => {
     userRole: currentRole,
     isAdmin: currentRole === "ADMIN",
     isRH: currentRole === "RH",
+    isDP: currentRole === "DP" || role === "dp",
     isGestor: currentRole === "GESTOR",
-    isDP: role === "dp",
+    isRecrutador: currentRole === "RECRUTADOR",
+    isAuditor: currentRole === "AUDITOR",
     isTI: role === "ti" || currentRole === "ADMIN",
     isColaborador: currentRole === "COLABORADOR",
     isTecnico,
     isAnalistaOuGestor,
-    canManageUsers: currentRole === "ADMIN",
-    canViewAllEmployees: ["ADMIN", "RH"].includes(currentRole),
-    canViewTeamEmployees: ["ADMIN", "RH", "GESTOR"].includes(currentRole),
-    canApproveRequests: ["ADMIN", "RH", "GESTOR"].includes(currentRole),
+    canManageUsers: hasPermission("users.view") || hasPermission("users.manage_roles"),
+    canViewAllEmployees: hasPermission("employees.view_all"),
+    canViewTeamEmployees: hasPermission("employees.view_team") || hasPermission("employees.view_all"),
+    canApproveRequests: hasPermission("requests.approve"),
     canManageChat: true,
-    canManagePeople: currentRole === "ADMIN" || currentRole === "RH",
-    canManageTraining: currentRole !== "COLABORADOR",
-    canManagePayroll: currentRole === "ADMIN" || currentRole === "RH" || role === "dp",
-    canManageDocs: currentRole !== "COLABORADOR",
-    canViewReports: currentRole !== "COLABORADOR",
-    canManageSettings: currentRole === "ADMIN" || currentRole === "RH",
+    canManagePeople: hasPermission("employees.create") || hasPermission("employees.update"),
+    canManageTraining: hasPermission("onboarding.view") || currentRole === "ADMIN" || currentRole === "RH",
+    canManagePayroll: hasPermission("payroll.manage") || hasPermission("payroll.view"),
+    canManageDocs: hasPermission("documents.create") || hasPermission("documents.upload"),
+    canViewReports: hasPermission("reports.view"),
+    canManageSettings: hasPermission("settings.update"),
     canManageTiChecklist: currentRole === "ADMIN" || currentRole === "RH",
-    canViewSchedule: true, // Visível ao colaborador, técnico e superiores
-    canEditSchedule: currentRole === "ADMIN" || currentRole === "RH" || currentRole === "GESTOR", // Editável por Gestor, RH e Admin
+    canViewSchedule: hasPermission("schedules.view"),
+    canEditSchedule: hasPermission("schedules.manage"),
+    canManageWorkflows: hasPermission("workflows.manage") || hasPermission("workflows.create"),
+    canViewWorkflows: hasPermission("workflows.view"),
+    canManageCalendar: hasPermission("calendar.view"),
+    canManagePerformance: hasPermission("performance.create_cycle") || hasPermission("performance.manage_goals"),
+    canEvaluatePerformance: hasPermission("performance.evaluate"),
+    canBuildCustomReports: hasPermission("reports.custom_build"),
+    canViewRecruitment: hasPermission("recruitment.view"),
+    canManageRecruitment: hasPermission("recruitment.manage"),
   }
 })
 
 export async function loginAsPreset(roleType: UserRoleType) {
   const user = PRESET_USERS[roleType]
   currentUser.value = { ...user }
+  requests.value = []
   isAuthenticated.value = true
   authStep.value = "done"
 
@@ -718,6 +863,7 @@ export async function logoutUser(): Promise<void> {
   pendingToken.value = ""
   isAuthenticated.value = false
   currentUser.value = null
+  requests.value = []
   authStep.value = "login"
   mfaCode.value = ""
   mfaPendingUser = null
@@ -775,11 +921,13 @@ export async function sendMessage(conversationId: string, text: string) {
 
   // Salvar mensagem no backend
   try {
-    await fetch(`/api/conversations/${conversationId}/messages`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, direction: "out" }),
     })
+    if (!res.ok) {
+      console.warn("Falha ao salvar mensagem no backend:", res.status)
+    }
   } catch (_e) {}
 }
 
@@ -836,9 +984,8 @@ export async function createConversation(payload: {
   chatOpen.value = true
 
   try {
-    const res = await fetch("/api/conversations", {
+    const res = await apiFetch("/api/conversations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: payload.name,
         channel: payload.channel,
@@ -944,9 +1091,8 @@ export async function startDirectChatForAttendance(): Promise<Conversation> {
   chatOpen.value = true
 
   try {
-    const res = await fetch("/api/conversations", {
+    const res = await apiFetch("/api/conversations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: colabName,
         channel: "interno",
@@ -971,47 +1117,71 @@ export async function startDirectChatForAttendance(): Promise<Conversation> {
 
 export async function setStatus(conversationId: string, status: "aberto" | "pendente" | "resolvido") {
   const conv = conversations.value.find((c) => c.id === conversationId)
+  const prevStatus = conv?.status
   if (conv) {
     conv.status = status
   }
   try {
-    await fetch(`/api/conversations/${conversationId}`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     })
-  } catch (_e) {}
-  showToast(`Status alterado para "${status}"`, "info")
+    if (!res.ok) {
+      if (conv && prevStatus) conv.status = prevStatus
+      showToast("Não foi possível alterar o status no servidor.", "error")
+      return
+    }
+    showToast(`Status alterado para "${status}"`, "info")
+  } catch (_e) {
+    if (conv && prevStatus) conv.status = prevStatus
+    showToast("Falha de conexão ao atualizar status.", "error")
+  }
 }
 
 export async function setPriority(conversationId: string, priority: Priority) {
   const conv = conversations.value.find((c) => c.id === conversationId)
+  const prevPriority = conv?.priority
   if (conv) {
     conv.priority = priority
   }
   try {
-    await fetch(`/api/conversations/${conversationId}`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ priority }),
     })
-  } catch (_e) {}
-  showToast(`Prioridade alterada para "${priority}"`, "info")
+    if (!res.ok) {
+      if (conv && prevPriority) conv.priority = prevPriority
+      showToast("Não foi possível alterar a prioridade no servidor.", "error")
+      return
+    }
+    showToast(`Prioridade alterada para "${priority}"`, "info")
+  } catch (_e) {
+    if (conv && prevPriority) conv.priority = prevPriority
+    showToast("Falha de conexão ao alterar prioridade.", "error")
+  }
 }
 
 export async function setTopic(conversationId: string, topic: Topic) {
   const conv = conversations.value.find((c) => c.id === conversationId)
+  const prevTopic = conv?.topic
   if (conv) {
     conv.topic = topic
   }
   try {
-    await fetch(`/api/conversations/${conversationId}`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topic }),
     })
-  } catch (_e) {}
-  showToast(`Tópico alterado para "${topic}"`, "info")
+    if (!res.ok) {
+      if (conv && prevTopic) conv.topic = prevTopic
+      showToast("Não foi possível alterar o tópico no servidor.", "error")
+      return
+    }
+    showToast(`Tópico alterado para "${topic}"`, "info")
+  } catch (_e) {
+    if (conv && prevTopic) conv.topic = prevTopic
+    showToast("Falha de conexão ao alterar tópico.", "error")
+  }
 }
 
 export async function deleteConversation(conversationId: string): Promise<boolean> {
@@ -1019,77 +1189,99 @@ export async function deleteConversation(conversationId: string): Promise<boolea
   if (index === -1) return false
 
   const name = conversations.value[index].name
-  conversations.value.splice(index, 1)
-
-  // Se a conversa excluída era a ativa, mudar para a próxima
-  if (activeId.value === conversationId) {
-    const nextAvailable = conversations.value.find((c) => c.status !== "resolvido") || conversations.value[0]
-    activeId.value = nextAvailable ? nextAvailable.id : ""
-  }
 
   try {
-    await fetch(`/api/conversations/${conversationId}`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}`, {
       method: "DELETE",
     })
-  } catch (_e) {}
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      showToast(data.error || "Erro ao excluir conversa no servidor.", "error")
+      return false
+    }
 
-  showToast(`Conversa com ${name} excluída com sucesso!`, "success")
-  return true
+    conversations.value.splice(index, 1)
+
+    // Se a conversa excluída era a ativa, mudar para a próxima
+    if (activeId.value === conversationId) {
+      const nextAvailable = conversations.value.find((c) => c.status !== "resolvido") || conversations.value[0]
+      activeId.value = nextAvailable ? nextAvailable.id : ""
+    }
+
+    showToast(`Conversa com ${name} excluída com sucesso!`, "success")
+    return true
+  } catch (err: any) {
+    showToast(`Falha de conexão ao excluir conversa: ${err.message}`, "error")
+    return false
+  }
 }
 
 export async function resolveConversation(conversationId: string): Promise<void> {
   const conv = conversations.value.find((c) => c.id === conversationId)
   if (!conv) return
 
-  conv.status = "resolvido"
-
-  const now = new Date()
-  const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-  conv.messages.push({
-    id: "msg-" + Date.now(),
-    direction: "out",
-    text: "Atendimento encerrado e marcado como Resolvido.",
-    time: timeStr,
-    status: "lido",
-  })
-  conv.lastMessage = "Atendimento encerrado e marcado como Resolvido."
-  conv.time = timeStr
-
-  // Se a conversa resolvida era a selecionada, troca para a próxima em aberto para sumir da tela
-  if (activeId.value === conversationId) {
-    const nextOpen = conversations.value.find((c) => c.id !== conversationId && c.status !== "resolvido")
-    if (nextOpen) {
-      activeId.value = nextOpen.id
-    }
-  }
+  const prevStatus = conv.status
 
   try {
-    await fetch(`/api/conversations/${conversationId}`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "resolvido" }),
     })
-  } catch (_e) {}
+    if (!res.ok) {
+      showToast("Não foi possível encerrar o atendimento no servidor.", "error")
+      return
+    }
 
-  showToast(`Atendimento com ${conv.name} resolvido com sucesso!`, "success")
+    conv.status = "resolvido"
+    const now = new Date()
+    const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    conv.messages.push({
+      id: "msg-" + Date.now(),
+      direction: "out",
+      text: "Atendimento encerrado e marcado como Resolvido.",
+      time: timeStr,
+      status: "lido",
+    })
+    conv.lastMessage = "Atendimento encerrado e marcado como Resolvido."
+    conv.time = timeStr
+
+    if (activeId.value === conversationId) {
+      const nextOpen = conversations.value.find((c) => c.id !== conversationId && c.status !== "resolvido")
+      if (nextOpen) {
+        activeId.value = nextOpen.id
+      }
+    }
+
+    showToast(`Atendimento com ${conv.name} resolvido com sucesso!`, "success")
+  } catch (_e) {
+    conv.status = prevStatus
+    showToast("Falha ao resolver conversa no servidor.", "error")
+  }
 }
 
 export async function reopenConversation(conversationId: string): Promise<void> {
   const conv = conversations.value.find((c) => c.id === conversationId)
   if (!conv) return
 
-  conv.status = "aberto"
-  activeId.value = conv.id
+  const prevStatus = conv.status
 
   try {
-    await fetch(`/api/conversations/${conversationId}`, {
+    const res = await apiFetch(`/api/conversations/${conversationId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "aberto" }),
     })
-  } catch (_e) {}
+    if (!res.ok) {
+      showToast("Não foi possível reabrir o atendimento no servidor.", "error")
+      return
+    }
 
-  showToast(`Conversa com ${conv.name} reaberta!`, "info")
+    conv.status = "aberto"
+    activeId.value = conv.id
+    showToast(`Conversa com ${conv.name} reaberta!`, "info")
+  } catch (_e) {
+    conv.status = prevStatus
+    showToast("Falha ao reabrir conversa.", "error")
+  }
 }
 
 /* ─── State e Conexão Backend: Colaboradores ───────────── */
@@ -1816,7 +2008,7 @@ export async function createEmployeeFolder(payload: {
   workSchedule?: WorkSchedule
   initialPassword?: string
   sendEmail?: boolean
-}): Promise<EmployeeFolder> {
+}): Promise<EmployeeFolder | null> {
   const id = "f-" + Date.now()
   const loc = payload.location || (payload.city && payload.state ? `${payload.city}, ${payload.state}` : "São Paulo, SP")
   const newFolder: EmployeeFolder = {
@@ -1849,8 +2041,6 @@ export async function createEmployeeFolder(payload: {
     contractType: payload.contractType || "prazo_indeterminado",
     workSchedule: payload.workSchedule || "escala_5x2",
   }
-  employeeFolders.value.unshift(newFolder)
-  activeFolderId.value = id
 
   try {
     const res = await apiFetch("/api/employees", {
@@ -1873,17 +2063,28 @@ export async function createEmployeeFolder(payload: {
         sendEmail: payload.sendEmail !== false,
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao criar colaborador no servidor.", "error")
+      return null
+    }
+
+    if (data.id) {
+      newFolder.id = data.id
+    }
+    employeeFolders.value.unshift(newFolder)
+    activeFolderId.value = newFolder.id
+
     if (data.emailDispatched) {
       showToast(`Pasta criada e credenciais enviadas por e-mail para ${payload.email}!`, "success")
     } else {
       showToast(`Pasta de RH criada para ${payload.name}`, "success")
     }
-  } catch (_e) {
-    showToast(`Pasta de RH criada para ${payload.name}`, "success")
+    return newFolder
+  } catch (err: any) {
+    showToast(`Falha de conexão ao criar pasta de colaborador: ${err.message}`, "error")
+    return null
   }
-
-  return newFolder
 }
 
 export function addDocumentToFolder(
@@ -1923,59 +2124,76 @@ export async function updateEmployeeFolder(
   const folder = employeeFolders.value.find((f) => f.id === folderId)
   if (!folder) return null
 
-  if (payload.name) {
-    folder.name = payload.name
-    const parts = payload.name.trim().split(" ")
-    folder.initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase()
-  }
-  if (payload.cpf !== undefined) folder.cpf = payload.cpf
-  if (payload.registration !== undefined) folder.registration = payload.registration
-  if (payload.role !== undefined) folder.role = payload.role
-  if (payload.department !== undefined) folder.department = payload.department
-  if (payload.email !== undefined) folder.email = payload.email
-  if (payload.phone !== undefined) folder.phone = payload.phone
-  if (payload.location !== undefined) folder.location = payload.location
-  if (payload.tenure !== undefined) folder.tenure = payload.tenure
-  if (payload.manager !== undefined) folder.manager = payload.manager
-  if (payload.admissionDate !== undefined) folder.admissionDate = payload.admissionDate
-  if (payload.status !== undefined) folder.status = payload.status
-  if (payload.notes !== undefined) folder.notes = payload.notes
-  if (payload.cep !== undefined) folder.cep = payload.cep
-  if (payload.street !== undefined) folder.street = payload.street
-  if (payload.number !== undefined) folder.number = payload.number
-  if (payload.complement !== undefined) folder.complement = payload.complement
-  if (payload.neighborhood !== undefined) folder.neighborhood = payload.neighborhood
-  if (payload.city !== undefined) folder.city = payload.city
-  if (payload.state !== undefined) folder.state = payload.state
-  if (payload.cbo !== undefined) folder.cbo = payload.cbo
-  if (payload.cboTitle !== undefined) folder.cboTitle = payload.cboTitle
-  if (payload.salary !== undefined) folder.salary = payload.salary
-  if (payload.contractType !== undefined) folder.contractType = payload.contractType
-  if (payload.workSchedule !== undefined) folder.workSchedule = payload.workSchedule
-
   try {
-    await apiFetch(`/api/employees/${folderId}`, {
+    const res = await apiFetch(`/api/employees/${folderId}`, {
       method: "PATCH",
       body: JSON.stringify({
-        name: folder.name,
-        role: folder.role,
-        department: folder.department,
-        email: folder.email,
-        phone: folder.phone,
-        cpf: folder.cpf,
-        salary: folder.salary,
-        manager: folder.manager,
-        location: folder.location,
-        cbo: folder.cbo,
-        cboTitle: folder.cboTitle,
-        contractType: folder.contractType,
-        workSchedule: folder.workSchedule,
+        name: payload.name !== undefined ? payload.name : folder.name,
+        role: payload.role !== undefined ? payload.role : folder.role,
+        department: payload.department !== undefined ? payload.department : folder.department,
+        email: payload.email !== undefined ? payload.email : folder.email,
+        phone: payload.phone !== undefined ? payload.phone : folder.phone,
+        cpf: payload.cpf !== undefined ? payload.cpf : folder.cpf,
+        salary: payload.salary !== undefined ? payload.salary : folder.salary,
+        manager: payload.manager !== undefined ? payload.manager : folder.manager,
+        location: payload.location !== undefined ? payload.location : folder.location,
+        cbo: payload.cbo !== undefined ? payload.cbo : folder.cbo,
+        cboTitle: payload.cboTitle !== undefined ? payload.cboTitle : folder.cboTitle,
+        contractType: payload.contractType !== undefined ? payload.contractType : folder.contractType,
+        workSchedule: payload.workSchedule !== undefined ? payload.workSchedule : folder.workSchedule,
+        status: payload.status !== undefined ? payload.status : folder.status,
+        notes: payload.notes !== undefined ? payload.notes : folder.notes,
+        cep: payload.cep !== undefined ? payload.cep : folder.cep,
+        street: payload.street !== undefined ? payload.street : folder.street,
+        number: payload.number !== undefined ? payload.number : folder.number,
+        complement: payload.complement !== undefined ? payload.complement : folder.complement,
+        neighborhood: payload.neighborhood !== undefined ? payload.neighborhood : folder.neighborhood,
+        city: payload.city !== undefined ? payload.city : folder.city,
+        state: payload.state !== undefined ? payload.state : folder.state,
       }),
     })
-  } catch (_e) {}
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao atualizar dados do colaborador.", "error")
+      return null
+    }
 
-  showToast(`Dados de ${folder.name} atualizados com sucesso!`, "success")
-  return folder
+    if (payload.name) {
+      folder.name = payload.name
+      const parts = payload.name.trim().split(" ")
+      folder.initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase()
+    }
+    if (payload.cpf !== undefined) folder.cpf = payload.cpf
+    if (payload.registration !== undefined) folder.registration = payload.registration
+    if (payload.role !== undefined) folder.role = payload.role
+    if (payload.department !== undefined) folder.department = payload.department
+    if (payload.email !== undefined) folder.email = payload.email
+    if (payload.phone !== undefined) folder.phone = payload.phone
+    if (payload.location !== undefined) folder.location = payload.location
+    if (payload.tenure !== undefined) folder.tenure = payload.tenure
+    if (payload.manager !== undefined) folder.manager = payload.manager
+    if (payload.admissionDate !== undefined) folder.admissionDate = payload.admissionDate
+    if (payload.status !== undefined) folder.status = payload.status
+    if (payload.notes !== undefined) folder.notes = payload.notes
+    if (payload.cep !== undefined) folder.cep = payload.cep
+    if (payload.street !== undefined) folder.street = payload.street
+    if (payload.number !== undefined) folder.number = payload.number
+    if (payload.complement !== undefined) folder.complement = payload.complement
+    if (payload.neighborhood !== undefined) folder.neighborhood = payload.neighborhood
+    if (payload.city !== undefined) folder.city = payload.city
+    if (payload.state !== undefined) folder.state = payload.state
+    if (payload.cbo !== undefined) folder.cbo = payload.cbo
+    if (payload.cboTitle !== undefined) folder.cboTitle = payload.cboTitle
+    if (payload.salary !== undefined) folder.salary = payload.salary
+    if (payload.contractType !== undefined) folder.contractType = payload.contractType
+    if (payload.workSchedule !== undefined) folder.workSchedule = payload.workSchedule
+
+    showToast(`Dados de ${folder.name} atualizados com sucesso!`, "success")
+    return folder
+  } catch (err: any) {
+    showToast(`Falha de conexão ao salvar colaborador: ${err.message}`, "error")
+    return null
+  }
 }
 
 export async function updateEmployeeContractAndSchedule(
@@ -2059,15 +2277,24 @@ export async function removeEmployeeMonthlyCalendarOverride(
   return folder
 }
 
-export async function deleteEmployeeFolder(folderId: string) {
-  employeeFolders.value = employeeFolders.value.filter((f) => f.id !== folderId)
-  if (activeFolderId.value === folderId) {
-    activeFolderId.value = null
-  }
+export async function deleteEmployeeFolder(folderId: string): Promise<boolean> {
   try {
-    await apiFetch(`/api/employees/${folderId}`, { method: "DELETE" })
-  } catch (_e) {}
-  showToast("Pasta de colaborador removida.", "info")
+    const res = await apiFetch(`/api/employees/${folderId}`, { method: "DELETE" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao excluir pasta do colaborador.", "error")
+      return false
+    }
+    employeeFolders.value = employeeFolders.value.filter((f) => f.id !== folderId)
+    if (activeFolderId.value === folderId) {
+      activeFolderId.value = null
+    }
+    showToast("Pasta de colaborador removida.", "info")
+    return true
+  } catch (err: any) {
+    showToast(`Falha ao remover colaborador: ${err.message}`, "error")
+    return false
+  }
 }
 
 /* ─── State e Conexão Backend: Solicitações ───────── */
@@ -2092,12 +2319,12 @@ export async function createRequest(payload: {
   amount?: string
   priority?: RequestPriority
   attachment?: string
-}): Promise<RequestItem> {
-  const id = "req-" + Date.now()
+}): Promise<RequestItem | null> {
   const count = requests.value.length + 1
   const protocol = `REQ-2026-${count.toString().padStart(3, "0")}`
   const now = new Date()
   const dateStr = now.toLocaleDateString("pt-BR")
+  const id = "req-" + Date.now()
 
   const newReq: RequestItem = {
     id,
@@ -2118,12 +2345,9 @@ export async function createRequest(payload: {
     createdAt: dateStr,
   }
 
-  requests.value.unshift(newReq)
-
   try {
-    const res = await fetch("/api/requests", {
+    const res = await apiFetch("/api/requests", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type: payload.type,
         requester: payload.employeeName,
@@ -2133,15 +2357,23 @@ export async function createRequest(payload: {
         details: { title: payload.title, startDate: payload.startDate, endDate: payload.endDate },
       }),
     })
-    const data = await res.json()
-    if (data.ok && data.id) {
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao registrar solicitação no servidor.", "error")
+      return null
+    }
+
+    if (data.id) {
       newReq.id = data.id
       newReq.protocol = data.id
     }
-  } catch (_e) {}
-
-  showToast(`Solicitação ${protocol} aberta com sucesso!`, "success")
-  return newReq
+    requests.value.unshift(newReq)
+    showToast(`Solicitação ${newReq.protocol} aberta com sucesso!`, "success")
+    return newReq
+  } catch (err: any) {
+    showToast(`Falha de conexão ao enviar solicitação: ${err.message}`, "error")
+    return null
+  }
 }
 
 export async function updateRequestStatus(
@@ -2149,9 +2381,26 @@ export async function updateRequestStatus(
   newStatus: RequestStatus,
   reviewerName: string = "Analista de RH",
   note?: string
-) {
+): Promise<boolean> {
   const req = requests.value.find((r) => r.id === requestId)
-  if (req) {
+  if (!req) return false
+
+  try {
+    const res = await apiFetch(`/api/requests/${requestId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: newStatus,
+        justification: note,
+        review_notes: note,
+        note,
+      }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao atualizar status da solicitação.", "error")
+      return false
+    }
+
     req.status = newStatus
     req.reviewedBy = reviewerName
     if (note) {
@@ -2233,9 +2482,8 @@ export async function updateRequestStatus(
 
           // Persiste no backend se disponível
           try {
-            fetch("/api/documents/generate", {
+            apiFetch("/api/documents/generate", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 templateName: docTitle,
                 category,
@@ -2246,28 +2494,33 @@ export async function updateRequestStatus(
         }
       }
     }
+
+    showToast(`Chamado ${requestId} atualizado para "${newStatus}"`, "info")
+    return true
+  } catch (err: any) {
+    showToast(`Falha de conexão ao atualizar chamado: ${err.message}`, "error")
+    return false
   }
-
-  try {
-    await fetch(`/api/requests/${requestId}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    })
-  } catch (_e) {}
-
-  showToast(`Chamado ${requestId} atualizado para "${newStatus}"`, "info")
 }
 
-export async function deleteRequest(requestId: string) {
-  requests.value = requests.value.filter((r) => r.id !== requestId)
-  if (activeRequestId.value === requestId) {
-    activeRequestId.value = null
-  }
+export async function deleteRequest(requestId: string): Promise<boolean> {
   try {
-    await fetch(`/api/requests/${requestId}`, { method: "DELETE" })
-  } catch (_e) {}
-  showToast("Solicitação excluída.", "info")
+    const res = await apiFetch(`/api/requests/${requestId}`, { method: "DELETE" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao excluir chamado.", "error")
+      return false
+    }
+    requests.value = requests.value.filter((r) => r.id !== requestId)
+    if (activeRequestId.value === requestId) {
+      activeRequestId.value = null
+    }
+    showToast("Solicitação excluída.", "info")
+    return true
+  } catch (err: any) {
+    showToast(`Falha ao excluir solicitação: ${err.message}`, "error")
+    return false
+  }
 }
 
 /* ─── State e Conexão Backend: Documentos ───────── */
@@ -2380,9 +2633,8 @@ export async function generateDocument(payload: {
   systemDocuments.value.unshift(newDoc)
 
   try {
-    const res = await fetch("/api/documents/generate", {
+    const res = await apiFetch("/api/documents/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         templateName: tpl?.title || "Documento RH",
         category,
@@ -2459,32 +2711,50 @@ export async function importPdfDocument(payload: {
   return newDoc
 }
 
-export async function deleteSystemDocument(id: string) {
-  systemDocuments.value = systemDocuments.value.filter((d) => d.id !== id)
+export async function deleteSystemDocument(id: string): Promise<boolean> {
   try {
-    await fetch(`/api/documents/${id}`, { method: "DELETE" })
-  } catch (_e) {}
-  showToast("Documento excluído.", "info")
+    const res = await apiFetch(`/api/documents/${id}`, { method: "DELETE" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao excluir documento.", "error")
+      return false
+    }
+    systemDocuments.value = systemDocuments.value.filter((d) => d.id !== id)
+    showToast("Documento excluído com sucesso.", "info")
+    return true
+  } catch (err: any) {
+    showToast(`Falha ao excluir documento: ${err.message}`, "error")
+    return false
+  }
 }
 
 /* ─── State e Conexão Backend: Onboarding ─────────── */
 export const onboardingItems = ref<OnboardingItem[]>([...initialOnboardingItems])
 export const onboardingTracks = ref<OnboardingTrack[]>([...initialOnboardingTracks])
 
-export async function toggleOnboardingStep(itemId: string, stepId: string) {
+export async function toggleOnboardingStep(itemId: string, stepId: string): Promise<boolean> {
   const item = onboardingItems.value.find((i) => i.id === itemId)
-  if (!item) return
+  if (!item) return false
   const step = item.checklist.find((s) => s.id === stepId)
-  if (step) {
-    step.completed = !step.completed
+  if (!step) return false
 
-    try {
-      await fetch(`/api/onboarding/${itemId}/step`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stepId, done: step.completed }),
-      })
-    } catch (_e) {}
+  const prevCompleted = step.completed
+  step.completed = !step.completed
+
+  try {
+    const res = await apiFetch(`/api/onboarding/${itemId}/step`, {
+      method: "PATCH",
+      body: JSON.stringify({ stepId, done: step.completed }),
+    })
+    if (!res.ok) {
+      step.completed = prevCompleted
+      showToast("Não foi possível atualizar a etapa no servidor.", "error")
+      return false
+    }
+  } catch (_e) {
+    step.completed = prevCompleted
+    showToast("Falha de conexão ao atualizar etapa.", "error")
+    return false
   }
 
   const completedCount = item.checklist.filter((s) => s.completed).length
@@ -2495,6 +2765,7 @@ export async function toggleOnboardingStep(itemId: string, stepId: string) {
   } else if (item.status === "concluido") {
     item.status = "em_andamento"
   }
+  return true
 }
 
 export async function createOnboardingItem(payload: {
@@ -2507,7 +2778,7 @@ export async function createOnboardingItem(payload: {
   trackTitle: string
   notes?: string
   customChecklist?: OnboardingStep[]
-}): Promise<OnboardingItem> {
+}): Promise<OnboardingItem | null> {
   const defaultChecklist: OnboardingStep[] = [
     { id: "s1", title: "Assinatura do Contrato Admissional & NDA", category: "documentacao", completed: false },
     { id: "s2", title: "Configuração do Notebook & Acessos da Empresa", category: "ti", completed: false },
@@ -2529,12 +2800,9 @@ export async function createOnboardingItem(payload: {
     notes: payload.notes || "Processo de onboarding iniciado.",
   }
 
-  onboardingItems.value.unshift(newItem)
-
   try {
-    const res = await fetch("/api/onboarding", {
+    const res = await apiFetch("/api/onboarding", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         candidateName: payload.employeeName,
         role: payload.role,
@@ -2543,12 +2811,20 @@ export async function createOnboardingItem(payload: {
         mentor: payload.buddy,
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Não foi possível cadastrar o colaborador no onboarding.", "error")
+      return null
+    }
     if (data.ok && data.id) {
       newItem.id = data.id
     }
-  } catch (_e) {}
+  } catch (_e) {
+    showToast("Falha de rede ao iniciar processo de onboarding.", "error")
+    return null
+  }
 
+  onboardingItems.value.unshift(newItem)
   showToast(`Integração iniciada para ${payload.employeeName}`, "success")
   return newItem
 }
@@ -2635,18 +2911,30 @@ export function enrollEmployeeInTrack(employeeName: string, trackTitle: string) 
   }
 }
 
-export async function deleteOnboardingItem(id: string) {
-  onboardingItems.value = onboardingItems.value.filter((i) => i.id !== id)
+export async function deleteOnboardingItem(id: string): Promise<boolean> {
   try {
-    await fetch(`/api/onboarding/${id}`, { method: "DELETE" })
-  } catch (_e) {}
-  showToast("Onboarding removido.", "info")
+    const res = await apiFetch(`/api/onboarding/${id}`, { method: "DELETE" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      showToast(data.error || "Erro ao excluir onboarding no servidor.", "error")
+      return false
+    }
+    onboardingItems.value = onboardingItems.value.filter((i) => i.id !== id)
+    showToast("Onboarding removido com sucesso.", "info")
+    return true
+  } catch (err: any) {
+    showToast(`Falha ao remover onboarding: ${err.message}`, "error")
+    return false
+  }
 }
 
 
 
 /* ─── Fetch global do Backend ───────────────────────────── */
+export const isDataSyncing = ref(false)
+
 export async function fetchAllFromBackend(retries = 3) {
+  isDataSyncing.value = true
   try {
     const resHealth = await apiFetch("/api/health")
     if (!resHealth.ok && retries > 0) {
@@ -2660,77 +2948,79 @@ export async function fetchAllFromBackend(retries = 3) {
     }
   }
 
-  // 1. Conversas
-  try {
-    const resConv = await apiFetch("/api/conversations")
-    const dataConv = await resConv.json()
-    if (dataConv.ok && Array.isArray(dataConv.conversations) && dataConv.conversations.length > 0) {
-      conversations.value = dataConv.conversations
-      if (!conversations.value.some((c) => c.id === activeId.value)) {
-        activeId.value = conversations.value[0].id
+  // Carregamento concorrente via Promise.allSettled para eliminar o waterfall de rede
+  const loadConversations = async () => {
+    try {
+      const resConv = await apiFetch("/api/conversations")
+      const dataConv = await resConv.json()
+      if (dataConv.ok && Array.isArray(dataConv.conversations) && dataConv.conversations.length > 0) {
+        conversations.value = dataConv.conversations
+        if (!conversations.value.some((c) => c.id === activeId.value)) {
+          activeId.value = conversations.value[0].id
+        }
       }
-    }
-  } catch (_e) {}
+    } catch (_e) {}
+  }
 
-  // 2. Colaboradores
-  try {
-    const resEmp = await apiFetch("/api/employees")
-    const dataEmp = await resEmp.json()
-    if (dataEmp.ok && Array.isArray(dataEmp.employees)) {
-      employeeFolders.value = dataEmp.employees.map((emp: any, idx: number) => ({
-        id: emp.id,
-        name: emp.name,
-        initials: emp.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase() || "US",
-        cpf: emp.cpf || "000.000.000-00",
-        registration: emp.registration || String(101 + idx),
-        role: emp.role,
-        department: emp.department,
-        email: emp.email,
-        phone: emp.phone || "+55 11 90000-0000",
-        location: emp.location || "São Paulo, SP",
-        tenure: "1 ano",
-        manager: emp.manager || "RH Gestão",
-        admissionDate: emp.hireDate || "01/01/2024",
-        salary: emp.salary || "R$ 6.500,00",
-        status: (emp.status?.toLowerCase() === "ativo" ? "ativo" : emp.status?.toLowerCase()) || "ativo",
-        documents: [],
-        notes: "Importado do banco de dados.",
-        contractType: emp.contractType || "prazo_indeterminado",
-        workSchedule: emp.workSchedule || "escala_5x2",
-        customSchedulePattern: emp.customSchedulePattern
-          ? typeof emp.customSchedulePattern === "string"
-            ? JSON.parse(emp.customSchedulePattern)
-            : emp.customSchedulePattern
-          : undefined,
-      }))
-    }
-  } catch (_e) {}
+  const loadEmployees = async () => {
+    try {
+      const resEmp = await apiFetch("/api/employees")
+      const dataEmp = await resEmp.json()
+      if (dataEmp.ok && Array.isArray(dataEmp.employees)) {
+        employeeFolders.value = dataEmp.employees.map((emp: any, idx: number) => ({
+          id: emp.id,
+          name: emp.name,
+          initials: emp.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase() || "US",
+          cpf: emp.cpf || "000.000.000-00",
+          registration: emp.registration || String(101 + idx),
+          role: emp.role,
+          department: emp.department,
+          email: emp.email,
+          phone: emp.phone || "+55 11 90000-0000",
+          location: emp.location || "São Paulo, SP",
+          tenure: "1 ano",
+          manager: emp.manager || "RH Gestão",
+          admissionDate: emp.hireDate || "01/01/2024",
+          salary: emp.salary || "R$ 6.500,00",
+          status: (emp.status?.toLowerCase() === "ativo" ? "ativo" : emp.status?.toLowerCase()) || "ativo",
+          documents: [],
+          notes: "Importado do banco de dados.",
+          contractType: emp.contractType || "prazo_indeterminado",
+          workSchedule: emp.workSchedule || "escala_5x2",
+          customSchedulePattern: emp.customSchedulePattern
+            ? typeof emp.customSchedulePattern === "string"
+              ? JSON.parse(emp.customSchedulePattern)
+              : emp.customSchedulePattern
+            : undefined,
+        }))
+      }
+    } catch (_e) {}
+  }
 
-  // 3. Solicitações / Chamados
-  try {
-    const resReq = await apiFetch("/api/requests")
-    const dataReq = await resReq.json()
-    if (dataReq.ok && Array.isArray(dataReq.requests) && dataReq.requests.length > 0) {
-      dataReq.requests.forEach((r: any) => {
-        if (!requests.value.some((item) => item.id === r.id)) {
-          const mapStatus: Record<string, RequestStatus> = {
-            "pendente": "pendente",
-            "em análise": "em_analise",
-            "em analise": "em_analise",
-            "aprovado": "aprovado",
-            "recusado": "recusado",
-          }
-          const mapPriority: Record<string, RequestPriority> = {
-            "baixa": "baixa",
-            "média": "media",
-            "media": "media",
-            "alta": "alta",
-            "urgente": "urgente",
-          }
+  const loadRequests = async () => {
+    try {
+      const resReq = await apiFetch("/api/requests")
+      const dataReq = await resReq.json()
+      if (dataReq.ok && Array.isArray(dataReq.requests)) {
+        const mapStatus: Record<string, RequestStatus> = {
+          "pendente": "pendente",
+          "em análise": "em_analise",
+          "em analise": "em_analise",
+          "aprovado": "aprovado",
+          "recusado": "recusado",
+        }
+        const mapPriority: Record<string, RequestPriority> = {
+          "baixa": "baixa",
+          "média": "media",
+          "media": "media",
+          "alta": "alta",
+          "urgente": "urgente",
+        }
+        requests.value = dataReq.requests.map((r: any) => {
           const statusLower = (r.status || "").toLowerCase()
           const priorityLower = (r.priority || "").toLowerCase()
 
-          requests.value.unshift({
+          return {
             id: r.id,
             protocol: r.id,
             employeeName: r.requester,
@@ -2750,90 +3040,122 @@ export async function fetchAllFromBackend(retries = 3) {
             status: mapStatus[statusLower] || "pendente",
             priority: mapPriority[priorityLower] || "media",
             createdAt: r.date,
-          })
-        }
-      })
-    }
-  } catch (_e) {}
+          }
+        })
+      }
+    } catch (_e) {}
+  }
 
-  // 4. Documentos
+  const loadDocuments = async () => {
+    try {
+      const resDoc = await apiFetch("/api/documents")
+      const dataDoc = await resDoc.json()
+      if (dataDoc.ok && Array.isArray(dataDoc.documents) && dataDoc.documents.length > 0) {
+        dataDoc.documents.forEach((d: any) => {
+          if (!systemDocuments.value.some((doc) => doc.id === d.id)) {
+            systemDocuments.value.unshift({
+              id: d.id,
+              code: d.id,
+              title: d.name,
+              category: (d.category?.toLowerCase().includes("declara") ? "declaracoes" :
+                         d.category?.toLowerCase().includes("contrat") ? "contratos" :
+                         d.category?.toLowerCase().includes("férias") || d.category?.toLowerCase().includes("ferias") ? "ferias" : "declaracoes") as DocumentCategory,
+              employeeName: d.employeeName,
+              employeeInitials: (d.employeeName || "RH").split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase(),
+              employeeRole: "Colaborador",
+              department: "Recursos Humanos",
+              fileType: d.type || "PDF",
+              fileSize: "1.2 MB",
+              generatedAt: d.date,
+              generatedBy: "Sistema RH",
+              signStatus: d.status === "Emitido" ? "assinado" : "pendente_assinatura",
+              contentSnippet: `Documento ${d.name} emitido em ${d.date} para ${d.employeeName}.`,
+            })
+          }
+        })
+      }
+    } catch (_e) {}
+  }
+
+  const loadOnboarding = async () => {
+    try {
+      const resOnb = await apiFetch("/api/onboarding")
+      const dataOnb = await resOnb.json()
+      if (dataOnb.ok && Array.isArray(dataOnb.onboardingItems) && dataOnb.onboardingItems.length > 0) {
+        dataOnb.onboardingItems.forEach((o: any) => {
+          if (!onboardingItems.value.some((item) => item.id === o.id)) {
+            const checklist = Array.isArray(o.steps)
+              ? o.steps.map((s: any) => ({
+                  id: `s-${s.id}`,
+                  title: s.title,
+                  category: "rh" as const,
+                  completed: Boolean(s.done),
+                }))
+              : []
+
+            onboardingItems.value.unshift({
+              id: o.id,
+              employeeName: o.candidateName,
+              employeeInitials: (o.candidateName || "RH").split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase(),
+              role: o.role,
+              department: o.department,
+              startDate: o.startDate,
+              buddy: o.mentor,
+              trackTitle: `Integração ${o.department}`,
+              status: o.status === "Concluído" ? "concluido" : "em_andamento",
+              checklist: checklist.length > 0 ? checklist : [
+                { id: "s1", title: "Envio de Documentos Pessoais", category: "documentacao", completed: true },
+                { id: "s2", title: "Assinatura do Contrato de Trabalho", category: "documentacao", completed: true },
+              ],
+              notes: "Importado do backend.",
+            })
+          }
+        })
+      }
+    } catch (_e) {}
+  }
+
+  const loadContraCheques = async () => {
+    try {
+      await Promise.allSettled([
+        fetchTenantContestDeadline(),
+        fetchContraChequesFromBackend(),
+      ])
+    } catch (_e) {}
+  }
+
+  const loadFeedAndAdverse = async () => {
+    try {
+      await Promise.allSettled([
+        fetchAdverseEvents(),
+        fetchFeedPosts(),
+      ])
+    } catch (_e) {}
+  }
+
   try {
-    const resDoc = await apiFetch("/api/documents")
-    const dataDoc = await resDoc.json()
-    if (dataDoc.ok && Array.isArray(dataDoc.documents) && dataDoc.documents.length > 0) {
-      dataDoc.documents.forEach((d: any) => {
-        if (!systemDocuments.value.some((doc) => doc.id === d.id)) {
-          systemDocuments.value.unshift({
-            id: d.id,
-            code: d.id,
-            title: d.name,
-            category: (d.category?.toLowerCase().includes("declara") ? "declaracoes" :
-                       d.category?.toLowerCase().includes("contrat") ? "contratos" :
-                       d.category?.toLowerCase().includes("férias") || d.category?.toLowerCase().includes("ferias") ? "ferias" : "declaracoes") as DocumentCategory,
-            employeeName: d.employeeName,
-            employeeInitials: (d.employeeName || "RH").split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase(),
-            employeeRole: "Colaborador",
-            department: "Recursos Humanos",
-            fileType: d.type || "PDF",
-            fileSize: "1.2 MB",
-            generatedAt: d.date,
-            generatedBy: "Sistema RH",
-            signStatus: d.status === "Emitido" ? "assinado" : "pendente_assinatura",
-            contentSnippet: `Documento ${d.name} emitido em ${d.date} para ${d.employeeName}.`,
-          })
-        }
-      })
-    }
-  } catch (_e) {}
+    await Promise.allSettled([
+      loadConversations(),
+      loadEmployees(),
+      loadRequests(),
+      loadDocuments(),
+      loadOnboarding(),
+      loadContraCheques(),
+      loadFeedAndAdverse(),
+    ])
+  } finally {
+    isDataSyncing.value = false
+  }
+}
 
-  // 5. Onboarding
+export async function refreshAllData(): Promise<void> {
+  if (isDataSyncing.value) return
   try {
-    const resOnb = await apiFetch("/api/onboarding")
-    const dataOnb = await resOnb.json()
-    if (dataOnb.ok && Array.isArray(dataOnb.onboardingItems) && dataOnb.onboardingItems.length > 0) {
-      dataOnb.onboardingItems.forEach((o: any) => {
-        if (!onboardingItems.value.some((item) => item.id === o.id)) {
-          const checklist = Array.isArray(o.steps)
-            ? o.steps.map((s: any) => ({
-                id: `s-${s.id}`,
-                title: s.title,
-                category: "rh" as const,
-                completed: Boolean(s.done),
-              }))
-            : []
-
-          onboardingItems.value.unshift({
-            id: o.id,
-            employeeName: o.candidateName,
-            employeeInitials: (o.candidateName || "RH").split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase(),
-            role: o.role,
-            department: o.department,
-            startDate: o.startDate,
-            buddy: o.mentor,
-            trackTitle: `Integração ${o.department}`,
-            status: o.status === "Concluído" ? "concluido" : "em_andamento",
-            checklist: checklist.length > 0 ? checklist : [
-              { id: "s1", title: "Envio de Documentos Pessoais", category: "documentacao", completed: true },
-              { id: "s2", title: "Assinatura do Contrato de Trabalho", category: "documentacao", completed: true },
-            ],
-            notes: "Importado do backend.",
-          })
-        }
-      })
-    }
-  } catch (_e) {}
-
-  // 6. Contra-Cheques e Prazo de Pedido de Vista do Tenant
-  try {
-    await fetchTenantContestDeadline()
-    await fetchContraChequesFromBackend()
-  } catch (_e) {}
-
-  // 7. Eventos Adversos & Feed Corporativo
-  try {
-    await fetchAdverseEvents()
-    await fetchFeedPosts()
-  } catch (_e) {}
+    await fetchAllFromBackend(1)
+    showToast("Dados sincronizados com sucesso!", "success")
+  } catch (_e) {
+    showToast("Não foi possível sincronizar todos os dados no momento.", "warning")
+  }
 }
 
 /* ─── Canal de Eventos Adversos & Denúncias ──────────────── */

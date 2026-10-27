@@ -170,15 +170,15 @@ function goBack() {
         enter-from-class="opacity-0 -translate-y-1"
         leave-to-class="opacity-0 -translate-y-1"
       >
-        <div v-if="error" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <AlertCircle :size="18" class="shrink-0 text-red-500" />
-          {{ error }}
+        <div v-if="error" id="mfa-error-msg" role="alert" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle :size="18" class="shrink-0 text-red-500" aria-hidden="true" />
+          <span>{{ error }}</span>
         </div>
       </transition>
 
       <!-- 6-digit inputs -->
       <div class="space-y-3">
-        <div class="flex items-center justify-center gap-2 sm:gap-3">
+        <div class="flex items-center justify-center gap-1.5 sm:gap-3">
           <template v-for="(_, i) in 6" :key="i">
             <input
               :ref="(el) => { inputRefs[i] = el as HTMLInputElement | null }"
@@ -187,8 +187,11 @@ function goBack() {
               inputmode="numeric"
               maxlength="2"
               autocomplete="one-time-code"
+              :aria-label="`Dígito ${i + 1} do código de verificação`"
+              :aria-invalid="!!error"
+              :aria-describedby="error ? 'mfa-error-msg' : undefined"
               :disabled="loading || success"
-              class="h-14 w-12 sm:h-16 sm:w-14 rounded-2xl border-2 bg-card text-center text-xl font-black tracking-widest outline-none transition-all disabled:opacity-50"
+              class="h-12 w-10 sm:h-16 sm:w-14 rounded-xl sm:rounded-2xl border-2 bg-card text-center text-lg sm:text-xl font-black tracking-widest outline-none transition-all disabled:opacity-50"
               :class="[
                 error ? 'border-red-300 bg-red-50/40 text-red-700' : '',
                 digits[i] && !error ? 'border-teal-500 bg-teal-50/30 text-teal-800' : '',
@@ -207,7 +210,7 @@ function goBack() {
               }"
             />
             <!-- Separator between digit 3 and 4 -->
-            <span v-if="i === 2" class="text-xl font-light text-muted-foreground select-none">·</span>
+            <span v-if="i === 2" class="text-lg sm:text-xl font-light text-muted-foreground select-none" aria-hidden="true">·</span>
           </template>
         </div>
 

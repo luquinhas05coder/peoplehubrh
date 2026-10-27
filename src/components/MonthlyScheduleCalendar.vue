@@ -609,7 +609,8 @@ function getDayStyle(type: DayScheduleType) {
     </div>
 
     <!-- Grid do Calendário Mensal (7 Colunas: Domingo a Sábado) -->
-    <div class="rounded-2xl border bg-card shadow-sm overflow-hidden">
+    <div class="overflow-x-auto scrollbar-thin">
+      <div class="rounded-2xl border bg-card shadow-sm overflow-hidden min-w-[560px]">
       <!-- Cabeçalho dos Dias da Semana -->
       <div class="grid grid-cols-7 border-b bg-muted/60 text-center font-bold text-xs text-muted-foreground divide-x">
         <div v-for="d in weekDayHeaders" :key="d" class="py-2.5">
@@ -695,13 +696,14 @@ function getDayStyle(type: DayScheduleType) {
         </div>
       </div>
     </div>
+  </div>
 
     <!-- Modal de Edição de Dia da Escala (Para o Analista) -->
     <div
       v-if="showEditModal && selectedCell"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200 overflow-y-auto"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <!-- Topo do Modal -->
         <div class="flex items-center justify-between border-b pb-3">
           <div>

@@ -55,6 +55,9 @@ async function handleStartChat() {
   >
     <aside
       v-if="open"
+      id="chat-panel"
+      tabindex="-1"
+      @keydown.esc="emit('close')"
       class="fixed inset-y-0 right-0 z-50 flex w-full max-w-6xl flex-col bg-background shadow-2xl"
       aria-label="Chat interno corporativo"
     >

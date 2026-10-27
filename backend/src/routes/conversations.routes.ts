@@ -4,11 +4,13 @@
 import { Router, type Request, type Response } from "express"
 import { getDB, persist } from "../db/index.js"
 import { resolveTenant } from "../middleware/auth.js"
+import { authenticateRBAC } from "../middleware/rbac.js"
 
 const router = Router()
 
-// Aplicar resolução de tenant em todas as rotas de conversas
+// Aplicar resolução de tenant e autenticação RBAC em todas as rotas de conversas
 router.use(resolveTenant)
+router.use(authenticateRBAC)
 
 // GET /api/conversations
 router.get("/", (req: Request, res: Response) => {
@@ -16,8 +18,17 @@ router.get("/", (req: Request, res: Response) => {
   const tenantId = req.tenantId || "tenant_default"
   const db = getDB()
 
+  const scope = req.access?.scope || "OWN"
+  const userName = (req.access?.name || "").toLowerCase()
+  const userEmail = (req.access?.email || "").toLowerCase()
+
   let sql = `SELECT * FROM conversations WHERE tenant_id = ?`
   const params: any[] = [tenantId]
+
+  if (scope === "OWN") {
+    sql += ` AND (lower(contact_email) = ? OR lower(name) = ? OR lower(assignedTo) = ?)`
+    params.push(userEmail, userName, userName)
+  }
 
   if (channel) {
     sql += ` AND channel = ?`
@@ -124,6 +135,21 @@ router.get("/:id", (req: Request, res: Response) => {
   columns.forEach((col, idx) => {
     c[col] = row[idx]
   })
+
+  // Verificação de escopo para acesso à conversa individual
+  const scope = req.access?.scope || "OWN"
+  const userName = (req.access?.name || "").toLowerCase()
+  const userEmail = (req.access?.email || "").toLowerCase()
+
+  if (scope === "OWN") {
+    const cEmail = (c.contact_email || "").toLowerCase()
+    const cName = (c.name || "").toLowerCase()
+    const cAssigned = (c.assignedTo || "").toLowerCase()
+    if (cEmail !== userEmail && cName !== userName && cAssigned !== userName) {
+      res.status(403).json({ ok: false, error: "Acesso negado: você não tem permissão para acessar esta conversa." })
+      return
+    }
+  }
 
   const msgRes = db.exec(
     `SELECT id, direction, text, time, status, replyTo_json, forwarded FROM messages WHERE conversation_id = ? ORDER BY id ASC`,
