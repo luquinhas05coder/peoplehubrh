@@ -282,11 +282,15 @@ function openScheduleInterview(c: CandidateItem) {
   showScheduleModal.value = true
 }
 
+const isSubmitting = ref(false)
+
 async function submitScheduleInterview() {
+  if (isSubmitting.value) return
   if (!scheduleForm.value.scheduledAt) {
     showToast("Selecione a data e hora da entrevista.", "warning")
     return
   }
+  isSubmitting.value = true
   try {
     const res = await apiFetch("/api/recruitment/interviews", {
       method: "POST",
@@ -302,6 +306,8 @@ async function submitScheduleInterview() {
     }
   } catch (err: any) {
     showToast(err.message || "Erro de conexão", "error")
+  } finally {
+    isSubmitting.value = false
   }
 }
 
@@ -316,7 +322,8 @@ function openEvaluateModal(interview: InterviewItem) {
 }
 
 async function submitEvaluation() {
-  if (!selectedInterview.value) return
+  if (isSubmitting.value || !selectedInterview.value) return
+  isSubmitting.value = true
   try {
     const res = await apiFetch(`/api/recruitment/interviews/${selectedInterview.value.id}/evaluate`, {
       method: "PATCH",
@@ -332,14 +339,18 @@ async function submitEvaluation() {
     }
   } catch (err: any) {
     showToast(err.message || "Erro de conexão", "error")
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 async function submitNewJob() {
+  if (isSubmitting.value) return
   if (!jobForm.value.title || !jobForm.value.department) {
     showToast("Preencha o título e o departamento da vaga.", "warning")
     return
   }
+  isSubmitting.value = true
   try {
     const res = await apiFetch("/api/recruitment/jobs", {
       method: "POST",
@@ -364,6 +375,8 @@ async function submitNewJob() {
     }
   } catch (err: any) {
     showToast(err.message || "Erro de conexão", "error")
+  } finally {
+    isSubmitting.value = false
   }
 }
 
@@ -393,7 +406,7 @@ function copyPublicLink(jobId?: string) {
 </script>
 
 <template>
-  <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-4 sm:p-7">
+  <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-3.5 sm:p-6 lg:p-8">
     <div class="mx-auto w-full max-w-7xl space-y-6">
       <!-- Cabeçalho do Módulo -->
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-5">
@@ -446,7 +459,7 @@ function copyPublicLink(jobId?: string) {
       </div>
 
       <!-- Abas de Navegação -->
-      <div class="flex items-center gap-2 border-b overflow-x-auto scrollbar-none pb-px text-sm">
+      <div class="flex items-center gap-2 border-b overflow-x-auto scrollbar-thin pb-px text-sm">
         <button
           class="flex items-center gap-2 px-4 py-2.5 font-medium transition-all border-b-2 cursor-pointer"
           :class="activeTab === 'pipeline' ? 'border-primary text-primary font-bold bg-primary/5 rounded-t-lg' : 'border-transparent text-muted-foreground hover:text-foreground'"
@@ -535,11 +548,11 @@ function copyPublicLink(jobId?: string) {
         </div>
 
         <!-- Kanban Board Horizontal com Scroll Suave -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3.5 overflow-x-auto pb-4">
+        <div class="flex gap-3.5 overflow-x-auto pb-4 scrollbar-thin">
           <div
             v-for="st in stagesList"
             :key="st.id"
-            class="flex flex-col rounded-2xl border bg-card/60 backdrop-blur-xs p-3 min-w-[210px] shadow-2xs"
+            class="flex-shrink-0 w-64 sm:w-72 flex flex-col rounded-2xl border bg-card/60 backdrop-blur-xs p-3 shadow-2xs"
           >
             <!-- Topo da Coluna -->
             <div class="flex items-center justify-between pb-2.5 border-b mb-2.5">
@@ -721,8 +734,8 @@ function copyPublicLink(jobId?: string) {
         </div>
 
         <div class="rounded-2xl border bg-card overflow-hidden shadow-2xs">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs sm:text-sm">
+          <div class="overflow-x-auto scrollbar-thin">
+            <table class="w-full text-left text-xs sm:text-sm min-w-[650px]">
               <thead class="border-b bg-muted/50 text-muted-foreground">
                 <tr>
                   <th class="p-3.5 font-semibold">Candidato / Vaga</th>
@@ -879,7 +892,7 @@ function copyPublicLink(jobId?: string) {
       v-if="showNewJobModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
     >
-      <div class="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="w-full max-w-2xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <h3 class="text-lg font-bold">Cadastrar Nova Vaga de Trabalho</h3>
           <button class="text-muted-foreground hover:text-foreground cursor-pointer" @click="showNewJobModal = false">
@@ -1178,7 +1191,7 @@ function copyPublicLink(jobId?: string) {
       v-if="showCandidateDetailsModal && selectedCandidate"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
     >
-      <div class="w-full max-w-xl rounded-2xl border bg-card p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+      <div class="w-full max-w-xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <UserCheck :size="20" class="text-purple-600" />

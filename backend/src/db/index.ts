@@ -43,14 +43,38 @@ export function getDB(): Database {
   return db
 }
 
-export function persist(): void {
+let persistTimer: NodeJS.Timeout | null = null
+
+export function persist(immediate = process.env.NODE_ENV === "test"): void {
   if (!db) return
-  const data = db.export()
-  const dir = path.dirname(DB_PATH)
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
+  if (immediate) {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    const data = db.export()
+    const dir = path.dirname(DB_PATH)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(DB_PATH, Buffer.from(data))
+    return
   }
-  fs.writeFileSync(DB_PATH, Buffer.from(data))
+
+  if (persistTimer) return
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    try {
+      const data = db.export()
+      const dir = path.dirname(DB_PATH)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      fs.writeFileSync(DB_PATH, Buffer.from(data))
+    } catch (e) {
+      console.error("[DB] Erro ao persistir banco de dados:", e)
+    }
+  }, 100)
 }
 
 function runMigrations(): void {
@@ -321,6 +345,18 @@ function runMigrations(): void {
   try {
     db.run(`ALTER TABLE documents ADD COLUMN notes TEXT;`)
   } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_requests_tenant_status ON requests(tenant_id, status);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_requests_tenant_req ON requests(tenant_id, requester);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_documents_tenant_emp ON documents(tenant_id, employeeName);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_documents_tenant_cat ON documents(tenant_id, category);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_employees_tenant_dept ON employees(tenant_id, department);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_employees_tenant_status ON employees(tenant_id, status);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_users_tenant_email ON users(tenant_id, email);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_tenant ON conversations(tenant_id, status);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON messages(conversation_id);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_onboarding_tenant ON onboarding(tenant_id, status);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_feed_tenant_pin_date ON feed_posts(tenant_id, is_pinned DESC, created_at DESC);`) } catch (_e) {}
+  try { db.run(`CREATE INDEX IF NOT EXISTS idx_contracheques_deadline ON contracheques(tenant_id, is_immutable, contest_deadline_at);`) } catch (_e) {}
 
   // Onboarding
   db.run(`
@@ -858,6 +894,32 @@ function runMigrations(): void {
     db.run(`CREATE INDEX IF NOT EXISTS idx_wh_del_event ON webhook_deliveries(event_id);`)
   } catch (_e) {}
 
+  // 7. MÓDULO: Governança RBAC & Matriz Dinâmica de Permissões
+  db.run(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      role        TEXT NOT NULL,
+      permission  TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (role, permission)
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_role_perms ON role_permissions(role);`)
+  } catch (_e) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_permissions (
+      user_id     TEXT NOT NULL,
+      permission  TEXT NOT NULL,
+      granted     INTEGER DEFAULT 1,
+      created_at  TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, permission)
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_user_perms ON user_permissions(user_id);`)
+  } catch (_e) {}
+
   console.log("[DB] Tabelas e índices criados/verificados com sucesso.")
 }
 
@@ -883,6 +945,16 @@ function seedInitialData(): void {
       tenant_id: "tenant_default",
     },
     {
+      id: "usr_admin",
+      name: "Administrador Geral",
+      email: "admin@peoplehub.com.br",
+      password: "admin123",
+      role: "ADMIN",
+      department: "Tecnologia da Informação",
+      initials: "AD",
+      tenant_id: "tenant_default",
+    },
+    {
       id: "usr_rh",
       name: "Mariana Alcantara",
       email: "rh@peoplehub.com.br",
@@ -890,6 +962,16 @@ function seedInitialData(): void {
       role: "RH",
       department: "Recursos Humanos",
       initials: "MA",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_dp",
+      name: "Carlos Eduardo Souza",
+      email: "dp@peoplehub.com.br",
+      password: "admin123",
+      role: "DP",
+      department: "Departamento Pessoal",
+      initials: "CS",
       tenant_id: "tenant_default",
     },
     {
@@ -912,6 +994,26 @@ function seedInitialData(): void {
       initials: "GS",
       tenant_id: "tenant_default",
     },
+    {
+      id: "usr_recrutador",
+      name: "Renata Recrutadora",
+      email: "recrutador@peoplehub.com.br",
+      password: "admin123",
+      role: "RECRUTADOR",
+      department: "Recrutamento & Seleção",
+      initials: "RR",
+      tenant_id: "tenant_default",
+    },
+    {
+      id: "usr_auditor",
+      name: "Arthur Auditor",
+      email: "auditor@peoplehub.com.br",
+      password: "admin123",
+      role: "AUDITOR",
+      department: "Compliance & Auditoria",
+      initials: "AA",
+      tenant_id: "tenant_default",
+    },
   ]
 
   for (const u of defaultUsers) {
@@ -930,10 +1032,13 @@ function seedInitialData(): void {
 
   // Garantir que as contas canônicas possuam suas roles oficiais restauradas
   try {
-    db.run(`UPDATE users SET role = 'ADMIN' WHERE lower(email) = 'admin@empresa.com'`)
+    db.run(`UPDATE users SET role = 'ADMIN' WHERE lower(email) = 'admin@empresa.com' OR lower(email) = 'admin@peoplehub.com.br'`)
     db.run(`UPDATE users SET role = 'RH' WHERE lower(email) = 'rh@peoplehub.com.br'`)
+    db.run(`UPDATE users SET role = 'DP' WHERE lower(email) = 'dp@peoplehub.com.br'`)
     db.run(`UPDATE users SET role = 'GESTOR' WHERE lower(email) = 'gestor@peoplehub.com.br'`)
     db.run(`UPDATE users SET role = 'COLABORADOR' WHERE lower(email) = 'colaborador@peoplehub.com.br'`)
+    db.run(`UPDATE users SET role = 'RECRUTADOR' WHERE lower(email) = 'recrutador@peoplehub.com.br'`)
+    db.run(`UPDATE users SET role = 'AUDITOR' WHERE lower(email) = 'auditor@peoplehub.com.br'`)
   } catch (_e) {}
 
   // Garantir cadastro de colaborador para Gabriel Santos (colaborador padrão)

@@ -108,7 +108,7 @@ router.get("/", (req: Request, res: Response) => {
     res.json({ ok: true, posts, counts })
   } catch (error: any) {
     console.error("[API Feed] Erro ao listar posts:", error)
-    res.status(500).json({ ok: false, error: "Falha ao buscar publicações do feed: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao buscar publicações do feed." })
   }
 })
 
@@ -205,7 +205,7 @@ router.post("/", (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error("[API Feed] Erro ao criar post:", error)
-    res.status(500).json({ ok: false, error: "Falha ao criar publicação no feed: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao criar publicação no feed." })
   }
 })
 
@@ -260,7 +260,7 @@ router.post("/:id/like", (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error("[API Feed] Erro ao curtir:", error)
-    res.status(500).json({ ok: false, error: "Falha ao registrar curtida: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao registrar curtida na publicação." })
   }
 })
 
@@ -295,7 +295,7 @@ router.delete("/:id", (req: Request, res: Response) => {
     res.json({ ok: true, message: "Publicação removida com sucesso." })
   } catch (error: any) {
     console.error("[API Feed] Erro ao remover post:", error)
-    res.status(500).json({ ok: false, error: "Erro ao excluir publicação: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao excluir publicação no feed." })
   }
 })
 

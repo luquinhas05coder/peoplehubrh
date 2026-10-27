@@ -184,27 +184,48 @@ function getEventBadgeStyle(category: string): string {
   }
 }
 
+const isSubmitting = ref(false)
+
 async function handleCreateEvent() {
+  if (isSubmitting.value) return
   if (!newEvent.value.title.trim()) {
     showToast("Informe o título do evento.", "warning")
     return
   }
 
+  if (newEvent.value.startDate && newEvent.value.endDate && newEvent.value.endDate < newEvent.value.startDate) {
+    showToast("A data final não pode ser anterior à data inicial do evento.", "warning")
+    return
+  }
+
+  isSubmitting.value = true
   try {
     const res = await apiFetch("/api/calendar/events", {
       method: "POST",
       body: JSON.stringify(newEvent.value),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (data.ok) {
       showToast("Evento adicionado ao calendário!", "success")
       showNewModal.value = false
+      newEvent.value = {
+        title: "",
+        category: "treinamento",
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: new Date().toISOString().slice(0, 10),
+        department: "Geral",
+        location: "Auditório Principal / Google Meet",
+        description: "",
+        isAllDay: true,
+      }
       await fetchEvents()
     } else {
       showToast(data.error || "Erro ao registrar evento.", "error")
     }
   } catch (err: any) {
-    showToast("Falha de rede: " + err.message, "error")
+    showToast("Falha de rede: " + (err?.message || "conexão indisponível"), "error")
+  } finally {
+    isSubmitting.value = false
   }
 }
 
@@ -214,17 +235,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto p-4 md:p-6 bg-background space-y-6">
+  <div class="flex-1 overflow-y-auto scrollbar-thin p-3.5 sm:p-6 lg:p-8 bg-background space-y-6">
     <!-- Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
       <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+        <div class="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20">
           <CalendarIcon :size="26" />
         </div>
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             Calendário Corporativo Integrado
-            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+            <span class="ph-badge-info text-xs">
               Prazos & Férias em Tempo Real
             </span>
           </h1>
@@ -238,7 +259,7 @@ onMounted(() => {
         <button
           @click="fetchEvents"
           :disabled="loading"
-          class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-card hover:bg-muted transition-colors disabled:opacity-50"
+          class="ph-btn-secondary"
         >
           <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
           <span class="hidden sm:inline">Atualizar</span>
@@ -247,7 +268,7 @@ onMounted(() => {
         <button
           v-if="hasPermission('calendar.manage')"
           @click="showNewModal = true"
-          class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all"
+          class="ph-btn-primary"
         >
           <Plus :size="18" />
           <span>Agendar Evento</span>
@@ -284,7 +305,7 @@ onMounted(() => {
       <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
         <select
           v-model="selectedCategory"
-          class="px-2.5 py-1.5 text-xs rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer"
+          class="ph-select px-2.5 py-1.5 text-xs"
         >
           <option value="todos">Todas Categorias</option>
           <option value="ferias">Férias Aprovadas</option>
@@ -296,7 +317,7 @@ onMounted(() => {
 
         <select
           v-model="selectedDepartment"
-          class="px-2.5 py-1.5 text-xs rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer"
+          class="ph-select px-2.5 py-1.5 text-xs"
         >
           <option value="todos">Todos Departamentos</option>
           <option value="Geral">Geral</option>
@@ -311,7 +332,8 @@ onMounted(() => {
     <!-- Layout Principal: Grade do Mês + Painel Lateral do Dia -->
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
       <!-- Grade Mensal -->
-      <div class="lg:col-span-3 bg-card rounded-2xl border p-4 shadow-2xs overflow-hidden">
+      <div class="lg:col-span-3 overflow-x-auto scrollbar-thin">
+        <div class="bg-card rounded-2xl border p-4 shadow-2xs overflow-hidden min-w-[540px]">
         <!-- Dias da Semana -->
         <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs text-muted-foreground uppercase py-2 border-b">
           <span>Dom</span>
@@ -371,6 +393,7 @@ onMounted(() => {
           </div>
         </div>
       </div>
+    </div>
 
       <!-- Painel Lateral: Detalhes do Dia Selecionado -->
       <div class="bg-card rounded-2xl border p-4 shadow-2xs flex flex-col space-y-4">
@@ -426,18 +449,18 @@ onMounted(() => {
     <!-- Modal de Agendamento de Evento Corporativo -->
     <div
       v-if="showNewModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm overflow-y-auto"
     >
-      <div class="bg-card w-full max-w-lg rounded-2xl border shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div class="p-5 border-b flex items-center justify-between bg-muted/20">
+      <div class="bg-card w-full max-w-lg rounded-2xl border border-border shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-foreground my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
+        <div class="p-5 border-b border-border flex items-center justify-between bg-muted/20">
           <div>
             <h2 class="text-base font-bold text-foreground flex items-center gap-2">
-              <CalendarIcon :size="18" class="text-teal-500" />
+              <CalendarIcon :size="18" class="text-primary" />
               Agendar Evento Corporativo
             </h2>
             <p class="text-xs text-muted-foreground">Registre treinamentos, reuniões de gestão e comunicados no calendário.</p>
           </div>
-          <button @click="showNewModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
+          <button @click="showNewModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted cursor-pointer">
             <X :size="18" />
           </button>
         </div>
@@ -449,7 +472,7 @@ onMounted(() => {
               v-model="newEvent.title"
               type="text"
               placeholder="Ex.: Treinamento de Segurança & LGPD"
-              class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:ring-2 focus:ring-teal-500/30"
+              class="ph-input w-full px-3 py-2 text-sm"
             />
           </div>
 
@@ -458,7 +481,7 @@ onMounted(() => {
               <label class="text-xs font-semibold text-foreground">Categoria</label>
               <select
                 v-model="newEvent.category"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border"
+                class="ph-select w-full px-3 py-2 text-sm"
               >
                 <option value="treinamento">Treinamento</option>
                 <option value="reuniao">Reunião de Gestão</option>
@@ -471,7 +494,7 @@ onMounted(() => {
               <label class="text-xs font-semibold text-foreground">Departamento</label>
               <select
                 v-model="newEvent.department"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border"
+                class="ph-select w-full px-3 py-2 text-sm"
               >
                 <option value="Geral">Geral (Toda a Empresa)</option>
                 <option value="TI">TI</option>
@@ -488,7 +511,7 @@ onMounted(() => {
               <input
                 v-model="newEvent.startDate"
                 type="date"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border"
+                class="ph-input w-full px-3 py-2 text-sm"
               />
             </div>
             <div class="space-y-1.5">
@@ -496,7 +519,7 @@ onMounted(() => {
               <input
                 v-model="newEvent.endDate"
                 type="date"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border"
+                class="ph-input w-full px-3 py-2 text-sm"
               />
             </div>
           </div>
@@ -507,7 +530,7 @@ onMounted(() => {
               v-model="newEvent.location"
               type="text"
               placeholder="Ex.: Google Meet / Auditório B"
-              class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border"
+              class="ph-input w-full px-3 py-2 text-sm"
             />
           </div>
 
@@ -517,17 +540,21 @@ onMounted(() => {
               v-model="newEvent.description"
               rows="2"
               placeholder="Breve resumo do evento ou instruções para os participantes..."
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border border-border"
+              class="ph-input w-full px-3 py-2 text-xs"
             ></textarea>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 bg-muted/20">
-          <button @click="showNewModal = false" class="px-4 py-2 text-sm font-semibold rounded-lg border hover:bg-muted">
+        <div class="p-4 border-t border-border flex justify-end gap-2 bg-muted/20">
+          <button @click="showNewModal = false" class="ph-btn-secondary px-4 py-2">
             Cancelar
           </button>
-          <button @click="handleCreateEvent" class="px-5 py-2 text-sm font-bold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm">
-            Salvar no Calendário
+          <button
+            @click="handleCreateEvent"
+            :disabled="isSubmitting"
+            class="ph-btn-primary px-5 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ isSubmitting ? "Salvando..." : "Salvar no Calendário" }}
           </button>
         </div>
       </div>

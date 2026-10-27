@@ -15,6 +15,7 @@ import {
   History,
   FileCheck,
   ChevronRight,
+  Loader2,
 } from "lucide-vue-next"
 import { apiFetch, showToast, activeUserRole, hasPermission } from "../store"
 
@@ -223,7 +224,10 @@ async function handleExecuteStep(action: "concluir" | "iniciar" | "rejeitar", st
   }
 }
 
+const isSubmittingWf = ref(false)
+
 async function handleCreateWorkflow() {
+  if (isSubmittingWf.value) return
   if (!newWf.value.title.trim()) {
     showToast("Informe o título do processo.", "warning")
     return
@@ -233,19 +237,31 @@ async function handleCreateWorkflow() {
     return
   }
 
+  const emptyStepIndex = newWf.value.steps.findIndex((s) => !s.title || !s.title.trim())
+  if (emptyStepIndex !== -1) {
+    showToast(`A etapa #${emptyStepIndex + 1} precisa ter um título preenchido.`, "warning")
+    return
+  }
+
+  isSubmittingWf.value = true
   try {
     const res = await apiFetch("/api/workflows", {
       method: "POST",
       body: JSON.stringify({
-        title: newWf.value.title,
+        title: newWf.value.title.trim(),
         category: newWf.value.category,
-        description: newWf.value.description,
-        employeeName: newWf.value.employee_name || undefined,
+        description: newWf.value.description.trim(),
+        employeeName: newWf.value.employee_name.trim() || undefined,
         dueDate: newWf.value.due_date || undefined,
-        steps: newWf.value.steps,
+        steps: newWf.value.steps.map((s, idx) => ({
+          order_index: idx + 1,
+          title: s.title.trim(),
+          assignee_role: s.assignee_role,
+          description: s.description || "",
+        })),
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (data.ok) {
       showToast("Processo de workflow iniciado com sucesso!", "success")
       showNewModal.value = false
@@ -255,6 +271,8 @@ async function handleCreateWorkflow() {
     }
   } catch (err: any) {
     showToast("Falha de rede ao criar workflow: " + err.message, "error")
+  } finally {
+    isSubmittingWf.value = false
   }
 }
 
@@ -314,24 +332,36 @@ function getCategoryColor(cat: string): string {
   }
 }
 
+function formatDisplayDate(val?: string): string {
+  if (!val) return ""
+  if (val.includes("T")) {
+    return new Date(val).toLocaleDateString("pt-BR")
+  }
+  const parts = val.split("-")
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`
+  }
+  return val
+}
+
 onMounted(() => {
   fetchWorkflows()
 })
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto p-4 md:p-6 bg-background space-y-6">
+  <div class="flex-1 overflow-y-auto scrollbar-thin p-3.5 sm:p-6 lg:p-8 bg-background space-y-6">
     <!-- Header Principal -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
       <div>
         <div class="flex items-center gap-3">
-          <div class="p-2.5 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+          <div class="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20">
             <GitMerge :size="26" />
           </div>
           <div>
             <h1 class="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               Workflows & Processos de RH
-              <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+              <span class="ph-badge-info text-xs">
                 Visual Kanban
               </span>
             </h1>
@@ -346,7 +376,7 @@ onMounted(() => {
         <button
           @click="fetchWorkflows"
           :disabled="loading"
-          class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          class="ph-btn-secondary"
           title="Recarregar processos"
         >
           <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
@@ -356,7 +386,7 @@ onMounted(() => {
         <button
           v-if="hasPermission('workflows.create')"
           @click="showNewModal = true"
-          class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all hover:shadow"
+          class="ph-btn-primary"
         >
           <Plus :size="18" />
           <span>Novo Processo</span>
@@ -365,60 +395,60 @@ onMounted(() => {
     </div>
 
     <!-- Cards de Métricas / KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="p-4 rounded-xl border bg-card text-card-foreground shadow-2xs">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <div class="p-3 sm:p-4 rounded-xl border border-border bg-card text-card-foreground shadow-2xs">
         <div class="flex items-center justify-between text-muted-foreground mb-1">
-          <span class="text-xs font-medium uppercase tracking-wider">Total de Processos</span>
-          <GitMerge :size="18" class="text-teal-500" />
+          <span class="text-xs font-medium uppercase tracking-wider">Total</span>
+          <GitMerge :size="18" class="text-primary" />
         </div>
-        <div class="text-2xl font-black text-foreground">{{ stats.total }}</div>
-        <span class="text-xs text-muted-foreground">Iniciados no sistema</span>
+        <div class="text-xl sm:text-2xl font-black text-foreground">{{ stats.total }}</div>
+        <span class="text-xs text-muted-foreground truncate block">Iniciados no sistema</span>
       </div>
 
-      <div class="p-4 rounded-xl border bg-card text-card-foreground shadow-2xs">
+      <div class="p-3 sm:p-4 rounded-xl border border-border bg-card text-card-foreground shadow-2xs">
         <div class="flex items-center justify-between text-muted-foreground mb-1">
-          <span class="text-xs font-medium uppercase tracking-wider">Em Andamento</span>
+          <span class="text-xs font-medium uppercase tracking-wider">Andamento</span>
           <Clock :size="18" class="text-amber-500" />
         </div>
-        <div class="text-2xl font-black text-amber-600 dark:text-amber-400">{{ stats.emAndamento }}</div>
-        <span class="text-xs text-muted-foreground">Requerem acompanhamento</span>
+        <div class="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">{{ stats.emAndamento }}</div>
+        <span class="text-xs text-muted-foreground truncate block">Em acompanhamento</span>
       </div>
 
-      <div class="p-4 rounded-xl border bg-card text-card-foreground shadow-2xs">
+      <div class="p-3 sm:p-4 rounded-xl border border-border bg-card text-card-foreground shadow-2xs">
         <div class="flex items-center justify-between text-muted-foreground mb-1">
           <span class="text-xs font-medium uppercase tracking-wider">Concluídos</span>
           <CheckCircle2 :size="18" class="text-emerald-500" />
         </div>
-        <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400">{{ stats.concluidos }}</div>
-        <span class="text-xs text-muted-foreground">Com todas etapas aprovadas</span>
+        <div class="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">{{ stats.concluidos }}</div>
+        <span class="text-xs text-muted-foreground truncate block">Todas etapas aprovadas</span>
       </div>
 
-      <div class="p-4 rounded-xl border bg-card text-card-foreground shadow-2xs">
+      <div class="p-3 sm:p-4 rounded-xl border border-border bg-card text-card-foreground shadow-2xs">
         <div class="flex items-center justify-between text-muted-foreground mb-1">
           <span class="text-xs font-medium uppercase tracking-wider">Taxa de Conclusão</span>
           <FileCheck :size="18" class="text-indigo-500" />
         </div>
-        <div class="text-2xl font-black text-indigo-600 dark:text-indigo-400">{{ stats.rate }}%</div>
-        <span class="text-xs text-muted-foreground">Eficiência das esteiras</span>
+        <div class="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400">{{ stats.rate }}%</div>
+        <span class="text-xs text-muted-foreground truncate block">Eficiência das esteiras</span>
       </div>
     </div>
 
     <!-- Barra de Filtros e Busca -->
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
       <div class="relative flex-1">
         <Search :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <input
           v-model="searchTerm"
           type="text"
           placeholder="Buscar por colaborador, título ou categoria..."
-          class="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+          class="ph-input w-full pl-9 pr-3 py-2 text-sm"
         />
       </div>
 
       <div class="flex items-center gap-2">
         <select
           v-model="selectedCategory"
-          class="px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30 cursor-pointer"
+          class="ph-select px-3 py-2 text-sm"
         >
           <option value="todos">Todas as Categorias</option>
           <option value="Admissão">Admissão</option>
@@ -484,7 +514,7 @@ onMounted(() => {
 
             <div class="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
               <span v-if="wf.due_date" class="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-                <Calendar :size="12" /> Prazo: {{ new Date(wf.due_date).toLocaleDateString('pt-BR') }}
+                <Calendar :size="12" /> Prazo: {{ formatDisplayDate(wf.due_date) }}
               </span>
               <span v-else>Sem prazo definido</span>
 
@@ -606,11 +636,11 @@ onMounted(() => {
     <!-- Modal de Detalhes e Execução de Etapas -->
     <div
       v-if="showDetailModal && selectedWorkflow"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
     >
-      <div class="bg-card w-full max-w-3xl rounded-2xl border shadow-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div class="bg-card w-full max-w-3xl rounded-2xl border shadow-xl max-h-[90dvh] my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <!-- Topo do Modal -->
-        <div class="p-5 border-b flex items-center justify-between bg-muted/20">
+        <div class="p-4 sm:p-5 border-b flex items-center justify-between bg-muted/20">
           <div>
             <div class="flex items-center gap-2 mb-1">
               <span class="text-xs font-semibold px-2 py-0.5 rounded-md border" :class="getCategoryColor(selectedWorkflow.category)">
@@ -632,7 +662,7 @@ onMounted(() => {
         </div>
 
         <!-- Conteúdo com Stepper Visual e Histórico -->
-        <div class="p-6 overflow-y-auto space-y-6 flex-1">
+        <div class="p-4 sm:p-6 overflow-y-auto scrollbar-thin space-y-6 flex-1">
           <!-- Stepper de Etapas -->
           <div>
             <h3 class="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
@@ -776,13 +806,13 @@ onMounted(() => {
     <!-- Modal de Criação de Novo Workflow -->
     <div
       v-if="showNewModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm overflow-y-auto"
     >
-      <div class="bg-card w-full max-w-2xl rounded-2xl border shadow-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div class="p-5 border-b flex items-center justify-between bg-muted/20">
+      <div class="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-xl max-h-[90dvh] my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-foreground">
+        <div class="p-4 sm:p-5 border-b border-border flex items-center justify-between bg-muted/20">
           <div>
             <h2 class="text-lg font-bold text-foreground flex items-center gap-2">
-              <GitMerge :size="20" class="text-teal-500" />
+              <GitMerge :size="20" class="text-primary" />
               Abrir Novo Processo de RH
             </h2>
             <p class="text-xs text-muted-foreground">Selecione um template corporativo ou customize as etapas de aprovação.</p>
@@ -792,14 +822,14 @@ onMounted(() => {
           </button>
         </div>
 
-        <div class="p-6 overflow-y-auto space-y-4 flex-1">
+        <div class="p-4 sm:p-6 overflow-y-auto scrollbar-thin space-y-4 flex-1">
           <!-- Template Selector -->
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-foreground">Modelo Pré-definido:</label>
             <select
               v-model="newWf.template"
               @change="handleTemplateChange"
-              class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              class="ph-select w-full px-3 py-2 text-sm"
             >
               <option value="admissao">Esteira de Admissão & Onboarding (4 etapas)</option>
               <option value="ferias">Programação e Homologação de Férias (3 etapas)</option>
@@ -815,7 +845,7 @@ onMounted(() => {
                 v-model="newWf.title"
                 type="text"
                 placeholder="Ex.: Admissão Desenvolvedor Frontend"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+                class="ph-input w-full px-3 py-2 text-sm"
               />
             </div>
 
@@ -825,7 +855,7 @@ onMounted(() => {
                 v-model="newWf.employee_name"
                 type="text"
                 placeholder="Nome completo do colaborador"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+                class="ph-input w-full px-3 py-2 text-sm"
               />
             </div>
           </div>
@@ -835,7 +865,7 @@ onMounted(() => {
               <label class="text-xs font-semibold text-foreground">Categoria</label>
               <select
                 v-model="newWf.category"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+                class="ph-select w-full px-3 py-2 text-sm"
               >
                 <option value="Admissão">Admissão</option>
                 <option value="Férias">Férias</option>
@@ -851,19 +881,19 @@ onMounted(() => {
               <input
                 v-model="newWf.due_date"
                 type="date"
-                class="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+                class="ph-input w-full px-3 py-2 text-sm"
               />
             </div>
           </div>
 
           <!-- Etapas Personalizáveis -->
-          <div class="border-t pt-4 space-y-3">
+          <div class="border-t border-border pt-4 space-y-3">
             <div class="flex items-center justify-between">
               <label class="text-xs font-bold text-foreground">Etapas e Alçadas de Aprovação:</label>
               <button
                 type="button"
                 @click="addStepToNewWf"
-                class="flex items-center gap-1 text-xs text-teal-600 dark:text-teal-400 font-bold hover:underline"
+                class="flex items-center gap-1 text-xs text-primary font-bold hover:underline cursor-pointer"
               >
                 <Plus :size="14" /> Adicionar Etapa
               </button>
@@ -873,18 +903,18 @@ onMounted(() => {
               <div
                 v-for="(st, idx) in newWf.steps"
                 :key="idx"
-                class="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30"
+                class="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-muted/30"
               >
                 <span class="text-xs font-bold w-5 text-center text-muted-foreground">{{ idx + 1 }}.</span>
                 <input
                   v-model="st.title"
                   type="text"
                   placeholder="Nome da etapa"
-                  class="flex-1 px-2.5 py-1.5 text-xs rounded border bg-background"
+                  class="ph-input flex-1 px-2.5 py-1.5 text-xs"
                 />
                 <select
                   v-model="st.assignee_role"
-                  class="px-2 py-1.5 text-xs rounded border bg-background font-semibold"
+                  class="ph-select px-2 py-1.5 text-xs font-semibold"
                 >
                   <option value="RH">RH</option>
                   <option value="ADMIN">ADMIN / TI</option>
@@ -894,7 +924,7 @@ onMounted(() => {
                 <button
                   type="button"
                   @click="removeStepFromNewWf(idx)"
-                  class="p-1 text-muted-foreground hover:text-rose-500"
+                  class="p-1 text-muted-foreground hover:text-rose-500 cursor-pointer"
                   title="Remover etapa"
                 >
                   <X :size="16" />
@@ -904,18 +934,20 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 bg-muted/20">
+        <div class="p-4 border-t border-border flex justify-end gap-2 bg-muted/20">
           <button
             @click="showNewModal = false"
-            class="px-4 py-2 text-sm font-semibold rounded-lg border hover:bg-muted transition-colors cursor-pointer"
+            class="ph-btn-secondary px-4 py-2"
           >
             Cancelar
           </button>
           <button
             @click="handleCreateWorkflow"
-            class="px-5 py-2 text-sm font-bold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-colors cursor-pointer"
+            :disabled="isSubmittingWf"
+            class="ph-btn-primary px-5 py-2 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
-            Criar & Iniciar Workflow
+            <Loader2 v-if="isSubmittingWf" class="w-3.5 h-3.5 animate-spin" />
+            <span>{{ isSubmittingWf ? 'Criando...' : 'Criar & Iniciar Workflow' }}</span>
           </button>
         </div>
       </div>

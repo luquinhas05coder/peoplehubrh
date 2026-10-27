@@ -436,12 +436,12 @@ onMounted(() => {
     <!-- Modal de Detalhes da Vaga e Candidatura -->
     <div
       v-if="showApplyModal && selectedJob"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"
       @click.self="closeApplyModal"
     >
-      <div class="w-full max-w-3xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl my-8 overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="w-full max-w-3xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl my-auto overflow-hidden flex flex-col max-h-[90dvh]">
         <!-- Modal Header -->
-        <div class="px-6 py-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+        <div class="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
           <div>
             <div class="flex items-center gap-2 mb-1">
               <span class="px-2 py-0.5 text-xs font-semibold rounded bg-teal-500/10 text-teal-400 border border-teal-500/30 uppercase">
@@ -460,7 +460,7 @@ onMounted(() => {
         </div>
 
         <!-- Modal Body -->
-        <div class="p-6 overflow-y-auto space-y-6 text-sm text-slate-300">
+        <div class="p-4 sm:p-6 overflow-y-auto space-y-6 text-sm text-slate-300 scrollbar-thin">
           <!-- Success State -->
           <div v-if="submitSuccess" class="py-8 text-center space-y-4">
             <div class="h-16 w-16 bg-teal-500/20 text-teal-400 rounded-full flex items-center justify-center mx-auto ring-8 ring-teal-500/10">
@@ -655,11 +655,11 @@ onMounted(() => {
               </div>
 
               <!-- Submit Button -->
-              <div class="mt-6 flex items-center justify-end gap-3">
+              <div class="mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
                 <button
                   type="button"
                   @click="closeApplyModal"
-                  class="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm font-medium transition-colors cursor-pointer"
+                  class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm font-medium transition-colors cursor-pointer text-center"
                 >
                   Cancelar
                 </button>
@@ -668,7 +668,7 @@ onMounted(() => {
                   type="button"
                   :disabled="submitting || !form.lgpdConsent"
                   @click="submitApplication"
-                  class="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm flex items-center gap-2 transition-all shadow-md shadow-teal-950 cursor-pointer"
+                  class="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-teal-950 cursor-pointer text-center"
                 >
                   <span v-if="submitting" class="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
                   <span>{{ submitting ? 'Enviando...' : 'Confirmar Candidatura' }}</span>

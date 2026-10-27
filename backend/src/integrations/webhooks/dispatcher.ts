@@ -8,7 +8,6 @@
 import { getDB, persist } from "../../db/index.js"
 import type { WebhookEventType } from "../core/types.js"
 import { sanitizePayload } from "../security/sanitizer.js"
-import { processDelivery } from "./worker.js"
 
 /**
  * Publica um evento assíncrono para todos os endpoints de webhook ativos inscritos
@@ -88,10 +87,13 @@ export async function dispatchWebhookEvent(
       deliveryIds.push(deliveryId)
 
       // Disparar execução assíncrona imediata sem bloquear o processo principal
-      setImmediate(() => {
-        processDelivery(deliveryId).catch((err) => {
-          console.error(`[Webhook Worker] Erro ao processar entrega ${deliveryId}:`, err.message)
-        })
+      setImmediate(async () => {
+        try {
+          const { processDelivery } = await import("./worker.js")
+          await processDelivery(deliveryId)
+        } catch (err: any) {
+          console.error(`[Webhook Worker] Erro ao processar entrega ${deliveryId}:`, err?.message || err)
+        }
       })
     }
 

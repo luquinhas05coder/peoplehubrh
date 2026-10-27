@@ -210,14 +210,21 @@ function openEvaluationForm(type: "autoavaliacao" | "lideranca", targetEmpName?:
   showEvalModal.value = true
 }
 
+const isSubmittingEval = ref(false)
+
 async function submitEvaluation(asDraft = false) {
-  if (!activeEvaluation.value.cycleId) return
+  if (isSubmittingEval.value) return
+  if (!activeEvaluation.value.cycleId) {
+    showToast("Ciclo de avaliação não selecionado.", "warning")
+    return
+  }
 
   const formattedScores = Object.entries(activeEvaluation.value.scores).map(([critId, score]) => ({
     criterion_id: critId,
     score,
   }))
 
+  isSubmittingEval.value = true
   try {
     const res = await apiFetch("/api/performance/evaluations", {
       method: "POST",
@@ -231,7 +238,7 @@ async function submitEvaluation(asDraft = false) {
         status: asDraft ? "rascunho" : "concluido",
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (data.ok) {
       showToast(asDraft ? "Rascunho salvo com sucesso!" : "Avaliação oficial enviada com sucesso!", "success")
       showEvalModal.value = false
@@ -240,7 +247,9 @@ async function submitEvaluation(asDraft = false) {
       showToast(data.error || "Erro ao salvar avaliação.", "error")
     }
   } catch (err: any) {
-    showToast("Falha de rede: " + err.message, "error")
+    showToast("Falha de rede ao salvar avaliação: " + (err?.message || "conexão indisponível"), "error")
+  } finally {
+    isSubmittingEval.value = false
   }
 }
 
@@ -251,21 +260,29 @@ async function updateGoalProgress(goal: IndividualGoal, newProgress: number) {
       method: "PATCH",
       body: JSON.stringify({ currentProgress: newProgress, status }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (data.ok) {
       goal.current_progress = newProgress
       goal.status = status
       showToast("Progresso da meta atualizado!", "success")
+    } else {
+      showToast(data.error || "Não foi possível atualizar o progresso da meta.", "error")
     }
-  } catch (_e) {}
+  } catch (_e) {
+    showToast("Falha de rede ao atualizar progresso da meta.", "error")
+  }
 }
 
+const isSubmittingGoal = ref(false)
+
 async function handleCreateGoal() {
+  if (isSubmittingGoal.value) return
   if (!newGoal.value.title.trim() || !newGoal.value.metricTarget.trim()) {
     showToast("Título e métrica alvo são obrigatórios.", "warning")
     return
   }
 
+  isSubmittingGoal.value = true
   try {
     const res = await apiFetch("/api/performance/goals", {
       method: "POST",
@@ -276,25 +293,39 @@ async function handleCreateGoal() {
         cycleId: selectedCycleId.value || undefined,
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (data.ok) {
       showToast("Meta individual criada com sucesso!", "success")
       showGoalModal.value = false
+      newGoal.value = {
+        employeeId: "",
+        employeeName: "",
+        title: "",
+        description: "",
+        metricTarget: "",
+        dueDate: "",
+      }
       await fetchGoals()
     } else {
       showToast(data.error || "Erro ao registrar meta.", "error")
     }
   } catch (err: any) {
-    showToast("Falha ao salvar meta: " + err.message, "error")
+    showToast("Falha ao salvar meta: " + (err?.message || "conexão indisponível"), "error")
+  } finally {
+    isSubmittingGoal.value = false
   }
 }
 
+const isSubmittingCycle = ref(false)
+
 async function handleCreateCycle() {
+  if (isSubmittingCycle.value) return
   if (!newCycle.value.title.trim()) {
     showToast("Informe o título do ciclo.", "warning")
     return
   }
 
+  isSubmittingCycle.value = true
   try {
     const res = await apiFetch("/api/performance/cycles", {
       method: "POST",
@@ -308,16 +339,24 @@ async function handleCreateCycle() {
         ],
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (data.ok) {
       showToast("Ciclo avaliativo criado com sucesso!", "success")
       showCycleModal.value = false
+      newCycle.value = {
+        title: "",
+        description: "",
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString().slice(0, 10),
+      }
       await fetchCycles()
     } else {
       showToast(data.error || "Erro ao criar ciclo.", "error")
     }
   } catch (err: any) {
-    showToast("Falha de rede: " + err.message, "error")
+    showToast("Falha de rede ao criar ciclo: " + (err?.message || "conexão indisponível"), "error")
+  } finally {
+    isSubmittingCycle.value = false
   }
 }
 
@@ -327,17 +366,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto p-4 md:p-6 bg-background space-y-6">
+  <div class="flex-1 overflow-y-auto scrollbar-thin p-3.5 sm:p-6 lg:p-8 bg-background space-y-6">
     <!-- Header -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-5">
       <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+        <div class="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20">
           <Award :size="26" />
         </div>
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             Avaliação de Desempenho & Metas
-            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+            <span class="ph-badge-info text-xs">
               Competências & OKRs
             </span>
           </h1>
@@ -351,7 +390,7 @@ onMounted(() => {
         <button
           @click="loadData"
           :disabled="loading"
-          class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-card hover:bg-muted transition-colors disabled:opacity-50"
+          class="ph-btn-secondary"
         >
           <RefreshCw :size="16" :class="{ 'animate-spin': loading }" />
           <span class="hidden sm:inline">Atualizar</span>
@@ -360,7 +399,7 @@ onMounted(() => {
         <button
           v-if="hasPermission('performance.create_cycle')"
           @click="showCycleModal = true"
-          class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border border-teal-500/30 text-teal-700 dark:text-teal-300 bg-teal-500/10 hover:bg-teal-500/20 transition-all"
+          class="ph-btn-secondary"
         >
           <Plus :size="16" />
           <span>Novo Ciclo</span>
@@ -368,7 +407,7 @@ onMounted(() => {
 
         <button
           @click="openEvaluationForm('autoavaliacao')"
-          class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all"
+          class="ph-btn-primary"
         >
           <Star :size="18" />
           <span>Minha Autoavaliação</span>
@@ -377,14 +416,14 @@ onMounted(() => {
     </div>
 
     <!-- Seletor de Ciclo e Abas de Navegação -->
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
       <div class="flex items-center gap-2">
-        <Award :size="18" class="text-teal-500 shrink-0" />
+        <Award :size="18" class="text-primary shrink-0" />
         <span class="text-xs font-semibold text-muted-foreground">Ciclo:</span>
         <select
           v-model="selectedCycleId"
           @change="fetchEvaluations"
-          class="px-3 py-1.5 text-xs font-bold rounded-lg bg-background border border-border focus:ring-2 focus:ring-teal-500/30 cursor-pointer max-w-[280px] truncate"
+          class="ph-select px-3 py-1.5 text-xs font-bold max-w-[280px] truncate"
         >
           <option v-for="c in cycles" :key="c.id" :value="c.id">
             {{ c.title }} ({{ c.status }})
@@ -621,30 +660,30 @@ onMounted(() => {
     <!-- Modal de Formulário de Avaliação (Autoavaliação ou Liderança) -->
     <div
       v-if="showEvalModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm overflow-y-auto"
     >
-      <div class="bg-card w-full max-w-2xl rounded-2xl border shadow-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div class="p-5 border-b flex items-center justify-between bg-muted/20">
+      <div class="bg-card w-full max-w-2xl rounded-2xl border border-border shadow-xl max-h-[90dvh] my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-foreground">
+        <div class="p-4 sm:p-5 border-b border-border flex items-center justify-between bg-muted/20">
           <div>
             <h2 class="text-base font-bold text-foreground flex items-center gap-2">
-              <Star :size="18" class="text-teal-500" />
+              <Star :size="18" class="text-primary" />
               {{ activeEvaluation.type === 'autoavaliacao' ? 'Formulário de Autoavaliação' : 'Avaliação da Liderança' }}
             </h2>
             <p class="text-xs text-muted-foreground">
               Colaborador: <strong class="text-foreground">{{ activeEvaluation.employeeName }}</strong>
             </p>
           </div>
-          <button @click="showEvalModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
+          <button @click="showEvalModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted cursor-pointer">
             <X :size="18" />
           </button>
         </div>
 
-        <div class="p-6 overflow-y-auto space-y-5 flex-1">
+        <div class="p-4 sm:p-6 overflow-y-auto scrollbar-thin space-y-5 flex-1">
           <!-- Box de Média Ponderada em Tempo Real -->
-          <div class="flex items-center justify-between p-4 rounded-xl bg-teal-500/10 border border-teal-500/20">
+          <div class="flex items-center justify-between p-4 rounded-xl bg-primary/10 border border-primary/20">
             <div>
-              <span class="text-xs font-bold text-teal-800 dark:text-teal-300 uppercase">Média Ponderada Atual:</span>
-              <div class="text-2xl font-black text-teal-600 dark:text-teal-400">
+              <span class="text-xs font-bold text-primary uppercase">Média Ponderada Atual:</span>
+              <div class="text-2xl font-black text-primary">
                 {{ calculatedAverage }} <span class="text-xs font-normal text-muted-foreground">/ 5.0</span>
               </div>
             </div>
@@ -660,14 +699,14 @@ onMounted(() => {
             <div
               v-for="crit in activeCriteria"
               :key="crit.id"
-              class="p-3.5 rounded-xl border bg-muted/20 space-y-2"
+              class="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2"
             >
               <div class="flex items-start justify-between">
                 <div>
                   <h4 class="text-xs font-bold text-foreground">{{ crit.name }}</h4>
                   <span class="text-[10px] text-muted-foreground">Peso no cálculo: {{ crit.weight }}x | {{ crit.category }}</span>
                 </div>
-                <span class="text-xs font-bold px-2 py-0.5 rounded bg-background border text-foreground">
+                <span class="text-xs font-bold px-2 py-0.5 rounded bg-background border border-border text-foreground">
                   Nota: {{ activeEvaluation.scores[crit.id] || 3 }} / 5
                 </span>
               </div>
@@ -679,10 +718,10 @@ onMounted(() => {
                   :key="n"
                   type="button"
                   @click="activeEvaluation.scores[crit.id] = n"
-                  class="h-8 w-8 rounded-lg font-bold text-xs border transition-all"
+                  class="h-8 w-8 rounded-lg font-bold text-xs border transition-all cursor-pointer"
                   :class="activeEvaluation.scores[crit.id] === n
-                    ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
-                    : 'bg-background hover:bg-muted text-muted-foreground'"
+                    ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                    : 'bg-background hover:bg-muted text-muted-foreground border-border'"
                 >
                   {{ n }}
                 </button>
@@ -691,29 +730,31 @@ onMounted(() => {
           </div>
 
           <!-- Parecer Qualitativo / PDI -->
-          <div class="space-y-1.5 border-t pt-4">
+          <div class="space-y-1.5 border-t border-border pt-4">
             <label class="text-xs font-bold text-foreground">Parecer Qualitativo & Plano de Desenvolvimento (PDI):</label>
             <textarea
               v-model="activeEvaluation.feedback"
               rows="3"
               placeholder="Descreva conquistas, pontos fortes e oportunidades de aprimoramento contínuo..."
-              class="w-full p-2.5 text-xs rounded-lg bg-background border border-border focus:ring-2 focus:ring-teal-500/30"
+              class="ph-input w-full p-2.5 text-xs"
             ></textarea>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 bg-muted/20">
+        <div class="p-4 border-t border-border flex justify-end gap-2 bg-muted/20">
           <button
             @click="submitEvaluation(true)"
-            class="px-4 py-2 text-xs font-semibold rounded-lg border hover:bg-muted"
+            :disabled="isSubmittingEval"
+            class="ph-btn-secondary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Salvar Rascunho
           </button>
           <button
             @click="submitEvaluation(false)"
-            class="px-5 py-2 text-xs font-bold rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm"
+            :disabled="isSubmittingEval"
+            class="ph-btn-primary px-5 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Enviar Avaliação Oficial
+            {{ isSubmittingEval ? "Enviando..." : "Enviar Avaliação Oficial" }}
           </button>
         </div>
       </div>
@@ -722,15 +763,15 @@ onMounted(() => {
     <!-- Modal de Nova Meta -->
     <div
       v-if="showGoalModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm overflow-y-auto"
     >
-      <div class="bg-card w-full max-w-md rounded-2xl border shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div class="p-5 border-b flex items-center justify-between bg-muted/20">
+      <div class="bg-card w-full max-w-md rounded-2xl border border-border shadow-xl my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin flex flex-col animate-in fade-in zoom-in-95 duration-200 text-foreground">
+        <div class="p-5 border-b border-border flex items-center justify-between bg-muted/20">
           <h2 class="text-base font-bold text-foreground flex items-center gap-2">
-            <Target :size="18" class="text-teal-500" />
+            <Target :size="18" class="text-primary" />
             Cadastrar Nova Meta Individual
           </h2>
-          <button @click="showGoalModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
+          <button @click="showGoalModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted cursor-pointer">
             <X :size="18" />
           </button>
         </div>
@@ -742,7 +783,7 @@ onMounted(() => {
               v-model="newGoal.title"
               type="text"
               placeholder="Ex.: Reduzir tempo médio de contratação (SLA)"
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+              class="ph-input w-full px-3 py-2 text-xs"
             />
           </div>
 
@@ -752,7 +793,7 @@ onMounted(() => {
               v-model="newGoal.metricTarget"
               type="text"
               placeholder="Ex.: Redução para menos de 15 dias"
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+              class="ph-input w-full px-3 py-2 text-xs"
             />
           </div>
 
@@ -762,7 +803,7 @@ onMounted(() => {
               v-model="newGoal.employeeName"
               type="text"
               placeholder="Nome do colaborador"
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+              class="ph-input w-full px-3 py-2 text-xs"
             />
           </div>
 
@@ -771,17 +812,21 @@ onMounted(() => {
             <input
               v-model="newGoal.dueDate"
               type="date"
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+              class="ph-input w-full px-3 py-2 text-xs"
             />
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 bg-muted/20">
-          <button @click="showGoalModal = false" class="px-4 py-1.5 text-xs font-semibold rounded-lg border hover:bg-muted">
+        <div class="p-4 border-t border-border flex justify-end gap-2 bg-muted/20">
+          <button @click="showGoalModal = false" class="ph-btn-secondary px-4 py-1.5 text-xs">
             Cancelar
           </button>
-          <button @click="handleCreateGoal" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-teal-600 text-white hover:bg-teal-700">
-            Salvar Meta
+          <button
+            @click="handleCreateGoal"
+            :disabled="isSubmittingGoal"
+            class="ph-btn-primary px-4 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ isSubmittingGoal ? "Salvando..." : "Salvar Meta" }}
           </button>
         </div>
       </div>
@@ -790,15 +835,15 @@ onMounted(() => {
     <!-- Modal de Novo Ciclo Avaliativo -->
     <div
       v-if="showCycleModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm overflow-y-auto"
     >
-      <div class="bg-card w-full max-w-md rounded-2xl border shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div class="p-5 border-b flex items-center justify-between bg-muted/20">
+      <div class="bg-card w-full max-w-md rounded-2xl border border-border shadow-xl my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin flex flex-col animate-in fade-in zoom-in-95 duration-200 text-foreground">
+        <div class="p-5 border-b border-border flex items-center justify-between bg-muted/20">
           <h2 class="text-base font-bold text-foreground flex items-center gap-2">
-            <Award :size="18" class="text-teal-500" />
+            <Award :size="18" class="text-primary" />
             Novo Ciclo de Avaliação
           </h2>
-          <button @click="showCycleModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
+          <button @click="showCycleModal = false" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted cursor-pointer">
             <X :size="18" />
           </button>
         </div>
@@ -810,7 +855,7 @@ onMounted(() => {
               v-model="newCycle.title"
               type="text"
               placeholder="Ex.: Ciclo 2026.2 - Competências e Metas"
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+              class="ph-input w-full px-3 py-2 text-xs"
             />
           </div>
 
@@ -820,7 +865,7 @@ onMounted(() => {
               v-model="newCycle.description"
               rows="2"
               placeholder="Objetivos e escopo do ciclo de avaliação..."
-              class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+              class="ph-input w-full px-3 py-2 text-xs"
             ></textarea>
           </div>
 
@@ -830,7 +875,7 @@ onMounted(() => {
               <input
                 v-model="newCycle.startDate"
                 type="date"
-                class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+                class="ph-input w-full px-3 py-2 text-xs"
               />
             </div>
             <div class="space-y-1">
@@ -838,18 +883,22 @@ onMounted(() => {
               <input
                 v-model="newCycle.endDate"
                 type="date"
-                class="w-full px-3 py-2 text-xs rounded-lg bg-background border"
+                class="ph-input w-full px-3 py-2 text-xs"
               />
             </div>
           </div>
         </div>
 
-        <div class="p-4 border-t flex justify-end gap-2 bg-muted/20">
-          <button @click="showCycleModal = false" class="px-4 py-1.5 text-xs font-semibold rounded-lg border hover:bg-muted">
+        <div class="p-4 border-t border-border flex justify-end gap-2 bg-muted/20">
+          <button @click="showCycleModal = false" class="ph-btn-secondary px-4 py-1.5 text-xs">
             Cancelar
           </button>
-          <button @click="handleCreateCycle" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-teal-600 text-white hover:bg-teal-700">
-            Criar Ciclo
+          <button
+            @click="handleCreateCycle"
+            :disabled="isSubmittingCycle"
+            class="ph-btn-primary px-4 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ isSubmittingCycle ? "Criando..." : "Criar Ciclo" }}
           </button>
         </div>
       </div>

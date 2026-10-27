@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from "vue"
 import { X, User, Mail, Save, Briefcase, Building, ShieldCheck, Lock } from "lucide-vue-next"
-import { currentUser, showToast, userRoleType, userPermissions, type UserRoleType } from "../store"
+import { currentUser, showToast, userRoleType, userPermissions, apiFetch, type UserRoleType } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 
 const emit = defineEmits<{
@@ -41,6 +41,7 @@ function onRoleChange() {
 const loading = ref(false)
 
 async function handleSave() {
+  if (loading.value) return
   loading.value = true
   try {
     const payload: Record<string, string> = {
@@ -54,10 +55,8 @@ async function handleSave() {
       payload.department = form.department
     }
 
-    const res = await fetch("/api/auth/profile", {
+    const res = await apiFetch("/api/auth/profile", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(payload),
     })
     const data = await res.json()
@@ -97,30 +96,40 @@ async function handleSave() {
 
 <template>
   <!-- Backdrop -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-    <div class="relative flex h-[85vh] max-h-[680px] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl border border-border">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"
+    @click.self="emit('close')"
+    @keydown.esc="emit('close')"
+    tabindex="-1"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-profile-title"
+  >
+    <div class="relative flex h-[90dvh] max-h-[680px] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl border border-border my-auto">
       
       <!-- Cabeçalho -->
-      <header class="flex items-center justify-between border-b px-6 py-4" style="background-color: var(--color-primary)">
+      <header class="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4" style="background-color: var(--color-primary)">
         <div class="flex items-center gap-3 text-primary-foreground">
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/15">
-            <User :size="22" />
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/15">
+            <User :size="22" aria-hidden="true" />
           </div>
           <div>
-            <h2 class="text-lg font-bold">Meu Perfil de Usuário</h2>
-            <p class="text-xs text-primary-foreground/75">Visualize e edite suas informações pessoais e credenciais de acesso</p>
+            <h2 id="modal-profile-title" class="text-base sm:text-lg font-bold">Meu Perfil de Usuário</h2>
+            <p class="text-xs text-primary-foreground/75 hidden sm:block">Visualize e edite suas informações pessoais e credenciais de acesso</p>
           </div>
         </div>
         <button
-          class="flex h-9 w-9 items-center justify-center rounded-lg text-primary-foreground/80 transition-colors hover:bg-primary-foreground/15 hover:text-primary-foreground"
+          type="button"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-primary-foreground/80 transition-colors hover:bg-primary-foreground/15 hover:text-primary-foreground cursor-pointer"
+          aria-label="Fechar perfil de usuário"
           @click="emit('close')"
         >
-          <X :size="20" />
+          <X :size="20" aria-hidden="true" />
         </button>
       </header>
 
       <!-- Formulário -->
-      <div class="flex-1 overflow-y-auto p-6 space-y-6">
+      <div class="flex-1 overflow-y-auto scrollbar-thin p-3.5 sm:p-6 space-y-6">
         
         <!-- User Header Card -->
         <div class="flex items-center gap-4 rounded-xl border bg-muted/30 p-4 shadow-sm">
@@ -142,12 +151,12 @@ async function handleSave() {
           <!-- Perfil de Acesso & Nível de Permissão (RBAC) -->
           <div class="space-y-1.5 rounded-xl border bg-muted/20 p-3.5">
             <div class="flex items-center justify-between">
-              <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <ShieldCheck :size="15" class="text-primary" /> Perfil de Acesso (RBAC)
+              <label for="profile-role-type" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <ShieldCheck :size="15" class="text-primary" aria-hidden="true" /> Perfil de Acesso (RBAC)
               </label>
               <span class="text-[10px] text-muted-foreground flex items-center gap-1">
                 <template v-if="!isAdmin">
-                  <Lock :size="11" class="text-amber-500" /> Somente Administrador
+                  <Lock :size="11" class="text-amber-500" aria-hidden="true" /> Somente Administrador
                 </template>
                 <template v-else>
                   Define telas e permissões
@@ -155,6 +164,7 @@ async function handleSave() {
               </span>
             </div>
             <select
+              id="profile-role-type"
               v-model="form.roleType"
               :disabled="!isAdmin"
               @change="onRoleChange"
@@ -168,7 +178,7 @@ async function handleSave() {
             </select>
 
             <div v-if="!isAdmin" class="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-300">
-              <Lock :size="14" class="shrink-0 text-amber-600 dark:text-amber-400" />
+              <Lock :size="14" class="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
               <span>Suas permissões e telas de acesso são definidas exclusivamente pelo Administrador da plataforma.</span>
             </div>
 
@@ -183,32 +193,33 @@ async function handleSave() {
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Nome Completo</label>
+            <label for="profile-name" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Nome Completo</label>
             <div class="relative">
-              <User :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input v-model="form.name" type="text" required class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary" />
+              <User :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input id="profile-name" v-model="form.name" type="text" required class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">E-mail Institucional</label>
+            <label for="profile-email" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">E-mail Institucional</label>
             <div class="relative">
-              <Mail :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input v-model="form.email" type="email" required class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary" />
+              <Mail :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input id="profile-email" v-model="form.email" type="email" required class="w-full rounded-xl border bg-background py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1.5">
               <div class="flex items-center justify-between">
-                <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Cargo / Função</label>
+                <label for="profile-role" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Cargo / Função</label>
                 <span v-if="!isAdmin" class="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Lock :size="10" /> Somente Leitura
+                  <Lock :size="10" aria-hidden="true" /> Somente Leitura
                 </span>
               </div>
               <div class="relative">
-                <Briefcase :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Briefcase :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <input
+                  id="profile-role"
                   v-model="form.role"
                   type="text"
                   :readonly="!isAdmin"
@@ -221,14 +232,15 @@ async function handleSave() {
 
             <div class="space-y-1.5">
               <div class="flex items-center justify-between">
-                <label class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Departamento</label>
+                <label for="profile-department" class="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Departamento</label>
                 <span v-if="!isAdmin" class="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Lock :size="10" /> Somente Leitura
+                  <Lock :size="10" aria-hidden="true" /> Somente Leitura
                 </span>
               </div>
               <div class="relative">
-                <Building :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Building :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <input
+                  id="profile-department"
                   v-model="form.department"
                   type="text"
                   :readonly="!isAdmin"
@@ -244,10 +256,10 @@ async function handleSave() {
       </div>
 
       <!-- Rodapé com Ações -->
-      <footer class="flex items-center justify-between border-t bg-muted/30 px-6 py-4">
+      <footer class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t bg-muted/30 px-4 py-3 sm:px-6 sm:py-4">
         <button
           type="button"
-          class="rounded-xl border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+          class="rounded-xl border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted cursor-pointer text-center"
           @click="emit('close')"
         >
           Cancelar
@@ -255,7 +267,7 @@ async function handleSave() {
         <button
           type="button"
           :disabled="loading"
-          class="flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-95"
+          class="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-95 cursor-pointer text-center"
           style="background-color: var(--color-primary)"
           @click="handleSave"
         >

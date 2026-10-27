@@ -40,6 +40,7 @@ import {
   userRoleType,
   userPermissions,
   currentUser,
+  showToast,
 } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import NewEmployeeFolderModal from "./NewEmployeeFolderModal.vue"
@@ -137,15 +138,6 @@ function clearSelectedFile() {
   selectedFile.value = null
   newDocSize.value = ""
   if (fileInputRef.value) fileInputRef.value.value = ""
-}
-
-const toastText = ref<string | null>(null)
-
-function showToast(msg: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2500)
 }
 
 const departments = ["todos", "Tecnologia", "Marketing", "Vendas", "Financeiro", "Administrativo", "Recursos Humanos"]
@@ -289,10 +281,9 @@ function handleDeleteDocument(docId: string, docName: string) {
   }
 }
 
-function handleDeleteFolder(id: string, name: string) {
+async function handleDeleteFolder(id: string, name: string) {
   if (confirm(`Tem certeza que deseja excluir a pasta do colaborador ${name}?`)) {
-    deleteEmployeeFolder(id)
-    showToast(`Pasta de ${name} removida.`)
+    await deleteEmployeeFolder(id)
   }
 }
 
@@ -333,25 +324,11 @@ function getScheduleMeta(key?: string) {
 
 <template>
   <div class="flex h-full flex-col bg-background relative overflow-hidden">
-    <!-- Toast local -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="fixed top-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-xl"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
 
 
     <!-- Modal Adicionar Documento -->
-    <div v-if="showAddDocModal && activeFolder" class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
-      <div class="w-full max-w-md rounded-2xl border bg-card p-6 shadow-2xl">
+    <div v-if="showAddDocModal && activeFolder" class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+      <div class="w-full max-w-md rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <h3 class="font-bold text-base flex items-center gap-2">
             <FileUp :size="18" style="color: var(--color-primary)" /> Adicionar Documento à Pasta
@@ -464,7 +441,7 @@ function getScheduleMeta(key?: string) {
     </div>
 
     <!-- Cabeçalho Principal do Módulo (visível apenas na lista geral e na visualização da pasta) -->
-    <header v-if="!showNewFolderModal && !isEditingFolder" class="border-b bg-card px-5 py-4 sm:px-8">
+    <header v-if="!showNewFolderModal && !isEditingFolder" class="border-b bg-card px-4 py-4 sm:px-6 lg:px-8">
       <!-- 1. CABEÇALHO QUANDO VISUALIZANDO UM COLABORADOR ESPECÍFICO -->
       <div v-if="activeFolder" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div v-if="userPermissions.isColaborador" class="flex items-center gap-2">
@@ -546,7 +523,7 @@ function getScheduleMeta(key?: string) {
             />
           </div>
 
-          <div class="flex items-center gap-2 overflow-x-auto">
+          <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
             <select
               v-model="selectedDepartment"
               class="rounded-xl border bg-background px-3 py-2 text-xs font-medium outline-none shrink-0 cursor-pointer"
@@ -620,7 +597,7 @@ function getScheduleMeta(key?: string) {
     </header>
 
     <!-- Conteúdo Principal: Cadastro In-Page, Edição In-Page, Inspector ou Lista de Pastas -->
-    <div class="flex-1 overflow-y-auto p-5 sm:p-8 scrollbar-thin">
+    <div class="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 scrollbar-thin">
       <!-- MODO 1: EDIÇÃO DE PASTA EXISTENTE (IN-PAGE) -->
       <NewEmployeeFolderModal
         v-if="isEditingFolder && folderToEdit"
@@ -1009,17 +986,17 @@ function getScheduleMeta(key?: string) {
         </div>
 
         <!-- MODO TABELA DETALHADA -->
-        <div v-else class="overflow-x-auto rounded-2xl border bg-card shadow-sm">
-          <table class="w-full text-left text-xs">
+        <div v-else class="overflow-x-auto rounded-2xl border bg-card shadow-sm scrollbar-thin">
+          <table class="w-full text-left text-xs min-w-[720px]" aria-label="Lista detalhada de colaboradores cadastrados">
             <thead class="border-b bg-muted/50 text-muted-foreground uppercase tracking-wider font-semibold">
               <tr>
-                <th class="p-3.5">Colaborador</th>
-                <th class="p-3.5">Matrícula / CPF</th>
-                <th class="p-3.5">Departamento & Cargo</th>
-                <th class="p-3.5">Contrato & Escala</th>
-                <th class="p-3.5">Documentos</th>
-                <th class="p-3.5">Status</th>
-                <th class="p-3.5 text-right">Ação</th>
+                <th scope="col" class="p-3.5">Colaborador</th>
+                <th scope="col" class="p-3.5">Matrícula / CPF</th>
+                <th scope="col" class="p-3.5">Departamento & Cargo</th>
+                <th scope="col" class="p-3.5">Contrato & Escala</th>
+                <th scope="col" class="p-3.5">Documentos</th>
+                <th scope="col" class="p-3.5">Status</th>
+                <th scope="col" class="p-3.5 text-right">Ações</th>
               </tr>
             </thead>
             <tbody class="divide-y">
@@ -1052,20 +1029,20 @@ function getScheduleMeta(key?: string) {
                       class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
                       :class="[getContractMeta(folder.contractType).badgeBg, getContractMeta(folder.contractType).badgeColor]"
                     >
-                      <FileCheck2 :size="11" /> {{ getContractMeta(folder.contractType).short }}
+                      <FileCheck2 :size="11" aria-hidden="true" /> {{ getContractMeta(folder.contractType).short }}
                     </span>
                     <br />
                     <span
                       class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
                       :class="[getScheduleMeta(folder.workSchedule).badgeBg, getScheduleMeta(folder.workSchedule).badgeColor]"
                     >
-                      <Clock :size="11" /> {{ getScheduleMeta(folder.workSchedule).label }}
+                      <Clock :size="11" aria-hidden="true" /> {{ getScheduleMeta(folder.workSchedule).label }}
                     </span>
                   </div>
                 </td>
                 <td class="p-3.5">
                   <span class="inline-flex items-center gap-1 font-bold text-teal-700 bg-teal-500/10 px-2 py-0.5 rounded-full text-[11px]">
-                    <Folder :size="12" /> {{ folder.documents.length }} docs
+                    <Folder :size="12" aria-hidden="true" /> {{ folder.documents.length }} docs
                   </span>
                 </td>
                 <td class="p-3.5">
@@ -1079,22 +1056,28 @@ function getScheduleMeta(key?: string) {
                 <td class="p-3.5 text-right">
                   <div class="flex items-center justify-end gap-1.5">
                     <button
+                      type="button"
                       class="rounded-lg bg-teal-600 text-white px-2.5 py-1 text-xs font-bold hover:bg-teal-700 transition-colors shadow-2xs cursor-pointer"
                       @click.stop="goToEmployeeProfile(folder.id)"
                       title="Ver Perfil Completo do Funcionário"
+                      :aria-label="'Ver perfil completo de ' + folder.name"
                     >
                       Ver perfil
                     </button>
                     <button
+                      type="button"
                       class="rounded-lg border border-teal-200 bg-teal-50/60 p-1.5 text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
                       @click.stop="openDossierForFolder(folder)"
                       title="Exportar Dossiê do Colaborador em PDF"
+                      :aria-label="'Exportar dossiê em PDF de ' + folder.name"
                     >
-                      <FolderArchive :size="14" />
+                      <FolderArchive :size="14" aria-hidden="true" />
                     </button>
                     <button
+                      type="button"
                       class="rounded-lg border px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer"
                       @click.stop="openFolder(folder.id)"
+                      :aria-label="'Abrir pasta funcional de ' + folder.name"
                     >
                       Pasta
                     </button>

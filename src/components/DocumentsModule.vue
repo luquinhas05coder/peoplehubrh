@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, watch } from "vue"
 import {
   FileText,
   FileCheck,
@@ -20,6 +20,8 @@ import {
   User,
   Plus,
   Edit3,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-vue-next"
 import type { DocumentCategory, SystemDocument, DocumentTemplate } from "../data"
 import { documentCategoryLabels } from "../data"
@@ -35,6 +37,7 @@ import {
   userRoleType,
   userPermissions,
   currentUser,
+  showToast,
 } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import GenerateDocumentModal from "./GenerateDocumentModal.vue"
@@ -185,8 +188,6 @@ function onTplFilePicked(e: Event) {
   }
 }
 
-const toastText = ref<string | null>(null)
-
 // State da Aba de Importação de PDF
 const uploadFile = ref<File | null>(null)
 const uploadFileName = ref("")
@@ -198,13 +199,6 @@ const uploadNotes = ref("")
 const isDragging = ref(false)
 const isUploading = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-
-function showToast(msg: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2500)
-}
 
 /* Indicadores */
 const totalDocs = computed(() => systemDocuments.value.length)
@@ -243,6 +237,19 @@ const filteredDocs = computed(() => {
   })
 })
 
+/* Paginação do Acervo */
+const currentPage = ref(1)
+const itemsPerPage = ref(9)
+const totalPages = computed(() => Math.ceil(filteredDocs.value.length / itemsPerPage.value) || 1)
+const paginatedDocs = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return filteredDocs.value.slice(start, start + itemsPerPage.value)
+})
+
+watch([search, selectedCategory], () => {
+  currentPage.value = 1
+})
+
 function getCategoryIcon(cat: DocumentCategory) {
   switch (cat) {
     case "contratos":
@@ -265,11 +272,10 @@ function openGenerateModal(templateId?: string) {
   showGenerateModal.value = true
 }
 
-function handleDeleteDoc(doc: SystemDocument) {
+async function handleDeleteDoc(doc: SystemDocument) {
   if (confirm(`Deseja excluir o documento ${doc.code}?`)) {
-    deleteSystemDocument(doc.id)
-    showToast(`Documento ${doc.code} removido.`)
-    if (previewDoc.value?.id === doc.id) {
+    const ok = await deleteSystemDocument(doc.id)
+    if (ok && previewDoc.value?.id === doc.id) {
       previewDoc.value = null
     }
   }
@@ -344,20 +350,6 @@ async function handleImportSubmit() {
 
 <template>
   <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative text-foreground">
-    <!-- Toast local -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="fixed top-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background shadow-2xl"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
 
     <!-- Modal de Solicitação de Documento (Autoatendimento do Colaborador) -->
     <NewRequestModal
@@ -376,7 +368,7 @@ async function handleImportSubmit() {
     />
 
     <!-- Header Principal -->
-    <header class="border-b bg-card px-5 py-5 sm:px-8">
+    <header class="border-b bg-card px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -391,7 +383,7 @@ async function handleImportSubmit() {
           </p>
         </div>
 
-        <div class="flex items-center gap-2.5">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <button
             v-if="userPermissions.isColaborador"
             class="flex items-center justify-center gap-2 rounded-xl py-2.5 px-4.5 font-semibold text-sm text-primary-foreground shadow-md transition-transform hover:-translate-y-0.5 active:scale-95 shrink-0 cursor-pointer"
@@ -423,9 +415,9 @@ async function handleImportSubmit() {
       </div>
 
       <!-- Abas de Navegação do Módulo -->
-      <div class="mt-6 flex items-center gap-6 border-b">
+      <div class="mt-6 flex items-center gap-4 sm:gap-6 border-b overflow-x-auto scrollbar-thin pb-px">
         <button
-          class="pb-3 text-sm font-bold transition-colors border-b-2 cursor-pointer"
+          class="pb-3 text-sm font-bold transition-colors border-b-2 cursor-pointer shrink-0 whitespace-nowrap"
           :class="activeMainTab === 'acervo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeMainTab = 'acervo'"
         >
@@ -433,7 +425,7 @@ async function handleImportSubmit() {
         </button>
         <button
           v-if="!userPermissions.isColaborador"
-          class="pb-3 text-sm font-bold transition-colors border-b-2 flex items-center gap-2 cursor-pointer"
+          class="pb-3 text-sm font-bold transition-colors border-b-2 flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap"
           :class="activeMainTab === 'importar' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeMainTab = 'importar'"
         >
@@ -443,7 +435,7 @@ async function handleImportSubmit() {
         </button>
         <button
           v-if="!userPermissions.isColaborador"
-          class="pb-3 text-sm font-bold transition-colors border-b-2 cursor-pointer"
+          class="pb-3 text-sm font-bold transition-colors border-b-2 cursor-pointer shrink-0 whitespace-nowrap"
           :class="activeMainTab === 'modelos' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
           @click="activeMainTab = 'modelos'"
         >
@@ -452,7 +444,7 @@ async function handleImportSubmit() {
       </div>
     </header>
 
-    <div class="mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 space-y-6">
+    <div class="mx-auto w-full max-w-7xl px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-6">
       <!-- Indicadores Rápidos (Ocultos para o colaborador) -->
       <section v-if="!userPermissions.isColaborador" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="flex items-center gap-3 rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
@@ -591,7 +583,7 @@ async function handleImportSubmit() {
 
           <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div
-              v-for="doc in filteredDocs"
+              v-for="doc in paginatedDocs"
               :key="doc.id"
               class="group flex flex-col justify-between rounded-2xl border bg-card p-5 transition-all hover:shadow-md hover:-translate-y-0.5"
             >
@@ -666,21 +658,21 @@ async function handleImportSubmit() {
 
         <!-- Tabela de Documentos -->
         <section v-else class="rounded-2xl border bg-card overflow-hidden shadow-sm">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
+          <div class="overflow-x-auto scrollbar-thin">
+            <table class="w-full text-left text-xs min-w-[680px]" aria-label="Lista de documentos emitidos e arquivados">
               <thead class="bg-muted/50 border-b font-semibold uppercase text-muted-foreground">
                 <tr>
-                  <th class="px-4 py-3">Código</th>
-                  <th class="px-4 py-3">Documento</th>
-                  <th class="px-4 py-3">Colaborador / Destinatário</th>
-                  <th class="px-4 py-3">Categoria</th>
-                  <th class="px-4 py-3">Formato</th>
-                  <th class="px-4 py-3">Data</th>
-                  <th class="px-4 py-3 text-right">Ações</th>
+                  <th scope="col" class="px-4 py-3">Código</th>
+                  <th scope="col" class="px-4 py-3">Documento</th>
+                  <th scope="col" class="px-4 py-3">Colaborador / Destinatário</th>
+                  <th scope="col" class="px-4 py-3">Categoria</th>
+                  <th scope="col" class="px-4 py-3">Formato</th>
+                  <th scope="col" class="px-4 py-3">Data</th>
+                  <th scope="col" class="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody class="divide-y">
-                <tr v-for="doc in filteredDocs" :key="doc.id" class="hover:bg-muted/30 transition-colors">
+                <tr v-for="doc in paginatedDocs" :key="doc.id" class="hover:bg-muted/30 transition-colors">
                   <td class="px-4 py-3 font-mono font-bold">{{ doc.code }}</td>
                   <td class="px-4 py-3 font-semibold text-foreground">{{ doc.title }}</td>
                   <td class="px-4 py-3">
@@ -694,14 +686,33 @@ async function handleImportSubmit() {
                   <td class="px-4 py-3 text-muted-foreground">{{ doc.generatedAt }}</td>
                   <td class="px-4 py-3 text-right">
                     <div class="flex items-center justify-end gap-2">
-                      <button class="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground" title="Visualizar" @click="previewDoc = doc">
-                        <Eye :size="15" />
+                      <button
+                        type="button"
+                        class="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                        title="Visualizar"
+                        :aria-label="'Visualizar documento ' + doc.title"
+                        @click="previewDoc = doc"
+                      >
+                        <Eye :size="15" aria-hidden="true" />
                       </button>
-                      <button class="p-1.5 rounded-lg hover:bg-muted text-primary" title="Baixar PDF" @click="showToast(`Download de ${doc.code} realizado.`)">
-                        <Download :size="15" />
+                      <button
+                        type="button"
+                        class="p-1.5 rounded-lg hover:bg-muted text-primary cursor-pointer"
+                        title="Baixar PDF"
+                        :aria-label="'Baixar PDF de ' + doc.title"
+                        @click="showToast(`Download de ${doc.code} realizado.`)"
+                      >
+                        <Download :size="15" aria-hidden="true" />
                       </button>
-                      <button v-if="!userPermissions.isColaborador" class="p-1.5 rounded-lg hover:bg-red-50 text-red-600 cursor-pointer" title="Excluir" @click="handleDeleteDoc(doc)">
-                        <Trash2 :size="15" />
+                      <button
+                        v-if="!userPermissions.isColaborador"
+                        type="button"
+                        class="p-1.5 rounded-lg hover:bg-red-50 text-red-600 cursor-pointer"
+                        title="Excluir"
+                        :aria-label="'Excluir documento ' + doc.title"
+                        @click="handleDeleteDoc(doc)"
+                      >
+                        <Trash2 :size="15" aria-hidden="true" />
                       </button>
                     </div>
                   </td>
@@ -710,6 +721,41 @@ async function handleImportSubmit() {
             </table>
           </div>
         </section>
+
+        <!-- Barra de Paginação -->
+        <div
+          v-if="filteredDocs.length > itemsPerPage"
+          class="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3 text-xs text-muted-foreground shadow-2xs"
+        >
+          <div>
+            Exibindo <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> até
+            <strong>{{ Math.min(currentPage * itemsPerPage, filteredDocs.length) }}</strong> de
+            <strong>{{ filteredDocs.length }}</strong> documentos
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-lg border bg-background text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              :disabled="currentPage === 1"
+              @click="currentPage--"
+              title="Página Anterior"
+              aria-label="Página Anterior"
+            >
+              <ChevronLeft :size="16" aria-hidden="true" />
+            </button>
+            <span class="px-2 font-medium">Página {{ currentPage }} de {{ totalPages }}</span>
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-lg border bg-background text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              :disabled="currentPage >= totalPages"
+              @click="currentPage++"
+              title="Próxima Página"
+              aria-label="Próxima Página"
+            >
+              <ChevronRight :size="16" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       </template>
 
       <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -943,7 +989,7 @@ async function handleImportSubmit() {
             <p class="text-xs text-muted-foreground">Crie, edite, exclua, importe novos modelos ou gere minutas em papel timbrado.</p>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <!-- Importar Arquivo de Modelo -->
             <button
               class="flex items-center gap-1.5 rounded-xl border bg-card px-3.5 py-2 text-xs font-bold text-foreground hover:bg-muted transition-colors cursor-pointer"
@@ -1027,8 +1073,17 @@ async function handleImportSubmit() {
     </div>
 
     <!-- Modal Criar / Editar / Importar Modelo de RH -->
-    <div v-if="showTemplateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-foreground/40 backdrop-blur-sm">
-      <div class="relative w-full max-w-2xl rounded-2xl bg-card border shadow-2xl z-10 p-6 sm:p-8 text-foreground max-h-[92vh] overflow-y-auto">
+    <div
+      v-if="showTemplateModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-foreground/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="template-modal-title"
+      tabindex="-1"
+      @click.self="showTemplateModal = false"
+      @keydown.esc="showTemplateModal = false"
+    >
+      <div class="relative w-full max-w-2xl rounded-2xl bg-card border shadow-2xl z-10 p-4 sm:p-6 text-foreground max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-4">
           <div class="flex items-center gap-3">
             <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 font-bold">
@@ -1037,7 +1092,7 @@ async function handleImportSubmit() {
               <Sparkles v-else :size="22" />
             </div>
             <div>
-              <h2 class="text-xl font-bold">
+              <h2 id="template-modal-title" class="text-xl font-bold">
                 {{ templateModalMode === 'edit' ? 'Editar Modelo de RH' : templateModalMode === 'import' ? 'Importar Novo Modelo de RH' : 'Criar Novo Modelo de RH' }}
               </h2>
               <p class="text-xs text-muted-foreground">
@@ -1152,14 +1207,22 @@ async function handleImportSubmit() {
     </div>
 
     <!-- Modal de Pré-visualização de Documento -->
-    <div v-if="previewDoc" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div
+      v-if="previewDoc"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="preview-doc-title"
+      tabindex="-1"
+      @keydown.esc="previewDoc = null"
+    >
       <div class="fixed inset-0 bg-black/60 backdrop-blur-sm" @click="previewDoc = null" />
-      <div class="relative w-full max-w-3xl rounded-2xl bg-card border shadow-2xl z-10 p-6 sm:p-8 text-foreground max-h-[90vh] overflow-y-auto">
+      <div class="relative w-full max-w-3xl rounded-2xl bg-card border shadow-2xl z-10 p-4 sm:p-6 text-foreground max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-4 mb-4">
           <div>
             <div class="flex items-center gap-2">
               <span class="font-mono text-xs font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded">{{ previewDoc.code }}</span>
-              <h2 class="text-lg font-bold">{{ previewDoc.title }}</h2>
+              <h2 id="preview-doc-title" class="text-lg font-bold">{{ previewDoc.title }}</h2>
             </div>
             <p class="text-xs text-muted-foreground mt-0.5">Destinatário: {{ previewDoc.employeeName }} · {{ previewDoc.department }}</p>
           </div>
@@ -1168,7 +1231,7 @@ async function handleImportSubmit() {
           </button>
         </div>
 
-        <div class="rounded-xl border bg-white text-slate-900 p-6 font-serif text-sm shadow-inner min-h-[300px] flex flex-col justify-between">
+        <div class="rounded-xl border bg-white text-slate-900 p-4 sm:p-6 font-serif text-sm shadow-inner min-h-[300px] flex flex-col justify-between">
           <div>
             <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
               <div class="flex items-center gap-2 font-sans font-bold text-xs">
@@ -1182,7 +1245,7 @@ async function handleImportSubmit() {
             <p class="text-justify text-slate-800 leading-relaxed font-normal whitespace-pre-line">{{ previewDoc.contentSnippet }}</p>
           </div>
 
-          <div class="mt-8 pt-4 border-t border-slate-200 flex items-center justify-between font-sans text-xs">
+          <div class="mt-8 pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 font-sans text-xs">
             <div>
               <p class="text-[10px] text-slate-500">Emitido em {{ previewDoc.generatedAt }}</p>
               <p class="font-bold text-slate-800 mt-0.5">Recursos Humanos — PeopleHub</p>
@@ -1191,12 +1254,12 @@ async function handleImportSubmit() {
           </div>
         </div>
 
-        <div class="mt-6 flex items-center justify-end gap-3 border-t pt-4">
-          <button class="rounded-xl border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer" @click="previewDoc = null">
+        <div class="mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 border-t pt-4">
+          <button class="w-full sm:w-auto rounded-xl border px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer text-center" @click="previewDoc = null">
             Fechar
           </button>
           <button
-            class="flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-primary-foreground shadow cursor-pointer"
+            class="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-primary-foreground shadow cursor-pointer text-center"
             style="background-color: var(--color-primary)"
             @click="showToast(`Download de ${previewDoc.code} realizado com sucesso.`)"
           >

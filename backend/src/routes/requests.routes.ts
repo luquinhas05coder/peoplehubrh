@@ -31,8 +31,15 @@ router.get("/", (req: Request, res: Response) => {
 
   // Enforçamento estrito de escopo de dados RBAC
   if (scope === "OWN") {
-    sql += ` AND (lower(requester) = ? OR lower(requester) = ?)`
-    params.push(userName, userEmail)
+    sql += ` AND (
+      lower(requester) = ? 
+      OR lower(requester) = ?
+      OR (details_json IS NOT NULL AND (
+        details_json LIKE ?
+        OR details_json LIKE ?
+      ))
+    )`
+    params.push(userName, userEmail, `%"created_by_email":"${userEmail}"%`, `%"created_by_id":"${req.access?.userId || ""}"%`)
   } else if (scope === "TEAM") {
     sql += ` AND (lower(department) = ? OR lower(requester) = ? OR lower(requester) = ?)`
     params.push(userDept, userName, userEmail)
@@ -168,9 +175,20 @@ router.get("/:id", (req: Request, res: Response) => {
   const reqUser = (reqItem.requester || "").toLowerCase()
   const reqDept = (reqItem.department || "").toLowerCase()
 
-  if (scope === "OWN" && reqUser !== userName && reqUser !== userEmail) {
-    res.status(403).json({ ok: false, error: "Acesso negado: Você só pode visualizar suas próprias solicitações." })
-    return
+  if (scope === "OWN") {
+    let isOwn = reqUser === userName || reqUser === userEmail
+    if (!isOwn && reqItem.details_json) {
+      if (
+        reqItem.details_json.includes(`"created_by_email":"${userEmail}"`) ||
+        reqItem.details_json.includes(`"created_by_id":"${req.access?.userId || ""}"`)
+      ) {
+        isOwn = true
+      }
+    }
+    if (!isOwn) {
+      res.status(403).json({ ok: false, error: "Acesso negado: Você só pode visualizar suas próprias solicitações." })
+      return
+    }
   }
 
   if (scope === "TEAM" && reqDept !== userDept && reqUser !== userName && reqUser !== userEmail) {
@@ -259,7 +277,7 @@ router.patch("/:id/status", (req: Request, res: Response) => {
     }
   } else {
     // 2. Aprovação, Rejeição ou Solicitação de Correção
-    const isApprovalOrRejection = ["aprovado", "rejeitado", "correção solicitada", "pendente de correção"].includes(targetStatusLower)
+    const isApprovalOrRejection = ["aprovado", "rejeitado", "recusado", "correção solicitada", "pendente de correção"].includes(targetStatusLower)
     if (isApprovalOrRejection) {
       if (!roleHasPermission(userRole, "requests.approve")) {
         res.status(403).json({
@@ -279,7 +297,7 @@ router.patch("/:id/status", (req: Request, res: Response) => {
       }
 
       // Rejeição ou Correção Solicitada exige justificativa obrigatória
-      if (["rejeitado", "correção solicitada", "pendente de correção"].includes(targetStatusLower) && !decisionNote) {
+      if (["rejeitado", "recusado", "correção solicitada", "pendente de correção"].includes(targetStatusLower) && !decisionNote) {
         res.status(400).json({
           ok: false,
           error: "Justificativa obrigatória: Informe o motivo da rejeição ou os itens pendentes de correção.",
@@ -348,8 +366,8 @@ router.patch("/:id/status", (req: Request, res: Response) => {
   const formattedStatus =
     targetStatusLower === "aprovado"
       ? "Aprovado"
-      : targetStatusLower === "rejeitado"
-      ? "Rejeitado"
+      : targetStatusLower === "rejeitado" || targetStatusLower === "recusado"
+      ? "Recusado"
       : targetStatusLower === "cancelado"
       ? "Cancelado"
       : targetStatusLower.includes("correção")

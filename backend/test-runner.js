@@ -95,6 +95,7 @@ async function main() {
     testFiles = [
       "test-cc-immutability.js",
       "test-rbac-permissions.js",
+      "test-rbac-permissions-restructure.js",
       "test-security-audit.js",
       "test-recruitment.js",
       "test-self-service.js",
@@ -104,6 +105,7 @@ async function main() {
     testFiles = [
       "test-cc-immutability.js",
       "test-rbac-permissions.js",
+      "test-rbac-permissions-restructure.js",
       "test-security-audit.js",
       "test-rh-access-provisioning.js",
       "test-recruitment.js",

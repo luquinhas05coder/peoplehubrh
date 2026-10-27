@@ -341,7 +341,7 @@ function goBack() {
     </div>
 
     <!-- 3. PERFIL COMPLETO DO COLABORADOR -->
-    <div v-else-if="employee" class="w-full max-w-6xl mx-auto px-5 py-6 sm:px-8 space-y-6">
+    <div v-else-if="employee" class="w-full max-w-6xl mx-auto px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-5 sm:space-y-6">
       <!-- Breadcrumb / Botão Voltar -->
       <div class="flex items-center justify-between">
         <button
@@ -357,7 +357,7 @@ function goBack() {
       </div>
 
       <!-- HEADER DO FUNCIONÁRIO -->
-      <section class="rounded-3xl border bg-card p-6 shadow-sm">
+      <section class="rounded-3xl border bg-card p-4 sm:p-6 shadow-sm">
         <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex items-center gap-4">
             <div class="relative">
@@ -770,8 +770,8 @@ function goBack() {
           <p class="font-medium">Nenhum documento cadastrado na pasta deste colaborador.</p>
         </div>
 
-        <div v-else class="overflow-x-auto rounded-2xl border bg-background">
-          <table class="w-full text-left text-xs">
+        <div v-else class="overflow-x-auto rounded-2xl border bg-background scrollbar-thin">
+          <table class="w-full text-left text-xs min-w-[620px]">
             <thead class="border-b bg-muted/50 text-muted-foreground uppercase tracking-wider font-semibold">
               <tr>
                 <th class="p-3.5">Documento</th>
@@ -885,8 +885,8 @@ function goBack() {
             Nenhuma solicitação de férias cadastrada para este colaborador.
           </div>
 
-          <div v-else class="overflow-x-auto rounded-2xl border bg-background">
-            <table class="w-full text-left text-xs">
+          <div v-else class="overflow-x-auto rounded-2xl border bg-background scrollbar-thin">
+            <table class="w-full text-left text-xs min-w-[560px]">
               <thead class="border-b bg-muted/50 text-muted-foreground uppercase tracking-wider font-semibold">
                 <tr>
                   <th class="p-3.5">Protocolo</th>
@@ -1071,9 +1071,9 @@ function goBack() {
     <!-- MODAL SIMPLES: ANEXAR DOCUMENTO -->
     <div
       v-if="showAddDocModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-md rounded-2xl border bg-card p-5 shadow-xl space-y-4">
+      <div class="w-full max-w-md rounded-2xl border bg-card p-4 sm:p-5 shadow-xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between border-b pb-3">
           <h3 class="font-bold text-sm text-foreground">Anexar Novo Documento</h3>
           <button class="text-muted-foreground hover:text-foreground cursor-pointer" @click="showAddDocModal = false">

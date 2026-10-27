@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue"
+import { ref, onMounted, computed, watch } from "vue"
 import {
   Radio,
   Send,
@@ -22,12 +22,26 @@ import {
   Trash2,
   Filter,
 } from "lucide-vue-next"
-import { apiFetch, showToast, currentUser } from "../store"
+import {
+  apiFetch,
+  showToast,
+  currentUser,
+  userPermissions,
+  activeUserRole,
+  normalizeUserRole,
+  hasRole,
+} from "../store"
 
 type SubTab = "webhooks" | "deliveries" | "csv" | "adapters"
 const activeSubTab = ref<SubTab>("webhooks")
 
-const isAdmin = computed(() => currentUser.value?.role === "ADMIN")
+const isAdmin = computed(() => {
+  if (userPermissions.value?.isAdmin) return true
+  if (activeUserRole.value === "ADMIN") return true
+  if (hasRole("ADMIN")) return true
+  const roleStr = currentUser.value?.userRole || currentUser.value?.role || ""
+  return normalizeUserRole(roleStr) === "ADMIN"
+})
 
 // ─── Webhooks Subscriptions State ───
 const subscriptions = ref<any[]>([])
@@ -299,6 +313,14 @@ onMounted(() => {
     loadAdapters()
   }
 })
+
+watch(isAdmin, (newVal) => {
+  if (newVal) {
+    loadSubscriptions()
+    loadDeliveries()
+    loadAdapters()
+  }
+})
 </script>
 
 <template>
@@ -521,8 +543,8 @@ onMounted(() => {
           <p class="text-xs text-muted-foreground mt-1">Os disparos de webhooks realizados pelo sistema aparecerão detalhados aqui.</p>
         </div>
 
-        <div v-else class="overflow-x-auto rounded-xl border bg-card shadow-xs">
-          <table class="w-full text-left text-xs">
+        <div v-else class="overflow-x-auto rounded-xl border bg-card shadow-xs scrollbar-thin">
+          <table class="w-full text-left text-xs min-w-[700px]">
             <thead class="border-b bg-muted/50 text-[11px] text-muted-foreground uppercase">
               <tr>
                 <th class="p-3">Status</th>
@@ -716,9 +738,9 @@ onMounted(() => {
     <!-- ─── MODAL DE CADASTRO DE NOVO WEBHOOK ─── -->
     <div
       v-if="showNewSubModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-xl space-y-5 animate-in fade-in zoom-in-95">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-xl space-y-5 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin animate-in fade-in zoom-in-95">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <Radio class="w-5 h-5 text-primary" />

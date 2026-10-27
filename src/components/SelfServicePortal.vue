@@ -714,7 +714,7 @@ function getStatusBadge(status: string) {
 <template>
   <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background text-foreground" id="self-service-portal">
     <!-- Cabeçalho Principal do Portal -->
-    <header class="border-b bg-card px-5 py-6 sm:px-8">
+    <header class="border-b bg-card px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div class="flex items-center gap-2.5">
@@ -801,9 +801,9 @@ function getStatusBadge(status: string) {
       </div>
 
       <!-- Abas de Navegação -->
-      <nav class="mt-6 flex space-x-1 border-b border-border/40" aria-label="Abas do Portal">
+      <nav class="mt-6 flex space-x-1 border-b border-border/40 overflow-x-auto scrollbar-thin pb-px" aria-label="Abas do Portal">
         <button
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
           :class="activeTab === 'dados'
             ? 'border-primary text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
@@ -814,7 +814,7 @@ function getStatusBadge(status: string) {
         </button>
 
         <button
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
           :class="activeTab === 'solicitacoes'
             ? 'border-primary text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
@@ -831,7 +831,7 @@ function getStatusBadge(status: string) {
         </button>
 
         <button
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
           :class="activeTab === 'documentos'
             ? 'border-primary text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
@@ -844,7 +844,7 @@ function getStatusBadge(status: string) {
         <!-- Aba de Aprovações para Perfis com Governança (RH / Gestor / Admin) -->
         <button
           v-if="isHrOrManager"
-          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
           :class="activeTab === 'aprovacoes'
             ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
             : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
@@ -863,7 +863,7 @@ function getStatusBadge(status: string) {
     </header>
 
     <!-- Conteúdo Principal -->
-    <div class="flex-1 p-5 sm:p-8 max-w-7xl w-full mx-auto">
+    <div class="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
       <!-- Loading Skeleton State -->
       <div v-if="loading" class="space-y-6 animate-pulse">
         <div class="h-44 rounded-2xl bg-muted/60"></div>
@@ -1393,10 +1393,10 @@ function getStatusBadge(status: string) {
     <!-- ======================================================== -->
     <div
       v-if="showCadastralModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto"
       @click.self="showCadastralModal = false"
     >
-      <div class="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="w-full max-w-2xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl max-h-[90dvh] overflow-y-auto scrollbar-thin my-auto">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <FileUp :size="20" class="text-primary" />
@@ -1531,10 +1531,10 @@ function getStatusBadge(status: string) {
     <!-- ======================================================== -->
     <div
       v-if="showNewRequestModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto"
       @click.self="showNewRequestModal = false"
     >
-      <div class="w-full max-w-xl rounded-2xl border bg-card p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="w-full max-w-xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl max-h-[90dvh] overflow-y-auto scrollbar-thin my-auto">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <Plus :size="20" class="text-primary" />
@@ -1629,10 +1629,10 @@ function getStatusBadge(status: string) {
     <!-- ======================================================== -->
     <div
       v-if="showDetailModal && selectedRequest"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto"
       @click.self="showDetailModal = false"
     >
-      <div class="w-full max-w-2xl rounded-2xl border bg-card p-6 shadow-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+      <div class="w-full max-w-2xl rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl max-h-[90dvh] overflow-y-auto scrollbar-thin flex flex-col my-auto">
         <div class="flex items-center justify-between border-b pb-3">
           <div>
             <div class="flex items-center gap-2">
@@ -1759,10 +1759,10 @@ function getStatusBadge(status: string) {
     <!-- ======================================================== -->
     <div
       v-if="showDecisionModal && selectedRequest"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto"
       @click.self="showDecisionModal = false"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl max-h-[90dvh] overflow-y-auto scrollbar-thin my-auto">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <Shield :size="20" class="text-indigo-600" />
@@ -1836,10 +1836,10 @@ function getStatusBadge(status: string) {
     <!-- ======================================================== -->
     <div
       v-if="showUploadDocModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto"
       @click.self="showUploadDocModal = false"
     >
-      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl">
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl max-h-[90dvh] overflow-y-auto scrollbar-thin my-auto">
         <div class="flex items-center justify-between border-b pb-3">
           <div class="flex items-center gap-2">
             <UploadCloud :size="20" class="text-primary" />

@@ -37,26 +37,24 @@ router.get("/", (req: Request, res: Response) => {
     const db = getDB()
     const tenantId = req.tenantId || "tenant_default"
 
-    // 1. Total de Funcionários
-    const totalEmpRes = db.exec(
-      `SELECT count(*) FROM employees WHERE tenant_id = ?`,
+    // 1, 2, 3: Contagem consolidada de funcionários em uma única consulta agregada
+    const empCountRes = db.exec(
+      `SELECT 
+        count(*) as total,
+        sum(case when lower(status) = 'ativo' then 1 else 0 end) as ativos,
+        sum(case when lower(status) != 'ativo' then 1 else 0 end) as inativos
+       FROM employees WHERE tenant_id = ?`,
       [tenantId]
     )
-    const totalFuncionarios = totalEmpRes.length && totalEmpRes[0].values.length ? Number(totalEmpRes[0].values[0][0]) : 0
-
-    // 2. Funcionários Ativos
-    const ativosRes = db.exec(
-      `SELECT count(*) FROM employees WHERE tenant_id = ? AND lower(status) = 'ativo'`,
-      [tenantId]
-    )
-    const funcionariosAtivos = ativosRes.length && ativosRes[0].values.length ? Number(ativosRes[0].values[0][0]) : 0
-
-    // 3. Funcionários Inativos (desligados, afastados, etc.)
-    const inativosRes = db.exec(
-      `SELECT count(*) FROM employees WHERE tenant_id = ? AND lower(status) != 'ativo'`,
-      [tenantId]
-    )
-    const funcionariosInativos = inativosRes.length && inativosRes[0].values.length ? Number(inativosRes[0].values[0][0]) : 0
+    let totalFuncionarios = 0
+    let funcionariosAtivos = 0
+    let funcionariosInativos = 0
+    if (empCountRes.length && empCountRes[0].values.length) {
+      const v = empCountRes[0].values[0]
+      totalFuncionarios = Number(v[0]) || 0
+      funcionariosAtivos = Number(v[1]) || 0
+      funcionariosInativos = Number(v[2]) || 0
+    }
 
     // 4. Mês atual para contratações e desligamentos
     const now = new Date()
@@ -64,38 +62,47 @@ router.get("/", (req: Request, res: Response) => {
     const currentMonthNum = String(now.getMonth() + 1).padStart(2, "0")
     const currentYearMonth = `${currentYear}-${currentMonthNum}` // "YYYY-MM"
 
-    // Contratações no mês atual
-    const hireRes = db.exec(
-      `SELECT count(*) FROM employees WHERE tenant_id = ? AND (hireDate LIKE ? OR hireDate LIKE ?)`,
-      [tenantId, `${currentYearMonth}%`, `%/${currentMonthNum}/${currentYear}%`]
-    )
-    const contratacoesMes = hireRes.length && hireRes[0].values.length ? Number(hireRes[0].values[0][0]) : 0
-
-    // Desligamentos no mês atual
-    const termRes = db.exec(
-      `SELECT count(*) FROM employees WHERE tenant_id = ? AND (
-        (terminationDate IS NOT NULL AND (terminationDate LIKE ? OR terminationDate LIKE ?))
-        OR (lower(status) IN ('inativo', 'desligado') AND (hireDate LIKE ? OR hireDate LIKE ?))
-      )`,
-      [tenantId, `${currentYearMonth}%`, `%/${currentMonthNum}/${currentYear}%`, `${currentYearMonth}%`, `%/${currentMonthNum}/${currentYear}%`]
-    )
-    const desligamentosMes = termRes.length && termRes[0].values.length ? Number(termRes[0].values[0][0]) : 0
-
-    // 5. Solicitações Pendentes (status em 'pendente' ou 'em análise')
-    const pendingReqRes = db.exec(
-      `SELECT count(*) FROM requests WHERE tenant_id = ? AND lower(status) IN ('pendente', 'em análise', 'em_analise')`,
+    // Busca os registros de datas de admissão e rescisão do tenant em uma única consulta
+    const datesRes = db.exec(
+      `SELECT hireDate, terminationDate, status FROM employees WHERE tenant_id = ?`,
       [tenantId]
     )
-    const solicitacoesPendentes = pendingReqRes.length && pendingReqRes[0].values.length ? Number(pendingReqRes[0].values[0][0]) : 0
+    const empDates: Array<{ hireDate: string; terminationDate: string | null; status: string }> = []
+    if (datesRes.length && datesRes[0].values.length) {
+      datesRes[0].values.forEach((row) => {
+        empDates.push({
+          hireDate: String(row[0] || ""),
+          terminationDate: row[1] ? String(row[1]) : null,
+          status: String(row[2] || "").toLowerCase(),
+        })
+      })
+    }
 
-    // 6. Férias Pendentes
-    const pendingFeriasRes = db.exec(
-      `SELECT count(*) FROM requests WHERE tenant_id = ? 
-       AND (lower(type) LIKE '%ferias%' OR lower(type) LIKE '%férias%')
-       AND lower(status) IN ('pendente', 'em análise', 'em_analise')`,
+    const contratacoesMes = empDates.filter(
+      (e) => e.hireDate.startsWith(currentYearMonth) || e.hireDate.includes(`/${currentMonthNum}/${currentYear}`)
+    ).length
+
+    const desligamentosMes = empDates.filter(
+      (e) =>
+        (e.terminationDate && (e.terminationDate.startsWith(currentYearMonth) || e.terminationDate.includes(`/${currentMonthNum}/${currentYear}`))) ||
+        (["inativo", "desligado"].includes(e.status) && (e.hireDate.startsWith(currentYearMonth) || e.hireDate.includes(`/${currentMonthNum}/${currentYear}`)))
+    ).length
+
+    // 5 & 6: Solicitações e férias pendentes em uma única consulta agregada
+    const reqRes = db.exec(
+      `SELECT 
+        sum(case when lower(status) IN ('pendente', 'em análise', 'em_analise') then 1 else 0 end) as solicitacoes,
+        sum(case when (lower(type) LIKE '%ferias%' OR lower(type) LIKE '%férias%') AND lower(status) IN ('pendente', 'em análise', 'em_analise') then 1 else 0 end) as ferias
+       FROM requests WHERE tenant_id = ?`,
       [tenantId]
     )
-    const feriasPendentes = pendingFeriasRes.length && pendingFeriasRes[0].values.length ? Number(pendingFeriasRes[0].values[0][0]) : 0
+    let solicitacoesPendentes = 0
+    let feriasPendentes = 0
+    if (reqRes.length && reqRes[0].values.length) {
+      const v = reqRes[0].values[0]
+      solicitacoesPendentes = Number(v[0]) || 0
+      feriasPendentes = Number(v[1]) || 0
+    }
 
     // 7. Documentos Próximos do Vencimento (próximos 30 dias ou status = 'Próximo do vencimento')
     const nowIso = now.toISOString().split("T")[0]
@@ -142,7 +149,7 @@ router.get("/", (req: Request, res: Response) => {
       })
     }
 
-    // 10. Contratações por Mês (Últimos 6 meses)
+    // 10. Contratações por Mês (Últimos 6 meses) calculadas em memória a partir de empDates
     const mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     const contratacoesPorMes: Array<{ mes: string; total: number }> = []
     const desligamentosPorMes: Array<{ mes: string; total: number }> = []
@@ -156,23 +163,16 @@ router.get("/", (req: Request, res: Response) => {
       const prefixIso = `${yr}-${moNum}`
       const suffixBr = `/${moNum}/${yr}`
 
-      // Contratações no mês i
-      const cRes = db.exec(
-        `SELECT count(*) FROM employees WHERE tenant_id = ? AND (hireDate LIKE ? OR hireDate LIKE ?)`,
-        [tenantId, `${prefixIso}%`, `%${suffixBr}%`]
-      )
-      const cTotal = cRes.length && cRes[0].values.length ? Number(cRes[0].values[0][0]) : 0
+      const cTotal = empDates.filter(
+        (e) => e.hireDate.startsWith(prefixIso) || e.hireDate.includes(suffixBr)
+      ).length
       contratacoesPorMes.push({ mes: label, total: cTotal })
 
-      // Desligamentos no mês i
-      const dRes = db.exec(
-        `SELECT count(*) FROM employees WHERE tenant_id = ? AND (
-          (terminationDate IS NOT NULL AND (terminationDate LIKE ? OR terminationDate LIKE ?))
-          OR (lower(status) IN ('inativo', 'desligado') AND (hireDate LIKE ? OR hireDate LIKE ?))
-        )`,
-        [tenantId, `${prefixIso}%`, `%${suffixBr}%`, `${prefixIso}%`, `%${suffixBr}%`]
-      )
-      const dTotal = dRes.length && dRes[0].values.length ? Number(dRes[0].values[0][0]) : 0
+      const dTotal = empDates.filter(
+        (e) =>
+          (e.terminationDate && (e.terminationDate.startsWith(prefixIso) || e.terminationDate.includes(suffixBr))) ||
+          (["inativo", "desligado"].includes(e.status) && (e.hireDate.startsWith(prefixIso) || e.hireDate.includes(suffixBr)))
+      ).length
       desligamentosPorMes.push({ mes: label, total: dTotal })
     }
 

@@ -234,7 +234,8 @@ router.post("/query", (req: Request, res: Response) => {
       rows,
     })
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: "Falha ao executar consulta: " + err.message })
+    console.error("❌ Erro ao executar consulta de relatório:", err)
+    res.status(500).json({ ok: false, error: "Falha ao processar consulta do relatório personalizado." })
   }
 })
 

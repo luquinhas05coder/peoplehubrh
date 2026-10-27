@@ -185,8 +185,8 @@ const features = [
     </aside>
 
     <!-- PAINEL DIREITO — Formulário de Login / Cadastro -->
-    <main class="flex flex-1 flex-col items-center justify-center p-6 sm:p-10 overflow-y-auto">
-      <div class="w-full max-w-sm space-y-6 py-6">
+    <main class="flex flex-1 flex-col items-center justify-center p-4 sm:p-8 lg:p-10 overflow-y-auto">
+      <div class="w-full max-w-sm space-y-6 py-4 sm:py-6">
         <!-- Mobile logo -->
         <div class="flex items-center gap-2.5 lg:hidden">
           <span class="flex h-9 w-9 items-center justify-center rounded-xl font-black text-sm text-primary-foreground" style="background: var(--color-primary)">PH</span>
@@ -301,9 +301,9 @@ const features = [
             enter-from-class="opacity-0 -translate-y-1"
             leave-to-class="opacity-0 -translate-y-1"
           >
-            <div v-if="error" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              <AlertCircle :size="18" class="shrink-0 text-red-500" />
-              {{ error }}
+            <div v-if="error" id="login-error" role="alert" class="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle :size="18" class="shrink-0 text-red-500" aria-hidden="true" />
+              <span>{{ error }}</span>
             </div>
           </transition>
 
@@ -315,10 +315,10 @@ const features = [
               @click="fillAdminCredentials"
             >
               <span class="flex items-center gap-2">
-                <Sparkles :size="14" class="text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform" />
+                <Sparkles :size="14" class="text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform" aria-hidden="true" />
                 <span>Login Rápido com <strong>Admin</strong></span>
               </span>
-              <span class="text-[10px] font-mono opacity-80 group-hover:translate-x-0.5 transition-transform">admin123 ➔</span>
+              <span class="text-[10px] font-mono opacity-80 group-hover:translate-x-0.5 transition-transform" aria-hidden="true">admin123 ➔</span>
             </button>
           </div>
 
@@ -330,7 +330,7 @@ const features = [
                 E-mail Institucional
               </label>
               <div class="relative">
-                <Mail :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Mail :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <input
                   id="login-email"
                   v-model="form.email"
@@ -338,6 +338,8 @@ const features = [
                   autocomplete="email"
                   placeholder="admin@empresa.com"
                   required
+                  :aria-invalid="!!error"
+                  :aria-describedby="error ? 'login-error' : undefined"
                   class="w-full rounded-xl border bg-card py-3 pl-10 pr-4 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
                   style="--tw-ring-color: var(--color-ring)"
                   :class="error ? 'border-red-300 bg-red-50/30' : ''"
@@ -360,7 +362,7 @@ const features = [
                 </button>
               </div>
               <div class="relative">
-                <Lock :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Lock :size="17" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <input
                   id="login-password"
                   v-model="form.password"
@@ -368,6 +370,8 @@ const features = [
                   autocomplete="current-password"
                   placeholder="••••••••"
                   required
+                  :aria-invalid="!!error"
+                  :aria-describedby="error ? 'login-error' : undefined"
                   class="w-full rounded-xl border bg-card py-3 pl-10 pr-12 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:ring-2 hover:border-teal-400/50"
                   style="--tw-ring-color: var(--color-ring)"
                   :class="error ? 'border-red-300 bg-red-50/30' : ''"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, onMounted, watch } from "vue"
 import {
   CalendarCheck,
   Plus,
@@ -18,10 +18,22 @@ import {
   X,
   Trash2,
   Receipt,
+  RotateCcw,
 } from "lucide-vue-next"
 import type { RequestType, RequestStatus, RequestPriority, RequestItem } from "../data"
 import { requestTypeLabels, requestStatusLabels } from "../data"
-import { requests, updateRequestStatus, deleteRequest, employeeFolders, userRoleType, userPermissions } from "../store"
+import {
+  requests,
+  updateRequestStatus,
+  deleteRequest,
+  employeeFolders,
+  userRoleType,
+  userPermissions,
+  currentUser,
+  activeUserRole,
+  apiFetch,
+  showToast,
+} from "../store"
 
 import UserAvatar from "./UserAvatar.vue"
 import NewRequestModal from "./NewRequestModal.vue"
@@ -31,19 +43,12 @@ const search = ref("")
 const selectedType = ref<string>("todos")
 const selectedStatus = ref<string>("todos")
 const viewMode = ref<"grid" | "table">("grid")
+const currentPage = ref(1)
+const itemsPerPage = ref(8)
 
 const showNewModal = ref(false)
 const selectedDetailRequest = ref<RequestItem | null>(null)
 const reviewNoteInput = ref("")
-
-const toastText = ref<string | null>(null)
-
-function showToast(msg: string) {
-  toastText.value = msg
-  setTimeout(() => {
-    toastText.value = null
-  }, 2500)
-}
 
 /* Títulos e Contexto Adaptados ao Cargo */
 const pageTitle = computed(() => {
@@ -60,15 +65,53 @@ const pageSubtitle = computed(() => {
   return "Acompanhe, analise e aprove solicitações de férias, atestados, declarações e desempenho."
 })
 
-/* Indicadores */
-const totalCount = computed(() => requests.value.length)
-const pendingCount = computed(() => requests.value.filter((r) => r.status === "pendente" || r.status === "em_analise").length)
-const approvedCount = computed(() => requests.value.filter((r) => r.status === "aprovado").length)
-const rejectedCount = computed(() => requests.value.filter((r) => r.status === "recusado").length)
+/* Isolamento e Enforçamento de Escopo RBAC */
+const scopedRequests = computed(() => {
+  const currentRole = activeUserRole.value
+  const user = currentUser.value
+  const userName = (user?.name || "").toLowerCase().trim()
+  const userEmail = (user?.email || "").toLowerCase().trim()
+  const userDept = (user?.department || "").toLowerCase().trim()
 
-/* Filtros */
+  // 1. Escopo OWN: Colaborador vê estritamente suas próprias solicitações
+  if (currentRole === "COLABORADOR" || userPermissions.value.isColaborador || !userPermissions.value.canApproveRequests) {
+    return requests.value.filter((r) => {
+      const reqName = (r.employeeName || "").toLowerCase().trim()
+      return (
+        (userName && reqName === userName) ||
+        (userEmail && reqName === userEmail) ||
+        (userName && reqName.includes(userName)) ||
+        (userName && userName.includes(reqName))
+      )
+    })
+  }
+
+  // 2. Escopo TEAM: Gestores vêem solicitações da sua equipe direta e as suas próprias
+  if (currentRole === "GESTOR" || userPermissions.value.isGestor) {
+    return requests.value.filter((r) => {
+      const reqName = (r.employeeName || "").toLowerCase().trim()
+      const reqDept = (r.department || "").toLowerCase().trim()
+      return (
+        (userDept && reqDept === userDept) ||
+        (userName && reqName === userName) ||
+        (userEmail && reqName === userEmail)
+      )
+    })
+  }
+
+  // 3. Escopo ALL: RH, DP, ADMIN, AUDITOR possuem visão corporativa integral
+  return requests.value
+})
+
+/* Indicadores Calculados sobre o Escopo Autorizado */
+const totalCount = computed(() => scopedRequests.value.length)
+const pendingCount = computed(() => scopedRequests.value.filter((r) => r.status === "pendente" || r.status === "em_analise").length)
+const approvedCount = computed(() => scopedRequests.value.filter((r) => r.status === "aprovado").length)
+const rejectedCount = computed(() => scopedRequests.value.filter((r) => r.status === "recusado").length)
+
+/* Filtros Aplicados sobre as Solicitações Autorizadas */
 const filteredRequests = computed(() => {
-  return requests.value.filter((r) => {
+  return scopedRequests.value.filter((r) => {
     const matchesType = selectedType.value === "todos" || r.type === selectedType.value
     const matchesStatus = selectedStatus.value === "todos" || r.status === selectedStatus.value
     const q = search.value.toLowerCase().trim()
@@ -81,6 +124,23 @@ const filteredRequests = computed(() => {
     return matchesType && matchesStatus && matchesSearch
   })
 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRequests.value.length / itemsPerPage.value)))
+const paginatedRequests = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage.value
+  return filteredRequests.value.slice(start, start + itemsPerPage.value)
+})
+
+watch([search, selectedType, selectedStatus], () => {
+  currentPage.value = 1
+})
+
+function clearFilters() {
+  search.value = ""
+  selectedType.value = "todos"
+  selectedStatus.value = "todos"
+  currentPage.value = 1
+}
 
 function getTypeIcon(type: RequestType) {
   switch (type) {
@@ -173,26 +233,102 @@ function getPriorityBadgeClass(priority: RequestPriority) {
   }
 }
 
-function handleApprove(req: RequestItem) {
-  updateRequestStatus(req.id, "aprovado", "Victor Silva", "Solicitação aprovada pelo RH.")
-  showToast(`Solicitação "${req.protocol}" aprovada!`)
-  if (selectedDetailRequest.value?.id === req.id) {
-    selectedDetailRequest.value.status = "aprovado"
+const isProcessing = ref(false)
+
+async function handleApprove(req: RequestItem) {
+  if (isProcessing.value) return
+  if (userPermissions.value.isColaborador || activeUserRole.value === "COLABORADOR" || !userPermissions.value.canApproveRequests) {
+    showToast("Ação bloqueada: Colaboradores não possuem permissão para aprovar solicitações.")
+    return
+  }
+
+  const user = currentUser.value
+  const userName = (user?.name || "").toLowerCase().trim()
+  const userEmail = (user?.email || "").toLowerCase().trim()
+  const reqName = (req.employeeName || "").toLowerCase().trim()
+  if (userName && (reqName === userName || reqName === userEmail)) {
+    showToast("Ação bloqueada: As regras de governança impedem aprovação de solicitações próprias.")
+    return
+  }
+
+  isProcessing.value = true
+  try {
+    const success = await updateRequestStatus(
+      req.id,
+      "aprovado",
+      currentUser.value?.name || "Victor Silva",
+      reviewNoteInput.value.trim() || "Solicitação aprovada pelo gestor/RH."
+    )
+    if (success) {
+      showToast(`Solicitação "${req.protocol}" aprovada!`)
+      if (selectedDetailRequest.value?.id === req.id) {
+        selectedDetailRequest.value.status = "aprovado"
+      }
+    }
+  } finally {
+    isProcessing.value = false
   }
 }
 
-function handleReject(req: RequestItem) {
-  const note = reviewNoteInput.value.trim() || "Solicitação não atende aos requisitos ou faltam comprovantes."
-  updateRequestStatus(req.id, "recusado", "Victor Silva", note)
-  showToast(`Solicitação "${req.protocol}" recusada.`)
-  if (selectedDetailRequest.value?.id === req.id) {
-    selectedDetailRequest.value.status = "recusado"
-    selectedDetailRequest.value.reviewNote = note
+async function handleReject(req: RequestItem) {
+  if (isProcessing.value) return
+  if (userPermissions.value.isColaborador || activeUserRole.value === "COLABORADOR" || !userPermissions.value.canApproveRequests) {
+    showToast("Ação bloqueada: Colaboradores não possuem permissão para reprovar solicitações.")
+    return
   }
-  reviewNoteInput.value = ""
+
+  const user = currentUser.value
+  const userName = (user?.name || "").toLowerCase().trim()
+  const userEmail = (user?.email || "").toLowerCase().trim()
+  const reqName = (req.employeeName || "").toLowerCase().trim()
+  if (userName && (reqName === userName || reqName === userEmail)) {
+    showToast("Ação bloqueada: As regras de governança impedem reprovação de solicitações próprias.")
+    return
+  }
+
+  let note = reviewNoteInput.value.trim()
+  if (!note) {
+    const prompted = window.prompt(`Informe a justificativa obrigatória para recusar a solicitação ${req.protocol}:`)
+    if (!prompted || !prompted.trim()) {
+      showToast("Operação cancelada: a recusa requer uma justificativa obrigatória.")
+      return
+    }
+    note = prompted.trim()
+  }
+
+  isProcessing.value = true
+  try {
+    const success = await updateRequestStatus(
+      req.id,
+      "recusado",
+      currentUser.value?.name || "Victor Silva",
+      note
+    )
+    if (success) {
+      showToast(`Solicitação "${req.protocol}" recusada.`)
+      if (selectedDetailRequest.value?.id === req.id) {
+        selectedDetailRequest.value.status = "recusado"
+        selectedDetailRequest.value.reviewNote = note
+      }
+      reviewNoteInput.value = ""
+    }
+  } finally {
+    isProcessing.value = false
+  }
 }
 
 function openDetail(req: RequestItem) {
+  const currentRole = activeUserRole.value
+  if (currentRole === "COLABORADOR" || userPermissions.value.isColaborador) {
+    const userName = (currentUser.value?.name || "").toLowerCase().trim()
+    const userEmail = (currentUser.value?.email || "").toLowerCase().trim()
+    const reqName = (req.employeeName || "").toLowerCase().trim()
+    const isOwn = (userName && reqName === userName) || (userEmail && reqName === userEmail) || (userName && reqName.includes(userName))
+    if (!isOwn) {
+      showToast("Acesso negado: Você só pode visualizar detalhes das suas próprias solicitações.")
+      return
+    }
+  }
   selectedDetailRequest.value = { ...req }
 }
 
@@ -201,37 +337,98 @@ function closeDetail() {
   reviewNoteInput.value = ""
 }
 
-function handleDelete(req: RequestItem) {
-  if (confirm(`Deseja remover a solicitação ${req.protocol}?`)) {
-    deleteRequest(req.id)
-    showToast(`Solicitação ${req.protocol} excluída.`)
-    if (selectedDetailRequest.value?.id === req.id) {
-      closeDetail()
+async function handleDelete(req: RequestItem) {
+  if (isProcessing.value) return
+  const currentRole = activeUserRole.value
+  if (currentRole === "COLABORADOR" || userPermissions.value.isColaborador) {
+    const userName = (currentUser.value?.name || "").toLowerCase().trim()
+    const userEmail = (currentUser.value?.email || "").toLowerCase().trim()
+    const reqName = (req.employeeName || "").toLowerCase().trim()
+    const isOwn = (userName && reqName === userName) || (userEmail && reqName === userEmail) || (userName && reqName.includes(userName))
+    if (!isOwn) {
+      showToast("Ação bloqueada: Você só pode excluir suas próprias solicitações.")
+      return
     }
+  }
+  if (!confirm(`Deseja realmente remover a solicitação ${req.protocol}?`)) {
+    return
+  }
+
+  isProcessing.value = true
+  try {
+    const success = await deleteRequest(req.id)
+    if (success) {
+      showToast(`Solicitação ${req.protocol} excluída.`)
+      if (selectedDetailRequest.value?.id === req.id) {
+        closeDetail()
+      }
+    }
+  } finally {
+    isProcessing.value = false
   }
 }
 
 function handleCreated(msg: string) {
   showToast(msg)
 }
+
+async function syncRequestsFromBackend() {
+  try {
+    const res = await apiFetch("/api/requests")
+    const data = await res.json()
+    if (data.ok && Array.isArray(data.requests) && data.requests.length > 0) {
+      const mapStatus: Record<string, RequestStatus> = {
+        "pendente": "pendente",
+        "em análise": "em_analise",
+        "em analise": "em_analise",
+        "aprovado": "aprovado",
+        "recusado": "recusado",
+      }
+      const mapPriority: Record<string, RequestPriority> = {
+        "baixa": "baixa",
+        "média": "media",
+        "media": "media",
+        "alta": "alta",
+        "urgente": "urgente",
+      }
+      requests.value = data.requests.map((r: any) => {
+        const statusLower = (r.status || "").toLowerCase()
+        const priorityLower = (r.priority || "").toLowerCase()
+
+        return {
+          id: r.id,
+          protocol: r.id,
+          employeeName: r.requester,
+          employeeInitials: (r.requester || "RH").split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase(),
+          employeeRole: "Colaborador",
+          department: r.department || "Geral",
+          type: (r.type?.toLowerCase().includes("contra") || r.type?.toLowerCase().includes("holerite")) ? "contracheque" :
+                (r.type?.toLowerCase().includes("férias") || r.type?.toLowerCase().includes("ferias")) ? "ferias" :
+                r.type?.toLowerCase().includes("atestado") ? "atestado" :
+                r.type?.toLowerCase().includes("reembolso") ? "reembolso" :
+                r.type?.toLowerCase().includes("ponto") ? "ponto" : "documento",
+          title: r.details?.title || r.description || "Solicitação RH",
+          description: r.description,
+          startDate: r.details?.period || r.date,
+          endDate: r.details?.endDate,
+          amount: r.details?.expectedDifference,
+          status: mapStatus[statusLower] || "pendente",
+          priority: mapPriority[priorityLower] || "media",
+          createdAt: r.date,
+        }
+      })
+    }
+  } catch (_e) {}
+}
+
+onMounted(() => {
+  syncRequestsFromBackend()
+})
 </script>
 
 <template>
   <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative text-foreground">
     <!-- Toast local -->
-    <transition
-      enter-active-class="transition-all duration-200"
-      leave-active-class="transition-all duration-200"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-    >
-      <div
-        v-if="toastText"
-        class="fixed top-5 left-1/2 z-50 -translate-x-1/2 rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background shadow-2xl"
-      >
-        {{ toastText }}
-      </div>
-    </transition>
 
     <!-- Modal Nova Solicitação -->
     <NewRequestModal
@@ -241,7 +438,7 @@ function handleCreated(msg: string) {
     />
 
     <!-- Header Principal -->
-    <header class="border-b bg-card px-5 py-5 sm:px-8">
+    <header class="border-b bg-card px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -267,7 +464,7 @@ function handleCreated(msg: string) {
       </div>
     </header>
 
-    <div class="mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 space-y-6">
+    <div class="mx-auto w-full max-w-7xl px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 space-y-6">
       <!-- Indicadores Rápidos -->
       <section class="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="flex items-center gap-3 rounded-2xl border bg-card p-4 transition-all hover:shadow-sm">
@@ -386,20 +583,31 @@ function handleCreated(msg: string) {
       <section v-if="viewMode === 'grid'">
         <div v-if="filteredRequests.length === 0" class="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card p-12 text-center">
           <CalendarCheck :size="48" class="text-muted-foreground/40 mb-3" />
-          <h3 class="text-lg font-bold">Nenhuma solicitação no momento</h3>
-          <p class="text-sm text-muted-foreground mt-1 max-w-md">As solicitações enviadas pelos colaboradores ou abertas no sistema aparecerão aqui.</p>
-          <button
-            class="mt-4 rounded-xl py-2 px-5 text-xs font-semibold text-primary-foreground shadow"
-            style="background-color: var(--color-primary)"
-            @click="showNewModal = true"
-          >
-            + Criar Nova Solicitação
-          </button>
+          <h3 class="text-lg font-bold">Nenhuma solicitação encontrada</h3>
+          <p class="text-sm text-muted-foreground mt-1 max-w-md">
+            {{ search || selectedType !== 'todos' || selectedStatus !== 'todos' ? 'Nenhuma solicitação corresponde aos filtros selecionados.' : 'As solicitações abertas no sistema aparecerão aqui.' }}
+          </p>
+          <div class="flex items-center gap-2 mt-4">
+            <button
+              v-if="search || selectedType !== 'todos' || selectedStatus !== 'todos'"
+              class="flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted cursor-pointer"
+              @click="clearFilters"
+            >
+              <RotateCcw :size="14" /> Limpar Filtros
+            </button>
+            <button
+              class="rounded-xl py-2 px-5 text-xs font-semibold text-primary-foreground shadow cursor-pointer"
+              style="background-color: var(--color-primary)"
+              @click="showNewModal = true"
+            >
+              + Criar Nova Solicitação
+            </button>
+          </div>
         </div>
 
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div
-            v-for="req in filteredRequests"
+            v-for="req in paginatedRequests"
             :key="req.id"
             class="group flex flex-col justify-between rounded-2xl border bg-card p-5 transition-all hover:shadow-md hover:-translate-y-0.5"
           >
@@ -510,7 +718,8 @@ function handleCreated(msg: string) {
                 </button>
                 <button
                   v-if="req.status === 'pendente' || req.status === 'em_analise'"
-                  class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-3 text-xs font-bold shadow transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  :disabled="isProcessing"
+                  class="rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-1.5 px-3 text-xs font-bold shadow transition-colors flex items-center justify-center gap-1 cursor-pointer"
                   title="Aprovar Solicitação"
                   @click="handleApprove(req)"
                 >
@@ -518,14 +727,16 @@ function handleCreated(msg: string) {
                 </button>
                 <button
                   v-if="req.status === 'pendente' || req.status === 'em_analise'"
-                  class="rounded-xl bg-rose-600 hover:bg-rose-700 text-white py-1.5 px-2 text-xs font-bold shadow transition-colors flex items-center justify-center cursor-pointer"
+                  :disabled="isProcessing"
+                  class="rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-1.5 px-2 text-xs font-bold shadow transition-colors flex items-center justify-center cursor-pointer"
                   title="Recusar Solicitação"
                   @click="handleReject(req)"
                 >
                   <XCircle :size="14" />
                 </button>
                 <button
-                  class="rounded-xl border border-red-200 bg-background hover:bg-red-50 text-red-600 py-1.5 px-2.5 text-xs font-semibold transition-colors flex items-center justify-center cursor-pointer"
+                  :disabled="isProcessing"
+                  class="rounded-xl border border-red-200 bg-background hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-red-600 py-1.5 px-2.5 text-xs font-semibold transition-colors flex items-center justify-center cursor-pointer"
                   title="Apagar Solicitação"
                   @click="handleDelete(req)"
                 >
@@ -539,21 +750,21 @@ function handleCreated(msg: string) {
 
       <!-- Modo Tabela -->
       <section v-else class="rounded-2xl border bg-card overflow-hidden shadow-sm">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
+        <div class="overflow-x-auto scrollbar-thin">
+          <table class="w-full text-left text-xs min-w-[650px]" aria-label="Lista de solicitações e chamados de RH">
             <thead class="bg-muted/50 border-b font-semibold uppercase text-muted-foreground">
               <tr>
-                <th class="px-4 py-3">Protocolo</th>
-                <th class="px-4 py-3">Solicitante</th>
-                <th class="px-4 py-3">Tipo / Título</th>
-                <th class="px-4 py-3">Status</th>
-                <th class="px-4 py-3">Prioridade</th>
-                <th class="px-4 py-3">Data</th>
-                <th class="px-4 py-3 text-right">Ações</th>
+                <th scope="col" class="px-4 py-3">Protocolo</th>
+                <th scope="col" class="px-4 py-3">Solicitante</th>
+                <th scope="col" class="px-4 py-3">Tipo / Título</th>
+                <th scope="col" class="px-4 py-3">Status</th>
+                <th scope="col" class="px-4 py-3">Prioridade</th>
+                <th scope="col" class="px-4 py-3">Data</th>
+                <th scope="col" class="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody class="divide-y">
-              <tr v-for="req in filteredRequests" :key="req.id" class="hover:bg-muted/30 transition-colors">
+              <tr v-for="req in paginatedRequests" :key="req.id" class="hover:bg-muted/30 transition-colors">
                 <td class="px-4 py-3 font-mono font-bold">{{ req.protocol }}</td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
@@ -581,15 +792,36 @@ function handleCreated(msg: string) {
                 <td class="px-4 py-3 text-muted-foreground">{{ req.createdAt }}</td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex items-center justify-end gap-1.5">
-                    <button class="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground" title="Ver Detalhes" @click="openDetail(req)">
-                      <Eye :size="16" />
+                    <button
+                      type="button"
+                      class="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Ver Detalhes"
+                      :aria-label="'Ver detalhes da solicitação ' + req.protocol"
+                      @click="openDetail(req)"
+                    >
+                      <Eye :size="16" aria-hidden="true" />
                     </button>
                     <template v-if="!userPermissions.isColaborador">
-                      <button v-if="req.status !== 'aprovado'" class="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-600" title="Aprovar" @click="handleApprove(req)">
-                        <CheckCircle2 :size="16" />
+                      <button
+                        v-if="req.status !== 'aprovado'"
+                        type="button"
+                        :disabled="isProcessing"
+                        class="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-600 disabled:opacity-40 cursor-pointer"
+                        title="Aprovar"
+                        :aria-label="'Aprovar solicitação ' + req.protocol"
+                        @click="handleApprove(req)"
+                      >
+                        <CheckCircle2 :size="16" aria-hidden="true" />
                       </button>
-                      <button class="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive" title="Excluir" @click="handleDelete(req)">
-                        <Trash2 :size="16" />
+                      <button
+                        type="button"
+                        :disabled="isProcessing"
+                        class="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive disabled:opacity-40 cursor-pointer"
+                        title="Excluir"
+                        :aria-label="'Excluir solicitação ' + req.protocol"
+                        @click="handleDelete(req)"
+                      >
+                        <Trash2 :size="16" aria-hidden="true" />
                       </button>
                     </template>
                   </div>
@@ -599,14 +831,43 @@ function handleCreated(msg: string) {
           </table>
         </div>
       </section>
+
+      <!-- BARRA DE PAGINAÇÃO DE SOLICITAÇÕES -->
+      <div
+        v-if="totalPages > 1"
+        class="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4 text-xs text-muted-foreground"
+      >
+        <p>
+          Exibindo <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> a
+          <strong>{{ Math.min(currentPage * itemsPerPage, filteredRequests.length) }}</strong> de
+          <strong>{{ filteredRequests.length }}</strong> solicitações
+        </p>
+        <div class="flex items-center gap-1 self-center sm:self-auto">
+          <button
+            class="rounded-lg border px-3 py-1.5 font-semibold hover:bg-muted disabled:opacity-40 cursor-pointer"
+            :disabled="currentPage === 1"
+            @click="currentPage--"
+          >
+            Anterior
+          </button>
+          <span class="px-2 font-medium">Página {{ currentPage }} de {{ totalPages }}</span>
+          <button
+            class="rounded-lg border px-3 py-1.5 font-semibold hover:bg-muted disabled:opacity-40 cursor-pointer"
+            :disabled="currentPage === totalPages"
+            @click="currentPage++"
+          >
+            Próxima
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Drawer / Modal de Detalhes da Solicitação -->
-    <div v-if="selectedDetailRequest" class="fixed inset-0 z-50 flex items-center justify-end p-4 sm:p-6">
+    <div v-if="selectedDetailRequest" class="fixed inset-0 z-50 flex items-center justify-end p-3 sm:p-6">
       <div class="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="closeDetail" />
 
       <div
-        class="relative w-full h-full max-h-[92vh] overflow-y-auto rounded-2xl bg-card border shadow-2xl z-10 p-6 flex flex-col justify-between"
+        class="relative w-full h-full max-h-[92dvh] overflow-y-auto rounded-2xl bg-card border shadow-2xl z-10 p-4 sm:p-6 flex flex-col justify-between scrollbar-thin"
         :class="selectedDetailRequest.type === 'contracheque' ? 'max-w-4xl' : 'max-w-lg'"
       >
         <div>
@@ -712,23 +973,26 @@ function handleCreated(msg: string) {
               />
               <div class="flex gap-2">
                 <button
-                  class="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 text-xs font-bold shadow flex items-center justify-center gap-1 cursor-pointer"
+                  :disabled="isProcessing"
+                  class="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 text-xs font-bold shadow flex items-center justify-center gap-1 cursor-pointer"
                   @click="handleApprove(selectedDetailRequest)"
                 >
-                  <CheckCircle2 :size="16" /> Aprovar Solicitação
+                  <CheckCircle2 :size="16" /> {{ isProcessing ? 'Processando...' : 'Aprovar Solicitação' }}
                 </button>
                 <button
-                  class="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white py-2.5 text-xs font-bold shadow flex items-center justify-center gap-1 cursor-pointer"
+                  :disabled="isProcessing"
+                  class="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 text-xs font-bold shadow flex items-center justify-center gap-1 cursor-pointer"
                   @click="handleReject(selectedDetailRequest)"
                 >
-                  <XCircle :size="16" /> Recusar Solicitação
+                  <XCircle :size="16" /> {{ isProcessing ? 'Processando...' : 'Recusar Solicitação' }}
                 </button>
               </div>
             </div>
 
             <div class="flex items-center gap-2">
               <button
-                class="flex-1 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                :disabled="isProcessing"
+                class="flex-1 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed text-red-600 py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 @click="handleDelete(selectedDetailRequest)"
               >
                 <Trash2 :size="15" /> Excluir Solicitação

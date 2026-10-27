@@ -204,7 +204,7 @@ router.post("/whatsapp/send", async (req: Request, res: Response) => {
     res.json({ ok: true, mode: "live", result: data })
   } catch (err: any) {
     console.error("❌ Erro ao enviar mensagem no WhatsApp:", err)
-    res.status(500).json({ ok: false, error: `Falha na conexão com a API de WhatsApp: ${err.message}` })
+    res.status(500).json({ ok: false, error: "Falha na comunicação com o serviço de WhatsApp." })
   }
 })
 

@@ -61,9 +61,7 @@ describe("IntegrationsManager.vue", () => {
       department: "Tecnologia",
       initials: "AD",
       tenantId: "tenant_default",
-      avatarBg: "bg-slate-700",
-      avatarColor: "text-white",
-    }
+    } as any
 
     vi.spyOn(storeModule, "apiFetch").mockImplementation(async (url) => {
       const u = String(url)
@@ -115,9 +113,7 @@ describe("IntegrationsManager.vue", () => {
       department: "Tecnologia",
       initials: "GS",
       tenantId: "tenant_default",
-      avatarBg: "bg-blue-600",
-      avatarColor: "text-white",
-    }
+    } as any
 
     const wrapper = mount(IntegrationsManager)
     await flushPromises()
@@ -193,5 +189,24 @@ describe("IntegrationsManager.vue", () => {
 
     const exportBtn = wrapper.findAll("button").find((b) => b.text().includes("Exportar Base Completa em CSV"))
     expect(exportBtn).toBeDefined()
+  })
+
+  it("7. Libera acesso ao painel para usuário com cargo descritivo 'Administrador de Sistemas' e userRole 'ADMIN'", async () => {
+    storeModule.currentUser.value = {
+      id: "usr_admin",
+      name: "Administrador Geral",
+      email: "admin@peoplehub.com.br",
+      role: "Administrador de Sistemas",
+      userRole: "ADMIN",
+      department: "Tecnologia da Informação",
+      initials: "AD",
+      tenantId: "tenant_default",
+    } as any
+
+    const wrapper = mount(IntegrationsManager)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain("Camada Modular de Integrações & Webhooks")
+    expect(wrapper.text()).not.toContain("Acesso Restrito a Administradores")
   })
 })

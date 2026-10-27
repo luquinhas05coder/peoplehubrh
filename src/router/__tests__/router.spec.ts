@@ -135,4 +135,80 @@ describe("Vue Router — Proteção de Rotas e Navegação RBAC", () => {
     await router.push("/relatorios")
     expect(router.currentRoute.value.path).toBe("/relatorios")
   })
+
+  it("redireciona amigavelmente COLABORADOR que tenta acessar /colaboradores para /autoatendimento", async () => {
+    isAuthenticated.value = true
+    currentUser.value = {
+      id: "u_colab",
+      name: "Gabriel Santos",
+      email: "colaborador@empresa.com",
+      role: "Desenvolvedor de Software",
+      userRole: "COLABORADOR",
+      roleType: "colaborador",
+      initials: "GS",
+      department: "TI",
+    } as AuthUser
+
+    await router.push("/colaboradores")
+    expect(router.currentRoute.value.path).toBe("/autoatendimento")
+  })
+
+  it("permite acesso a /recrutamento para perfil RECRUTADOR e bloqueia /usuarios", async () => {
+    isAuthenticated.value = true
+    currentUser.value = {
+      id: "u_recrutador",
+      name: "Renata Recrutadora",
+      email: "recrutador@empresa.com",
+      role: "Recrutadora Técnica",
+      userRole: "RECRUTADOR",
+      roleType: "recrutador",
+      initials: "RR",
+      department: "Recrutamento & Seleção",
+    } as AuthUser
+
+    await router.push("/recrutamento")
+    expect(router.currentRoute.value.path).toBe("/recrutamento")
+
+    await router.push("/usuarios")
+    expect(router.currentRoute.value.path).toBe("/acesso-negado")
+  })
+
+  it("permite acesso a /relatorios para perfil AUDITOR e bloqueia /usuarios", async () => {
+    isAuthenticated.value = true
+    currentUser.value = {
+      id: "u_auditor",
+      name: "Arthur Auditor",
+      email: "auditor@empresa.com",
+      role: "Auditor de Compliance",
+      userRole: "AUDITOR",
+      roleType: "auditor",
+      initials: "AA",
+      department: "Compliance & Auditoria",
+    } as AuthUser
+
+    await router.push("/relatorios")
+    expect(router.currentRoute.value.path).toBe("/relatorios")
+
+    await router.push("/usuarios")
+    expect(router.currentRoute.value.path).toBe("/acesso-negado")
+  })
+
+  it("respeita overrides dinâmicos de permissões no usuário autenticado", async () => {
+    isAuthenticated.value = true
+    currentUser.value = {
+      id: "u_colab_custom",
+      name: "Gabriel Santos",
+      email: "colaborador@empresa.com",
+      role: "Desenvolvedor",
+      userRole: "COLABORADOR",
+      roleType: "colaborador",
+      initials: "GS",
+      department: "TI",
+      permissions: ["reports.view"], // Override concedido especificamente
+    } as AuthUser
+
+    await router.push("/relatorios")
+    expect(router.currentRoute.value.path).toBe("/relatorios")
+  })
 })
+

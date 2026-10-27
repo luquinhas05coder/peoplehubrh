@@ -9,7 +9,7 @@
   --color-card: #ffffff;
   --color-card-foreground: #1a1d21;
   --color-muted: #eceef1;
-  --color-muted-foreground: #6b7280;
+  --color-muted-foreground: #525866;
   --color-border: #e3e6ea;
   --color-input: #e3e6ea;
 
@@ -57,6 +57,29 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Link de Pulo para o Conteúdo Principal (WCAG 2.4.1) */
+.ph-skip-link {
+  position: fixed;
+  top: -100px;
+  left: 1rem;
+  z-index: 9999;
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.75rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-decoration: none;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+  transition: top 0.2s ease-in-out;
+}
+.ph-skip-link:focus,
+.ph-skip-link:focus-visible {
+  top: 1rem;
+  outline: 3px solid #ffffff !important;
+  outline-offset: 2px !important;
+}
+
 /* Scrollbar sutil */
 .scrollbar-thin {
   scrollbar-width: thin;
@@ -72,4 +95,225 @@ body {
 }
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Indicador de Foco Acessível (Teclado - WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Utilitários do Design System Corporativo */
+@layer components {
+  /* Botão de Ação Primária */
+  .ph-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    padding: 0.5625rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+  }
+  .ph-btn-primary:hover:not(:disabled) {
+    opacity: 0.94;
+    transform: translateY(-0.5px);
+    box-shadow: 0 4px 6px -1px rgba(15, 118, 110, 0.2);
+  }
+  .ph-btn-primary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .ph-btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Botão Secundário / Contorno */
+  .ph-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    background-color: var(--color-card);
+    color: var(--color-foreground);
+    border: 1px solid var(--color-border);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+  }
+  .ph-btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-muted);
+    border-color: #cbd5e1;
+  }
+  .ph-btn-secondary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .ph-btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Botão de Perigo / Ação Destrutiva */
+  .ph-btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1rem;
+    background-color: rgba(220, 38, 38, 0.08);
+    color: var(--color-danger);
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+  }
+  .ph-btn-danger:hover:not(:disabled) {
+    background-color: rgba(220, 38, 38, 0.15);
+  }
+  .ph-btn-danger:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  /* Campo de Texto Padronizado */
+  .ph-input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-background);
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    color: var(--color-foreground);
+    outline: none;
+    transition: all 0.15s ease-in-out;
+  }
+  .ph-input::placeholder {
+    color: var(--color-muted-foreground);
+    opacity: 0.8;
+  }
+  .ph-input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+  }
+
+  /* Seletor Padronizado */
+  .ph-select {
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-background);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    outline: none;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+  }
+  .ph-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+  }
+
+  /* Badges de Status Semânticos */
+  .ph-badge-success {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: rgba(16, 185, 129, 0.12);
+    color: #047857;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+  .ph-badge-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: rgba(217, 119, 6, 0.12);
+    color: #b45309;
+    border: 1px solid rgba(217, 119, 6, 0.25);
+  }
+  .ph-badge-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: rgba(220, 38, 38, 0.12);
+    color: #b91c1c;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+  }
+  .ph-badge-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+    border: 1px solid rgba(37, 99, 235, 0.25);
+  }
+  .ph-badge-neutral {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: var(--color-muted);
+    color: var(--color-muted-foreground);
+    border: 1px solid var(--color-border);
+  }
+}
+
+/* Respeito a Preferência de Movimento Reduzido (Acessibilidade) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Estilos de Impressão */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  nav,
+  aside,
+  button[aria-label="Abrir central de atendimento"],
+  .fixed {
+    display: none !important;
+  }
 }

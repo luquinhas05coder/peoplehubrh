@@ -56,8 +56,8 @@ function submit() {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
-    <div class="w-full max-w-lg rounded-2xl border bg-card p-6 shadow-2xl transition-all">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+    <div class="w-full max-w-lg rounded-2xl border bg-card p-4 sm:p-6 shadow-2xl transition-all my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
       <div class="flex items-center justify-between border-b pb-4">
         <div class="flex items-center gap-2.5">
           <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">

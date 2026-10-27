@@ -192,22 +192,22 @@ async function handleAnnounceFeed() {
 </script>
 
 <template>
-  <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-5 sm:p-8">
+  <main class="flex h-full flex-col overflow-y-auto scrollbar-thin bg-background relative p-3.5 sm:p-6 lg:p-8">
     <div class="mx-auto w-full max-w-6xl space-y-6">
 
       <!-- CABEÇALHO DO CANAL DE EVENTOS ADVERSOS -->
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-3xl border bg-card p-6 shadow-sm">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-3xl border border-border bg-card p-4 sm:p-6 shadow-sm">
         <div class="space-y-1.5">
           <div class="flex items-center gap-2.5">
-            <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20 shadow-xs">
+            <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20 shadow-xs shrink-0">
               <ShieldAlert :size="22" />
             </div>
             <div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <h1 class="text-xl sm:text-2xl font-black tracking-tight text-foreground">
                   Canal de Eventos Adversos & Ouvidoria
                 </h1>
-                <span class="rounded-full bg-teal-500/10 border border-teal-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase text-teal-700 dark:text-teal-300">
+                <span class="ph-badge-info text-[10px]">
                   Canal Seguro & Sigiloso
                 </span>
               </div>
@@ -219,7 +219,7 @@ async function handleAnnounceFeed() {
         </div>
 
         <button
-          class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-teal-700 transition-all active:scale-95 cursor-pointer shrink-0"
+          class="ph-btn-primary shrink-0"
           @click="showNewModal = true"
         >
           <Plus :size="16" />
@@ -229,23 +229,23 @@ async function handleAnnounceFeed() {
 
       <!-- CARDS DE MÉTRICAS OPERACIONAIS -->
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-        <div class="rounded-2xl border bg-card p-4 shadow-2xs">
+        <div class="rounded-2xl border border-border bg-card p-4 shadow-2xs">
           <span class="text-xs font-semibold text-muted-foreground">Total Relatado</span>
           <p class="mt-1 text-2xl font-black text-foreground">{{ adverseEventsStats.total }}</p>
         </div>
-        <div class="rounded-2xl border bg-card p-4 shadow-2xs border-blue-500/20 bg-blue-500/5">
+        <div class="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-2xs">
           <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Novos Registros</span>
           <p class="mt-1 text-2xl font-black text-blue-700 dark:text-blue-300">{{ adverseEventsStats.novos }}</p>
         </div>
-        <div class="rounded-2xl border bg-card p-4 shadow-2xs border-amber-500/20 bg-amber-500/5">
+        <div class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 shadow-2xs">
           <span class="text-xs font-semibold text-amber-700 dark:text-amber-300">Em Tratativa / CIPA</span>
           <p class="mt-1 text-2xl font-black text-amber-700 dark:text-amber-300">{{ adverseEventsStats.em_tratativa }}</p>
         </div>
-        <div class="rounded-2xl border bg-card p-4 shadow-2xs border-teal-500/20 bg-teal-500/5">
+        <div class="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-4 shadow-2xs">
           <span class="text-xs font-semibold text-teal-700 dark:text-teal-300">Medidas Adotadas</span>
           <p class="mt-1 text-2xl font-black text-teal-700 dark:text-teal-300">{{ adverseEventsStats.com_medidas }}</p>
         </div>
-        <div class="rounded-2xl border bg-card p-4 shadow-2xs border-emerald-500/20 bg-emerald-500/5">
+        <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-2xs">
           <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Concluídos</span>
           <p class="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-300">{{ adverseEventsStats.concluidos }}</p>
         </div>
@@ -259,7 +259,7 @@ async function handleAnnounceFeed() {
             v-model="searchQuery"
             type="text"
             placeholder="Buscar por protocolo, título ou local..."
-            class="w-full rounded-xl border bg-card py-2.5 pl-10 pr-4 text-xs outline-none focus:ring-2 focus:ring-teal-500/40 transition-all"
+            class="ph-input w-full py-2.5 pl-10 pr-4 text-xs"
           />
         </div>
 
@@ -267,7 +267,7 @@ async function handleAnnounceFeed() {
           <!-- Filtro por Status -->
           <select
             v-model="selectedStatus"
-            class="rounded-xl border bg-card px-3 py-2 text-xs font-medium outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+            class="ph-select px-3 py-2 text-xs font-medium"
           >
             <option value="todos">Todos os Status</option>
             <option value="registrado">Novos / Registrados</option>
@@ -279,7 +279,7 @@ async function handleAnnounceFeed() {
           <!-- Filtro por Categoria -->
           <select
             v-model="selectedCategory"
-            class="rounded-xl border bg-card px-3 py-2 text-xs font-medium outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+            class="ph-select px-3 py-2 text-xs font-medium"
           >
             <option value="todos">Todas as Categorias</option>
             <option v-for="cat in categoriesList" :key="cat" :value="cat">{{ cat }}</option>
@@ -370,10 +370,10 @@ async function handleAnnounceFeed() {
     <!-- MODAL 1: REGISTRAR NOVO EVENTO ADVERSO -->
     <div
       v-if="showNewModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-3 sm:p-4 backdrop-blur-sm"
     >
-      <div class="w-full max-w-2xl rounded-3xl border bg-card p-6 sm:p-8 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto scrollbar-thin">
-        <div class="flex items-center justify-between border-b pb-4">
+      <div class="w-full max-w-2xl rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xl space-y-5 max-h-[90dvh] overflow-y-auto scrollbar-thin text-foreground">
+        <div class="flex items-center justify-between border-b border-border pb-4">
           <div class="flex items-center gap-2.5">
             <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20">
               <ShieldAlert :size="20" />
@@ -390,7 +390,7 @@ async function handleAnnounceFeed() {
 
         <form @submit.prevent="handleCreateSubmit" class="space-y-4 text-xs">
           <!-- Toggle Anônimo -->
-          <div class="flex items-center justify-between p-3.5 rounded-2xl border bg-muted/40">
+          <div class="flex items-center justify-between p-3.5 rounded-xl border border-border bg-muted/40">
             <div class="flex items-center gap-2.5">
               <Lock :size="17" class="text-amber-500" />
               <div>
@@ -400,7 +400,7 @@ async function handleAnnounceFeed() {
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input v-model="newEvent.is_anonymous" type="checkbox" class="sr-only peer" />
-              <div class="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+              <div class="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
             </label>
           </div>
 
@@ -411,7 +411,7 @@ async function handleAnnounceFeed() {
               type="text"
               required
               placeholder="Ex: Falha no isolamento térmico da sala 2 ou risco elétrico"
-              class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+              class="ph-input w-full mt-1 p-3 text-xs"
             />
           </div>
 
@@ -420,7 +420,7 @@ async function handleAnnounceFeed() {
               <label class="font-bold text-foreground">Categoria do Ocorrido *</label>
               <select
                 v-model="newEvent.category"
-                class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+                class="ph-select w-full mt-1 p-3 text-xs"
               >
                 <option v-for="cat in categoriesList" :key="cat" :value="cat">{{ cat }}</option>
               </select>
@@ -430,7 +430,7 @@ async function handleAnnounceFeed() {
               <label class="font-bold text-foreground">Nível de Severidade Estimado</label>
               <select
                 v-model="newEvent.severity"
-                class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+                class="ph-select w-full mt-1 p-3 text-xs"
               >
                 <option value="baixa">Baixa (Incômodo sem risco físico iminente)</option>
                 <option value="media">Média (Impacto operacional moderado)</option>
@@ -447,7 +447,7 @@ async function handleAnnounceFeed() {
                 v-model="newEvent.incident_date"
                 type="date"
                 required
-                class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+                class="ph-input w-full mt-1 p-3 text-xs"
               />
             </div>
 
@@ -457,7 +457,7 @@ async function handleAnnounceFeed() {
                 v-model="newEvent.incident_location"
                 type="text"
                 placeholder="Ex: Almoxarifado Central, Bloco B"
-                class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+                class="ph-input w-full mt-1 p-3 text-xs"
               />
             </div>
           </div>
@@ -469,14 +469,14 @@ async function handleAnnounceFeed() {
               required
               rows="4"
               placeholder="Descreva com detalhes o que aconteceu, horários, possíveis causas ou riscos observados..."
-              class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+              class="ph-input w-full mt-1 p-3 text-xs"
             ></textarea>
           </div>
 
-          <div class="flex items-center justify-end gap-3 pt-3 border-t">
+          <div class="flex items-center justify-end gap-3 pt-3 border-t border-border">
             <button
               type="button"
-              class="rounded-xl border px-4 py-2.5 font-bold hover:bg-muted transition-colors cursor-pointer"
+              class="ph-btn-secondary px-4 py-2.5"
               @click="showNewModal = false"
             >
               Cancelar
@@ -484,7 +484,7 @@ async function handleAnnounceFeed() {
             <button
               type="submit"
               :disabled="isSubmitting"
-              class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 font-bold text-white hover:bg-teal-700 transition-all cursor-pointer shadow-md disabled:opacity-60"
+              class="ph-btn-primary px-5 py-2.5 disabled:opacity-60"
             >
               <Send :size="14" />
               <span>{{ isSubmitting ? 'Registrando...' : 'Registrar Notificação' }}</span>
@@ -497,13 +497,13 @@ async function handleAnnounceFeed() {
     <!-- MODAL 2: DETALHES DO EVENTO, TRATATIVA E ANÚNCIO DE MEDIDAS -->
     <div
       v-if="showDetailModal && selectedEvent"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-3 sm:p-4 backdrop-blur-sm"
     >
-      <div class="w-full max-w-3xl rounded-3xl border bg-card p-6 sm:p-8 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto scrollbar-thin">
+      <div class="w-full max-w-3xl rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xl space-y-6 max-h-[90dvh] overflow-y-auto scrollbar-thin text-foreground">
         <!-- Header -->
-        <div class="flex items-center justify-between border-b pb-4">
+        <div class="flex items-center justify-between border-b border-border pb-4">
           <div class="flex items-center gap-3">
-            <span class="font-mono text-sm font-black text-teal-700 dark:text-teal-400 bg-teal-500/10 px-3 py-1 rounded-xl border border-teal-500/20">
+            <span class="font-mono text-sm font-black text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/20">
               {{ selectedEvent.protocol }}
             </span>
             <div>
@@ -517,8 +517,8 @@ async function handleAnnounceFeed() {
         </div>
 
         <!-- Descrição e Metadados do Relato -->
-        <div class="rounded-2xl border bg-muted/30 p-4 space-y-3 text-xs">
-          <div class="flex flex-wrap items-center gap-4 text-muted-foreground border-b pb-2.5">
+        <div class="rounded-xl border border-border bg-muted/30 p-4 space-y-3 text-xs">
+          <div class="flex flex-wrap items-center gap-4 text-muted-foreground border-b border-border pb-2.5">
             <span>Local: <strong class="text-foreground">{{ selectedEvent.incident_location || 'Não informado' }}</strong></span>
             <span>Severidade: <strong class="text-foreground capitalize">{{ selectedEvent.severity }}</strong></span>
             <span>Relator: <strong class="text-foreground">{{ selectedEvent.reporter_name || (selectedEvent.is_anonymous ? 'Sigiloso / Anônimo' : 'Colaborador') }}</strong></span>
@@ -531,11 +531,11 @@ async function handleAnnounceFeed() {
         </div>
 
         <!-- SEÇÃO DE TRATATIVA (DISPONÍVEL AO RH / GESTÃO / ADMIN) -->
-        <div class="rounded-2xl border border-teal-500/30 bg-teal-500/5 p-5 space-y-4">
-          <div class="flex items-center justify-between border-b border-teal-500/20 pb-3">
+        <div class="rounded-xl border border-primary/30 bg-primary/5 p-5 space-y-4">
+          <div class="flex items-center justify-between border-b border-primary/20 pb-3">
             <div class="flex items-center gap-2">
-              <Clock :size="16" class="text-teal-600" />
-              <h3 class="text-xs font-bold uppercase tracking-wider text-teal-900 dark:text-teal-200">
+              <Clock :size="16" class="text-primary" />
+              <h3 class="text-xs font-bold uppercase tracking-wider text-foreground">
                 Tratativa do Incidente & Ações do RH
               </h3>
             </div>
@@ -550,7 +550,7 @@ async function handleAnnounceFeed() {
                 <label class="font-bold text-foreground">Status Atual da Ocorrência</label>
                 <select
                   v-model="tratativaForm.status"
-                  class="w-full mt-1 rounded-xl border bg-card p-2.5 text-xs font-medium outline-none cursor-pointer focus:ring-2 focus:ring-teal-500/40"
+                  class="ph-select w-full mt-1 p-2.5 text-xs font-medium"
                 >
                   <option value="registrado">Registrado / Triagem Inicial</option>
                   <option value="em_investigacao">Em Investigação / Análise Técnica</option>
@@ -566,7 +566,7 @@ async function handleAnnounceFeed() {
                   type="text"
                   disabled
                   :value="selectedEvent.tratativa_updated_at || 'Ainda sem atualizações'"
-                  class="w-full mt-1 rounded-xl border bg-muted/60 p-2.5 text-xs text-muted-foreground"
+                  class="ph-input w-full mt-1 p-2.5 text-xs text-muted-foreground opacity-75"
                 />
               </div>
             </div>
@@ -577,7 +577,7 @@ async function handleAnnounceFeed() {
                 v-model="tratativaForm.tratativa_notes"
                 rows="3"
                 placeholder="Ex: Realizada vistoria no local com eletricista no dia 15/09. Foi aprovado o orçamento de manutenção predial..."
-                class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+                class="ph-input w-full mt-1 p-3 text-xs"
               ></textarea>
             </div>
 
@@ -587,7 +587,7 @@ async function handleAnnounceFeed() {
                 v-model="tratativaForm.measures_taken"
                 rows="3"
                 placeholder="Descreva as melhorias, equipamentos substituídos, advertências, treinamentos ou políticas implantadas..."
-                class="w-full mt-1 rounded-xl border bg-card p-3 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+                class="ph-input w-full mt-1 p-3 text-xs"
               ></textarea>
             </div>
 
@@ -597,7 +597,7 @@ async function handleAnnounceFeed() {
                 v-model="tratativaForm.public_announcement"
                 type="text"
                 placeholder="Ex: Medida Concluída: Finalizada a modernização elétrica e iluminação do Almoxarifado Central."
-                class="w-full mt-1 rounded-xl border bg-card p-2.5 text-xs outline-none focus:ring-2 focus:ring-teal-500/40"
+                class="ph-input w-full mt-1 p-2.5 text-xs"
               />
             </div>
 
@@ -605,10 +605,10 @@ async function handleAnnounceFeed() {
               <button
                 type="button"
                 :disabled="isUpdatingTratativa"
-                class="inline-flex items-center gap-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 font-bold hover:bg-slate-700 transition-all cursor-pointer disabled:opacity-60 shadow-xs"
+                class="ph-btn-secondary"
                 @click="handleSaveTratativa"
               >
-                <CheckCircle2 :size="15" class="text-teal-400" />
+                <CheckCircle2 :size="15" class="text-primary" />
                 <span>{{ isUpdatingTratativa ? 'Salvando...' : 'Salvar Andamento da Tratativa' }}</span>
               </button>
 
@@ -616,7 +616,7 @@ async function handleAnnounceFeed() {
               <button
                 type="button"
                 :disabled="isAnnouncingFeed || !tratativaForm.measures_taken.trim()"
-                class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-indigo-600 text-white px-4 py-2.5 font-bold hover:opacity-90 transition-all cursor-pointer shadow-md disabled:opacity-50"
+                class="ph-btn-primary"
                 @click="handleAnnounceFeed"
               >
                 <Megaphone :size="15" />
@@ -637,9 +637,9 @@ async function handleAnnounceFeed() {
           </div>
         </div>
 
-        <div class="flex justify-end pt-2 border-t">
+        <div class="flex justify-end pt-2 border-t border-border">
           <button
-            class="rounded-xl border px-4 py-2 text-xs font-bold hover:bg-muted transition-colors cursor-pointer"
+            class="ph-btn-secondary"
             @click="showDetailModal = false"
           >
             Fechar Janela

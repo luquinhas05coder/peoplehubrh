@@ -44,38 +44,107 @@ A plataforma integra **atendimento omnichannel imediato**, **gestão documental 
 
 ---
 
-### 🛡️ 2. Sistema Completo de Perfis de Acesso (RBAC — Role-Based Access Control)
-O PeopleHub RH conta com um sistema corporativo rigoroso de controle de acesso baseado em funções, com garantia de bloqueio em nível de backend (HTTP 401 e HTTP 403), isolamento de escopos de dados em SQL e trilha de auditoria:
+### 🛡️ 2. Sistema Completo de Perfis de Acesso & Permissões (RBAC Dinâmico & Granular)
+O PeopleHub RH conta com um sistema corporativo completo e reestruturado de **Controle de Acesso Baseado em Funções (RBAC)**, com proteção ponta a ponta no backend (HTTP 401/403), navegação adaptativa no frontend, isolamento de escopo de dados em SQL, gestão dinâmica de permissões e trilha de auditoria imutável.
 
-* **As 4 Funções Oficiais (Roles)**:
-  * **`ADMIN` (Administrador Geral)**: Acesso irrestrito a todas as configurações, painéis, auditoria, alteração de perfis e gestão de usuários (`/usuarios`).
-  * **`RH` (Recursos Humanos & DP)**: Acesso integral a todos os colaboradores da empresa (`ALL`), criação e exclusão de pastas funcionais, gestão completa de folha de pagamento, contracheques, documentos, férias e aprovações.
-  * **`GESTOR` (Gestão de Equipe)**: Acesso restrito ao escopo da sua equipe e liderados diretos (`TEAM`). Pode visualizar colaboradores do seu departamento, gerenciar escalas mensais, e aprovar solicitações de seus liderados (com bloqueio estrito contra aprovação do próprio requerimento).
-  * **`COLABORADOR` (Autoatendimento)**: Acesso estritamente pessoal (`OWN`). Visualiza unicamente o seu próprio prontuário, espelho de ponto, contracheques emitidos e solicitações abertas. Bloqueado de criar funcionários, alterar dados de outros ou aprovar solicitações.
+#### 👥 Os 7 Perfis Oficiais (Canonical Roles):
+1. **`ADMIN` (Administrador Geral)**:
+   * **Escopo de Dados**: `ALL` (todos os registros da organização).
+   * **Atribuições**: Gestão completa da plataforma, usuários, cargos, matriz de permissões (`/usuarios`), configurações globais de sistema e auditoria.
+   * **Salvaguardas**: Protegido contra auto-despromoção, auto-desativação e com regra de **Anti-Lockout** (impossível rebaixar ou inativar o único administrador ativo).
+2. **`RH` (Recursos Humanos — Estratégico & DHO)**:
+   * **Escopo de Dados**: `ALL` (visão operacional corporativa integral).
+   * **Atribuições**: Gestão estratégica de pessoas, desenvolvimento organizacional, programas de onboarding/desenvolvimento, gestão do ATS/vagas, ciclos de avaliação de desempenho e metas corporativas.
+   * **Restrições**: Sem acesso à gestão administrativa de usuários (`/usuarios`) ou alteração de matriz sistêmica.
+3. **`DP` (Departamento Pessoal — Burocrático, Legal & Operacional)**:
+   * **Escopo de Dados**: `ALL` (visão corporativa para cumprimento de obrigações legais e trabalhistas).
+   * **4 Pilares de Permissões e Acessos**:
+     1. **Administração de Vínculos e Documentação**: Admissão digital de colaboradores (`employees.create`), rescisões e desligamentos (`employees.update`, `employees.delete`, `workflows.execute`), gestão de dados sensíveis em conformidade com a LGPD (`employees.view_sensitive`, visualização irrestrita de CPFs e salários contratuais, gestão de dossiês e documentos admissionais).
+     2. **Rotinas de Folha de Pagamento e Encargos**: Cálculo e validação da folha (`payroll.view`, `payroll.manage`), holerites, controle de proventos e descontos, obrigações eSocial/FGTS/INSS (`reports.export`, `reports.custom_build`) e gestão de benefícios (`requests.approve`).
+     3. **Controle de Jornada e Frequência**: Apuração e auditoria de ponto (`schedules.view`, `schedules.manage`), escalas de trabalho CLT, controle de faltas, atrasos e banco de horas; gestão de ausências (`vacations.view`, `vacations.request`, `vacations.approve`, `vacations.reject`), atestados médicos e licenças legais.
+     4. **Saúde e Segurança do Trabalho (SST)**: Registro e arquivamento de eventos de SST (`documents.create`, `documents.upload`), laudos periciais, ASO (Atestado de Saúde Ocupacional NR-7) e comunicações de CAT.
+   * **Restrições**: Sem acesso à exclusão ou fechamento de vagas de ATS (`recruitment.delete`), criação de ciclos de avaliação de desempenho nem governança de acessos/usuários do sistema.
+4. **`GESTOR` (Gestão de Equipe & Liderança)**:
+   * **Escopo de Dados**: `TEAM` (estritamente seu departamento ou subordinados diretos).
+   * **Atribuições**: Visualização da equipe direta, acompanhamento de metas, avaliações de desempenho, aprovação de solicitações de liderados e gestão de escalas.
+   * **Restrições**: Salários e CPFs de terceiros são ofuscados automaticamente. Bloqueado de aprovar suas próprias solicitações (Anti-Autoaprovação).
+5. **`RECRUTADOR` (Recrutamento & Seleção — ATS)**:
+   * **Escopo de Dados**: `OWN` / Recrutamento.
+   * **Atribuições**: Gestão de vagas (abrir, pausar, publicar), triagem de candidatos, pipeline seletivo, agendamento de entrevistas e preenchimento de scorecards.
+   * **Restrições**: Sem acesso a dados salariais globais, folha de pagamento ou configurações corporativas.
+6. **`AUDITOR` (Auditoria & Compliance)**:
+   * **Escopo de Dados**: `ALL` (visão global para fins de conformidade e fiscalização).
+   * **Atribuições**: Acesso irrestrito de **LEITURA** e exportação a todos os módulos, relatórios, históricos e trilhas de auditoria.
+   * **Invariante Crítico de Segurança**: **Bloqueio absoluto de qualquer operação de escrita ou mutação** (`POST`, `PUT`, `PATCH`, `DELETE`). Qualquer tentativa de alteração resulta em `HTTP 403 Forbidden`.
+7. **`COLABORADOR` (Autoatendimento & Portal Pessoal)**:
+   * **Escopo de Dados**: `OWN` (estritamente seus próprios dados pessoais).
+   * **Atribuições**: Consulta ao dossiê pessoal (`/api/employees/me`), solicitações de alteração cadastral, upload de documentos pessoais, acompanhamento de chamados e visualização do próprio contracheque e férias.
+   * **Restrições**: Bloqueio total a registros de outros funcionários (Proteção contra IDOR). Acesso a rotas administrativas redireciona amigavelmente ou bloqueia (`/acesso-negado`).
 
-* **Escopos de Dados em Nível de Banco de Dados**:
-  * **`ALL`** (Admin e RH): Consultas executam sem restrição departmental.
-  * **`TEAM`** (Gestor): Consultas filtram automaticamente por `department = ? OR manager = ?`.
-  * **`OWN`** (Colaborador): Consultas filtram estritamente pelo e-mail/identificador do usuário autenticado.
+---
 
-* **Mascaramento Automático de Dados Sensíveis**:
-  * Usuários sem a permissão `employees.view_sensitive` (Gestores e Colaboradores) têm campos sensíveis como **Salário Base** exibidos como `"Confidencial"` e **CPF** ofuscado (`123.***.***-**`), com exceção do colaborador consultando o seu próprio perfil pessoal.
+#### 📊 Matriz de Permissões por Módulo e Ação:
 
-* **Governança & Anti-Autoaprovação**:
-  * Nenhum usuário (mesmo Gestores ou Administradores) pode aprovar ou rejeitar suas próprias solicitações de férias ou contracheques (`HTTP 403: Violação de Governança`).
+| Módulo | Ação / Permissão | ADMIN | RH | DP | GESTOR | RECRUTADOR | AUDITOR | COLABORADOR |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Dashboard** | `dashboard.view` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **Usuários & RBAC** | `users.view`, `users.manage_roles` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Colaboradores** | `employees.view_all` / `export` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (Leitura) | ❌ |
+| | `employees.view_sensitive` (CPF/Salário) | ✅ | ✅ | ✅ | ❌ (Ofuscado) | ❌ | ❌ (Ofuscado) | ❌ (Próprio) |
+| | `employees.create` (Admissão CLT) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| | `employees.update`, `delete` (Rescisão) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| | `employees.view_team` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| | `employees.view_own` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Folha & Encargos** | `payroll.view`, `payroll.manage` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (Leitura) | ❌ |
+| **Ponto & Jornada** | `schedules.view`, `schedules.manage` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Leitura) | ❌ (Próprio) |
+| **Férias & Ausências** | `vacations.view`, `vacations.approve` | ✅ | ✅ | ✅ | ✅ (Equipe) | ❌ | ✅ (Leitura) | ❌ (Próprio) |
+| **Documentos & SST** | `documents.view`, `create`, `export` | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ (Leitura) | ❌ (Próprio) |
+| **Relatórios / eSocial**| `reports.view`, `reports.custom_build` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Leitura) | ❌ |
+| **Solicitações** | `requests.create`, `requests.view` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (Leitura) | ✅ (Próprias) |
+| | `requests.approve`, `requests.reject` | ✅ | ✅ | ✅ | ✅ (Equipe) | ❌ | ❌ | ❌ |
+| **Workflows / Rescisões**| `workflows.view`, `workflows.execute` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (Leitura) | ❌ |
+| **Recrutamento (ATS)** | `recruitment.manage`, `delete` | ✅ | ✅ | ❌ | ✅ (Scorecard) | ✅ | ✅ (Leitura) | ❌ |
+| **Auditoria** | `audit.view` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 
-* **Módulo Administrativo de Usuários (`/usuarios`)**:
-  * Painel restrito ao `ADMIN` para listar, criar, editar dados cadastrais, alterar funções e ativar/desativar contas.
-  * Modal com aviso de segurança explícito e confirmação antes de alterar a role de qualquer membro da organização.
-  * Bloqueio contra auto-despromoção e auto-desativação do administrador ativo.
+---
 
-* **Trilha de Auditoria Imutável (`/api/users/audit`)**:
-  * Tabela `audit_logs` que registra de forma definitiva todas as ações críticas: `ALTERAR_ROLE`, `ATIVAR_USUARIO`, `DESATIVAR_USUARIO`, `EMPLOYEE_CREATE`, `EMPLOYEE_DELETE`, `REQUEST_STATUS_CHANGE`, acompanhado do autor, timestamp e endereço IP.
+#### 🎛️ Gestão Administrativa de Acessos & Matriz Dinâmica (`/usuarios`):
+O sistema conta com uma interface administrativa interativa na aba **"Matriz de Acessos & Perfis RBAC"** do módulo de Usuários:
+* **Seletor de Cargos**: Permite escolher qualquer um dos perfis para inspecionar e personalizar suas permissões.
+* **Matriz Visual de Switches**: Organizada por módulo funcional e tipo de ação (`view`, `create`, `edit`, `delete`, `approve`, `export`, `admin`).
+* **Salvamento Auditado**: Ao salvar alterações, o sistema solicita confirmação do administrador e registra a mudança com payload diff na trilha de auditoria.
+* **Inspetor de Permissões Efetivas**: Permite selecionar um usuário específico para visualizar exatamente quais permissões ele possui (herdadas do cargo ou aplicadas por override individual pontual).
+* **Salvaguardas de Segurança**:
+  * O perfil `AUDITOR` é blindado contra concessão acidental de permissões de escrita/mutação.
+  * O perfil `ADMIN` não pode perder permissões críticas de governança.
+  * O último `ADMIN` da organização não pode ser rebaixado nem inativado (Anti-Lockout).
 
-* **Execução dos Testes Automatizados de Segurança**:
-  ```bash
-  cd backend && node test-rbac-permissions.js
-  ```
+---
+
+#### 🗄️ Estrutura de Tabelas RBAC no SQLite:
+* `role_permissions (role TEXT, permission TEXT, created_at TEXT, PRIMARY KEY(role, permission))`
+* `user_permissions (user_id TEXT, permission TEXT, granted INTEGER, created_at TEXT, PRIMARY KEY(user_id, permission))`
+* `audit_logs (id TEXT PRIMARY KEY, user_id, user_name, user_role, action, entity, entity_id, details_json, tenant_id, ip_address, created_at)`
+
+---
+
+#### 🧪 Bateria de Testes Automatizados RBAC (15 Cenários Cobertos):
+Para executar a suíte completa de testes automatizados:
+```bash
+# Executa todos os testes de backend e frontend
+npm test
+
+# Executa especificamente os testes de permissões e reestruturação RBAC
+node backend/test-runner.js test-rbac-permissions-restructure.js
+```
+
+**Credenciais Pré-Configuradas para Teste Manual de Cada Perfil (Senha Padrão: `admin123`)**:
+* **ADMIN**: `admin@empresa.com`
+* **RH**: `rh@peoplehub.com.br`
+* **GESTOR**: `gestor@peoplehub.com.br`
+* **RECRUTADOR**: `recrutador@peoplehub.com.br`
+* **AUDITOR**: `auditor@peoplehub.com.br`
+* **COLABORADOR**: `colaborador@peoplehub.com.br`
 
 ---
 

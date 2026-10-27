@@ -391,21 +391,27 @@ function handleConfirmDelete() {
     <div
       v-if="showDeleteConfirm"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-del-conv-title"
+      tabindex="-1"
+      @keydown.esc="showDeleteConfirm = false"
     >
       <div class="w-full max-w-sm rounded-2xl bg-card p-5 shadow-2xl border space-y-4 animate-in fade-in zoom-in duration-150">
         <div class="flex items-start gap-3">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400">
-            <AlertTriangle :size="20" />
+            <AlertTriangle :size="20" aria-hidden="true" />
           </div>
           <div class="min-w-0 flex-1">
-            <h3 class="font-bold text-sm text-foreground">Excluir conversa?</h3>
+            <h3 id="modal-del-conv-title" class="font-bold text-sm text-foreground">Excluir conversa?</h3>
             <p class="text-xs text-muted-foreground mt-1">
               Tem certeza de que deseja excluir permanentemente o atendimento com <strong>{{ conversation.name }}</strong>? Esta ação não pode ser desfeita.
             </p>
           </div>
           <button
             type="button"
-            class="text-muted-foreground hover:text-foreground cursor-pointer"
+            class="text-muted-foreground hover:text-foreground cursor-pointer p-1 rounded-lg"
+            aria-label="Cancelar e fechar janela de confirmação"
             @click="showDeleteConfirm = false"
           >
             <X :size="18" />

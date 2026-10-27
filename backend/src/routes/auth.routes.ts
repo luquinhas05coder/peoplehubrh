@@ -15,6 +15,7 @@ import {
   type JwtPayload,
 } from "../middleware/auth.js"
 import { generateSecureRandomPassword, sendForgotPasswordEmail } from "../services/mail.service.js"
+import { normalizeRole, getEffectivePermissionsForUser } from "../constants/rbac.js"
 
 const router = Router()
 
@@ -132,11 +133,17 @@ router.post("/login", async (req: Request, res: Response) => {
     })
     persist()
 
+    const normalizedRole = normalizeRole(userObj.role)
+    const permissions = getEffectivePermissionsForUser(userObj.id, normalizedRole)
+
     res.json({
       ok: true,
       token,
       user: {
         ...userObj,
+        role: normalizedRole,
+        userRole: normalizedRole,
+        permissions,
         twoFactorEnabled: false,
         mustChangePassword: userObj.must_change_password === 1,
         tenantId: userObj.tenant_id,
@@ -235,6 +242,9 @@ router.post("/verify-mfa", (req: Request, res: Response) => {
     maxAge: 8 * 60 * 60 * 1000,
   })
 
+  const normalizedRole = normalizeRole(role)
+  const permissions = getEffectivePermissionsForUser(id, normalizedRole)
+
   res.json({
     ok: true,
     token: sessionToken,
@@ -242,7 +252,9 @@ router.post("/verify-mfa", (req: Request, res: Response) => {
       id,
       name,
       email,
-      role,
+      role: normalizedRole,
+      userRole: normalizedRole,
+      permissions,
       department,
       initials,
       twoFactorEnabled: raw2faEnabled === 1,
@@ -474,13 +486,18 @@ router.get("/me", requireAuth, (req: Request, res: Response) => {
     tenantSlug = tRes[0].values[0][1] as string
   }
 
+  const normalizedRole = normalizeRole(role)
+  const permissions = getEffectivePermissionsForUser(id, normalizedRole)
+
   res.json({
     ok: true,
     user: {
       id,
       name,
       email,
-      role,
+      role: normalizedRole,
+      userRole: normalizedRole,
+      permissions,
       department,
       initials,
       twoFactorEnabled: raw2faEnabled === 1,

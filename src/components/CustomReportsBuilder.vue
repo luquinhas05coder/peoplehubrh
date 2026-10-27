@@ -331,7 +331,7 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Header e Controles Rápidos -->
-    <div class="p-5 rounded-2xl border bg-card text-card-foreground shadow-2xs space-y-4">
+    <div class="p-3.5 sm:p-5 rounded-2xl border bg-card text-card-foreground shadow-2xs space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
         <div>
           <h2 class="text-lg font-bold text-foreground flex items-center gap-2">
@@ -343,7 +343,7 @@ onMounted(() => {
           </p>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <!-- Seletor de Modelos Salvos -->
           <select
             v-if="savedReports.length"
@@ -483,37 +483,41 @@ onMounted(() => {
           <div
             v-for="(f, idx) in filters"
             :key="idx"
-            class="flex items-center gap-2 bg-muted/30 p-2 rounded-lg border text-xs"
+            class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-muted/30 p-2.5 sm:p-2 rounded-lg border text-xs"
           >
-            <select v-model="f.column" class="px-2 py-1 rounded border bg-background text-xs font-medium">
-              <option v-for="c in currentEntityConfig.columns" :key="c.key" :value="c.key">
-                {{ c.label }}
-              </option>
-            </select>
+            <div class="flex items-center gap-2 flex-1">
+              <select v-model="f.column" class="flex-1 sm:flex-none px-2 py-1.5 rounded border bg-background text-xs font-medium">
+                <option v-for="c in currentEntityConfig.columns" :key="c.key" :value="c.key">
+                  {{ c.label }}
+                </option>
+              </select>
 
-            <select v-model="f.operator" class="px-2 py-1 rounded border bg-background text-xs font-bold w-28">
-              <option value="=">Igual (=)</option>
-              <option value="!=">Diferente (!=)</option>
-              <option value="LIKE">Contém (LIKE)</option>
-              <option value=">">Maior que (&gt;)</option>
-              <option value="<">Menor que (&lt;)</option>
-            </select>
+              <select v-model="f.operator" class="px-2 py-1.5 rounded border bg-background text-xs font-bold w-24 sm:w-28">
+                <option value="=">Igual (=)</option>
+                <option value="!=">Diferente (!=)</option>
+                <option value="LIKE">Contém (LIKE)</option>
+                <option value=">">Maior que (&gt;)</option>
+                <option value="<">Menor que (&lt;)</option>
+              </select>
+            </div>
 
-            <input
-              v-model="f.value"
-              type="text"
-              placeholder="Valor do filtro..."
-              class="flex-1 px-2.5 py-1 rounded border bg-background text-xs"
-            />
+            <div class="flex items-center gap-2 flex-1">
+              <input
+                v-model="f.value"
+                type="text"
+                placeholder="Valor do filtro..."
+                class="flex-1 px-2.5 py-1.5 rounded border bg-background text-xs"
+              />
 
-            <button
-              type="button"
-              @click="removeFilter(idx)"
-              class="p-1 text-muted-foreground hover:text-rose-500"
-              title="Remover filtro"
-            >
-              <Trash2 :size="14" />
-            </button>
+              <button
+                type="button"
+                @click="removeFilter(idx)"
+                class="p-1.5 text-muted-foreground hover:text-rose-500 cursor-pointer shrink-0"
+                title="Remover filtro"
+              >
+                <Trash2 :size="15" />
+              </button>
+            </div>
           </div>
         </div>
         <div v-else class="text-[11px] text-muted-foreground italic">
@@ -522,12 +526,12 @@ onMounted(() => {
       </div>
 
       <!-- Barra de Ações: Executar e Exportar -->
-      <div class="flex items-center justify-between border-t pt-4">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t pt-4">
         <div class="text-xs text-muted-foreground font-medium">
           Registros retornados: <strong class="text-foreground">{{ queryResults.length }}</strong>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             @click="exportCSV"
             :disabled="!queryResults.length"
@@ -607,8 +611,8 @@ onMounted(() => {
         </h3>
       </div>
 
-      <div class="overflow-x-auto">
-        <table v-if="queryResults.length" class="w-full text-left text-xs divide-y">
+      <div class="overflow-x-auto scrollbar-thin">
+        <table v-if="queryResults.length" class="w-full text-left text-xs divide-y min-w-[550px]">
           <thead class="bg-muted/40 font-bold text-muted-foreground uppercase text-[11px]">
             <tr>
               <th v-for="c in resultColumns" :key="c" class="px-4 py-3 whitespace-nowrap">

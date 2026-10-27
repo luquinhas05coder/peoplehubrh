@@ -771,10 +771,10 @@ function resetSelection() {
     <!-- MODAL DE EDIÇÃO DO HORÁRIO DO DIA -->
     <div
       v-if="editingDayIndex !== null"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
       @click.self="closeDayEditor"
     >
-      <div class="bg-card border rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in zoom-in-95 duration-200">
+      <div class="bg-card border rounded-2xl shadow-2xl max-w-lg w-full p-4 sm:p-6 space-y-5 animate-in zoom-in-95 duration-200 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <!-- Header do Modal -->
         <div class="flex items-center justify-between border-b pb-3.5">
           <div class="flex items-center gap-2">

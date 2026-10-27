@@ -84,6 +84,13 @@ app.use(
   })
 )
 app.use(express.json({ limit: "2mb" }))
+// Intercepta e formata erros de sintaxe de JSON malformado
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && "status" in err && (err as any).status === 400) {
+    return res.status(400).json({ ok: false, error: "Formato de payload JSON inválido na requisição." })
+  }
+  next(err)
+})
 app.use(cookieParser())
 
 // Documentação Swagger UI
@@ -189,10 +196,21 @@ app.use((req, res) => {
   res.status(404).send("Página não encontrada.")
 })
 
-// Middleware global de tratamento de erros
+// Middleware global de tratamento de erros seguro
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("❌ Erro interno no servidor:", err)
-  res.status(500).json({ ok: false, error: err?.message || "Erro interno no servidor de API." })
+  console.error("❌ Erro capturado no servidor:", err)
+  const statusCode = typeof err?.status === "number" && err.status >= 400 && err.status < 600 ? err.status : 500
+  if (statusCode >= 500) {
+    res.status(statusCode).json({
+      ok: false,
+      error: "Ocorreu um erro interno no servidor ao processar a solicitação. Tente novamente mais tarde.",
+    })
+  } else {
+    res.status(statusCode).json({
+      ok: false,
+      error: err?.message || "Requisição inválida.",
+    })
+  }
 })
 
 initDB()

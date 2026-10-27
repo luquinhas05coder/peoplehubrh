@@ -12,8 +12,7 @@ router.use(resolveTenant)
 router.use(authenticateRBAC)
 router.use(requirePermission("reports.view"))
 
-// GET /api/reports/metrics
-router.get("/metrics", (req: Request, res: Response) => {
+function getReportMetrics(req: Request, res: Response): void {
   const db = getDB()
   const tenantId = req.tenantId || "tenant_default"
 
@@ -94,6 +93,10 @@ router.get("/metrics", (req: Request, res: Response) => {
       activeEmployeesCount,
     },
   })
-})
+}
+
+// GET /api/reports e GET /api/reports/metrics
+router.get("/", getReportMetrics)
+router.get("/metrics", getReportMetrics)
 
 export default router

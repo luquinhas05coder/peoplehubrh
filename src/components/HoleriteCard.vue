@@ -29,6 +29,7 @@ import {
   pedirVistaContraCheque,
   fetchContraChequesFromBackend,
   tenantContestDeadlineDays,
+  apiFetch,
 } from "../store"
 
 const props = defineProps<{
@@ -241,9 +242,8 @@ async function handleDownloadPdf() {
   const fileName = `Contra_Cheque_${cleanName}_${cleanMonth}.pdf`
 
   try {
-    const response = await fetch("/api/pdf/holerite", {
+    const response = await apiFetch("/api/pdf/holerite", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         employeeName: snap.employeeName,
         cpf: snap.cpf,
@@ -653,8 +653,8 @@ function handlePrint() {
     </div>
 
     <!-- Modal de Pedido de Vista (Recurso por Erro de Cálculo) -->
-    <div v-if="isContestModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl space-y-4 border">
+    <div v-if="isContestModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 overflow-y-auto">
+      <div class="w-full max-w-lg rounded-2xl bg-card p-4 sm:p-6 shadow-2xl space-y-4 border my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-start justify-between border-b pb-3">
           <div>
             <h3 class="text-base font-bold text-foreground flex items-center gap-2">
@@ -730,8 +730,8 @@ function handlePrint() {
     </div>
 
     <!-- Modal de Edição de Rubricas -->
-    <div v-if="isRubricasModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl space-y-4">
+    <div v-if="isRubricasModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 overflow-y-auto">
+      <div class="w-full max-w-lg rounded-2xl bg-card p-4 sm:p-6 shadow-xl space-y-4 my-auto max-h-[90dvh] overflow-y-auto scrollbar-thin">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-bold">Lançamentos: {{ selectedMonth }}</h3>
           <button @click="isRubricasModalOpen = false"><X :size="20" /></button>
@@ -774,10 +774,11 @@ function handlePrint() {
     </div>
 
     <!-- MODELO TRADICIONAL CLÁSSICO DE CONTRA-CHEQUE -->
-    <div
-      id="holerite-document-pdf"
-      class="bg-white text-black font-sans text-xs border border-black shadow-md mx-auto max-w-4xl print:shadow-none print:border-black"
-    >
+    <div class="overflow-x-auto rounded-xl border border-black/10 scrollbar-thin print:overflow-visible print:border-none">
+      <div
+        id="holerite-document-pdf"
+        class="bg-white text-black font-sans text-xs border border-black shadow-md mx-auto min-w-[680px] max-w-4xl print:min-w-0 print:shadow-none print:border-black"
+      >
       <div class="flex">
         <!-- ÁREA PRINCIPAL DO RECIBO (85% LARGURA) -->
         <div class="flex-1 border-r border-black flex flex-col justify-between">
@@ -920,4 +921,5 @@ function handlePrint() {
       </div>
     </div>
   </div>
+</div>
 </template>

@@ -317,7 +317,7 @@ router.post("/me/request-update", (req: Request, res: Response) => {
     return
   }
 
-  const requestId = `REQ-CAD-${Math.floor(100 + Math.random() * 900)}`
+  const requestId = `REQ-CAD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
   const date = new Date().toISOString().split("T")[0]
   const status = "Em Análise"
   const priority = "Média"

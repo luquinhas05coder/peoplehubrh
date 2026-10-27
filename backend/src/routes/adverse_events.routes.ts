@@ -108,7 +108,7 @@ router.get("/", (req: Request, res: Response) => {
     res.json({ ok: true, events, stats })
   } catch (error: any) {
     console.error("[API Adverse Events] Erro ao listar eventos:", error)
-    res.status(500).json({ ok: false, error: "Falha ao buscar eventos adversos: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao buscar eventos adversos." })
   }
 })
 
@@ -214,7 +214,7 @@ router.post("/", (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error("[API Adverse Events] Erro ao criar evento:", error)
-    res.status(500).json({ ok: false, error: "Falha ao registrar evento adverso: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao registrar evento adverso." })
   }
 })
 
@@ -298,7 +298,7 @@ router.patch("/:id/tratativa", (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error("[API Adverse Events] Erro na tratativa:", error)
-    res.status(500).json({ ok: false, error: "Erro ao atualizar tratativa: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao atualizar tratativa do evento adverso." })
   }
 })
 
@@ -375,7 +375,7 @@ router.post("/:id/announce-feed", (req: Request, res: Response) => {
     })
   } catch (error: any) {
     console.error("[API Adverse Events] Erro ao anunciar no feed:", error)
-    res.status(500).json({ ok: false, error: "Erro ao publicar medidas no feed: " + error?.message })
+    res.status(500).json({ ok: false, error: "Falha ao publicar medidas no feed corporativo." })
   }
 })
 

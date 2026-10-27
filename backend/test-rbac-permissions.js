@@ -4,7 +4,7 @@
  * Valida autenticação, perfis (ADMIN, RH, GESTOR, COLABORADOR),
  * bloqueios 401/403, anti-autoaprovação, escopos e auditoria.
  */
-const BASE_URL = "http://localhost:3001"
+const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3001"
 
 let passed = 0
 let failed = 0
@@ -158,7 +158,7 @@ async function runTests() {
   console.log("\n[TEST 6] Alteração de Roles e Proteção de Auto-Despromoção:")
   // Encontrar usuário do colaborador
   const targetColabUser = adminUsersData.users.find((u) => u.email === "colaborador@peoplehub.com.br")
-  const adminUser = adminUsersData.users.find((u) => u.email === "admin@empresa.com" || u.email === "admin@peoplehub.com.br")
+  const adminUser = adminUsersData.users.find((u) => u.email === "admin@empresa.com") || adminUsersData.users.find((u) => u.email === "admin@peoplehub.com.br")
 
   // Auto-despromoção do ADMIN deve ser bloqueada
   const selfDemoteRes = await fetch(`${BASE_URL}/api/users/${adminUser.id}/role`, {
