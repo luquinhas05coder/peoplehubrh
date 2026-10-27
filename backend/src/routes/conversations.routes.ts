@@ -292,16 +292,28 @@ router.post("/:id/messages", (req: Request, res: Response) => {
 
   persist()
 
+  const messagePayload = {
+    id: msgId,
+    direction: dir,
+    text,
+    time,
+    status: "enviado",
+    replyTo,
+  }
+
+  // Notificar clientes em tempo real via WebSocket Socket.IO
+  const io = req.app.get("io")
+  if (io) {
+    io.to(`tenant_${tenantId}`).emit("chat:message", {
+      conversationId: id,
+      message: messagePayload,
+      tenantId,
+    })
+  }
+
   res.status(201).json({
     ok: true,
-    message: {
-      id: msgId,
-      direction: dir,
-      text,
-      time,
-      status: "enviado",
-      replyTo,
-    },
+    message: messagePayload,
   })
 })
 

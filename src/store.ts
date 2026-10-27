@@ -1,4 +1,5 @@
 import { ref, computed } from "vue"
+import { subscribeToEvent } from "./utils/socket"
 import type {
   Conversation,
   Message,
@@ -2932,21 +2933,47 @@ export async function deleteOnboardingItem(id: string): Promise<boolean> {
 
 /* ─── Fetch global do Backend ───────────────────────────── */
 export const isDataSyncing = ref(false)
+let fetchAllPromise: Promise<void> | null = null
+let lastFetchAllTime = 0
 
-export async function fetchAllFromBackend(retries = 3) {
-  isDataSyncing.value = true
-  try {
-    const resHealth = await apiFetch("/api/health")
-    if (!resHealth.ok && retries > 0) {
-      setTimeout(() => fetchAllFromBackend(retries - 1), 1200)
-      return
-    }
-  } catch (_e) {
-    if (retries > 0) {
-      setTimeout(() => fetchAllFromBackend(retries - 1), 1200)
-      return
-    }
+export async function fetchAllFromBackend(retries = 3): Promise<void> {
+  // Se já há um fetch em andamento, retorna a mesma promessa para evitar requisições redundantes
+  if (fetchAllPromise) {
+    return fetchAllPromise
   }
+  const now = Date.now()
+  if (now - lastFetchAllTime < 2000 && retries === 3) {
+    return
+  }
+
+  fetchAllPromise = (async () => {
+    isDataSyncing.value = true
+    try {
+      try {
+        const resHealth = await apiFetch("/api/health")
+        if (!resHealth.ok && retries > 0) {
+          setTimeout(() => fetchAllFromBackend(retries - 1), 1200)
+          return
+        }
+      } catch (_e) {
+        if (retries > 0) {
+          setTimeout(() => fetchAllFromBackend(retries - 1), 1200)
+          return
+        }
+      }
+
+      await executeAllBackendLoads()
+    } finally {
+      isDataSyncing.value = false
+      lastFetchAllTime = Date.now()
+      fetchAllPromise = null
+    }
+  })()
+
+  return fetchAllPromise
+}
+
+async function executeAllBackendLoads() {
 
   // Carregamento concorrente via Promise.allSettled para eliminar o waterfall de rede
   const loadConversations = async () => {
@@ -3133,19 +3160,15 @@ export async function fetchAllFromBackend(retries = 3) {
     } catch (_e) {}
   }
 
-  try {
-    await Promise.allSettled([
-      loadConversations(),
-      loadEmployees(),
-      loadRequests(),
-      loadDocuments(),
-      loadOnboarding(),
-      loadContraCheques(),
-      loadFeedAndAdverse(),
-    ])
-  } finally {
-    isDataSyncing.value = false
-  }
+  await Promise.allSettled([
+    loadConversations(),
+    loadEmployees(),
+    loadRequests(),
+    loadDocuments(),
+    loadOnboarding(),
+    loadContraCheques(),
+    loadFeedAndAdverse(),
+  ])
 }
 
 export async function refreshAllData(): Promise<void> {
@@ -3362,5 +3385,110 @@ export async function deleteFeedPost(id: string): Promise<{ ok: boolean; error?:
   }
 }
 
-// Iniciar busca automática do backend ao carregar
-fetchAllFromBackend()
+/* ─── Notificações Corporativas em Tempo Real ─────────────────── */
+export interface SystemNotificationItem {
+  id: string
+  title: string
+  description: string
+  category: string
+  priority: "baixa" | "media" | "alta"
+  link?: string
+  read: boolean
+  created_at: string
+}
+
+export const systemNotifications = ref<SystemNotificationItem[]>([])
+export const unreadNotificationsCount = computed(() =>
+  systemNotifications.value.filter((n) => !n.read).length
+)
+
+let fetchNotificationsPromise: Promise<void> | null = null
+let lastNotificationsFetchTime = 0
+
+export async function fetchSystemNotifications(force = false): Promise<void> {
+  if (fetchNotificationsPromise) {
+    return fetchNotificationsPromise
+  }
+  const now = Date.now()
+  if (!force && now - lastNotificationsFetchTime < 10000 && systemNotifications.value.length > 0) {
+    return
+  }
+
+  fetchNotificationsPromise = (async () => {
+    try {
+      const res = await apiFetch("/api/notifications")
+      const data = await res.json()
+      if (data && data.ok && Array.isArray(data.notifications)) {
+        systemNotifications.value = data.notifications
+        lastNotificationsFetchTime = Date.now()
+      }
+    } catch (_e) {
+      // Falha silenciosa
+    } finally {
+      fetchNotificationsPromise = null
+    }
+  })()
+
+  return fetchNotificationsPromise
+}
+
+export async function markNotificationAsRead(item: SystemNotificationItem): Promise<void> {
+  if (!item.read) {
+    item.read = true
+    try {
+      await apiFetch(`/api/notifications/${item.id}/read`, { method: "PATCH" })
+    } catch (_e) {}
+  }
+}
+
+export async function markAllNotificationsAsRead(): Promise<void> {
+  systemNotifications.value.forEach((n) => (n.read = true))
+  try {
+    await apiFetch("/api/notifications/read-all", { method: "PATCH" })
+    showToast("Todas as notificações foram marcadas como lidas.", "success")
+  } catch (_e) {}
+}
+
+let realtimeInitialized = false
+export function initRealtimeListeners() {
+  if (typeof window === "undefined" || realtimeInitialized) return
+  realtimeInitialized = true
+
+  // Mensagens de Chat em Tempo Real via Socket.IO
+  subscribeToEvent("chat:message", (data: any) => {
+    if (!data || !data.conversationId || !data.message) return
+    const conv = conversations.value.find((c) => c.id === data.conversationId)
+    if (conv) {
+      const exists = conv.messages.some((m) => m.id === data.message.id)
+      if (!exists) {
+        conv.messages.push(data.message)
+        conv.lastMessage = data.message.text
+        conv.time = data.message.time
+        if (activeId.value !== conv.id) {
+          conv.unread = (conv.unread || 0) + 1
+        }
+      }
+    }
+  })
+
+  // Novas Notificações em Tempo Real
+  subscribeToEvent("notification:new", (notif: SystemNotificationItem) => {
+    if (!notif || !notif.id) return
+    if (!systemNotifications.value.some((n) => n.id === notif.id)) {
+      systemNotifications.value.unshift(notif)
+      showToast(`Nova Notificação: ${notif.title}`, "info")
+    }
+  })
+
+  // Notificação lida em tempo real
+  subscribeToEvent("notification:read", (data: { id: string }) => {
+    if (!data?.id) return
+    const item = systemNotifications.value.find((n) => n.id === data.id)
+    if (item) item.read = true
+  })
+
+  // Todas lidas em tempo real
+  subscribeToEvent("notification:read-all", () => {
+    systemNotifications.value.forEach((n) => (n.read = true))
+  })
+}

@@ -49,6 +49,11 @@ router.patch("/:id/read", (req: Request, res: Response) => {
   db.run(`UPDATE notifications SET read = 1 WHERE id = ? AND tenant_id = ?`, [id, tenantId])
   persist()
 
+  const io = req.app.get("io")
+  if (io) {
+    io.to(`tenant_${tenantId}`).emit("notification:read", { id, tenantId })
+  }
+
   res.json({ ok: true, message: "Notificação marcada como lida." })
 })
 
@@ -65,6 +70,11 @@ router.patch("/read-all", (req: Request, res: Response) => {
     [tenantId, userId, userEmail]
   )
   persist()
+
+  const io = req.app.get("io")
+  if (io) {
+    io.to(`tenant_${tenantId}`).emit("notification:read-all", { tenantId })
+  }
 
   res.json({ ok: true, message: "Todas as notificações foram marcadas como lidas." })
 })

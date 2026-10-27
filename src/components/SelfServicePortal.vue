@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, onMounted, onBeforeUnmount } from "vue"
 import {
   UserCheck,
   FileText,
@@ -324,11 +324,13 @@ async function loadHrApprovals() {
   }
 }
 
+let clockTimer: any = null
+
 onMounted(() => {
   loadPortalData()
 
   // Sincronizar relógio digital a cada segundo
-  setInterval(() => {
+  clockTimer = setInterval(() => {
     liveClock.value = new Date().toLocaleTimeString('pt-BR')
   }, 1000)
 
@@ -342,6 +344,13 @@ onMounted(() => {
   loadTimeClockData()
   loadVacationModuleData()
   loadBenefitsModuleData()
+})
+
+onBeforeUnmount(() => {
+  if (clockTimer) {
+    clearInterval(clockTimer)
+    clockTimer = null
+  }
 })
 
 /* ─── Funções: Ponto Eletrônico & Banco de Horas ─── */

@@ -2,7 +2,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from "vue"
 import { useRouter } from "vue-router"
 import { Bell, CheckCheck, Clock, Calendar, GitMerge, Award, FileText, CheckCircle2, X } from "lucide-vue-next"
-import { apiFetch, showToast, activeTab } from "../store"
+import {
+  activeTab,
+  systemNotifications as notifications,
+  unreadNotificationsCount as unreadCount,
+  fetchSystemNotifications,
+  markNotificationAsRead as storeMarkAsRead,
+  markAllNotificationsAsRead as storeMarkAllAsRead,
+} from "../store"
 
 export interface NotificationItem {
   id: string
@@ -27,8 +34,6 @@ const props = withDefaults(
 const router = useRouter()
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
-const notifications = ref<NotificationItem[]>([])
-const unreadCount = ref(0)
 const loading = ref(false)
 
 const popoverPositionClass = computed(() => {
@@ -41,20 +46,10 @@ const popoverPositionClass = computed(() => {
   return "fixed inset-x-3 top-16 sm:inset-auto sm:right-3 sm:top-14 md:absolute md:inset-auto md:left-16 md:top-0 w-auto md:w-96"
 })
 
-async function fetchNotifications() {
+async function fetchNotifications(force = false) {
   loading.value = true
   try {
-    const res = await apiFetch("/api/notifications")
-    const data = await res.json()
-    if (data && data.ok && Array.isArray(data.notifications)) {
-      notifications.value = data.notifications
-      unreadCount.value =
-        typeof data.unreadCount === "number"
-          ? data.unreadCount
-          : data.notifications.filter((n: any) => !n.read).length
-    }
-  } catch (_e) {
-    // Falha silenciosa de polling
+    await fetchSystemNotifications(force)
   } finally {
     loading.value = false
   }
@@ -62,8 +57,8 @@ async function fetchNotifications() {
 
 function toggleDropdown() {
   isOpen.value = !isOpen.value
-  if (isOpen.value && notifications.value.length === 0) {
-    fetchNotifications()
+  if (isOpen.value) {
+    fetchNotifications(true)
   }
 }
 
@@ -72,13 +67,7 @@ function closeDropdown() {
 }
 
 async function markAsRead(item: NotificationItem) {
-  if (!item.read) {
-    try {
-      await apiFetch(`/api/notifications/${item.id}/read`, { method: "PATCH" })
-      item.read = true
-      unreadCount.value = Math.max(0, unreadCount.value - 1)
-    } catch (_e) {}
-  }
+  await storeMarkAsRead(item)
   if (item.link) {
     isOpen.value = false
     const cleanPath = item.link.replace(/^\//, "")
@@ -92,12 +81,7 @@ async function markAsRead(item: NotificationItem) {
 }
 
 async function markAllAsRead() {
-  try {
-    await apiFetch("/api/notifications/read-all", { method: "PATCH" })
-    notifications.value.forEach((n) => (n.read = true))
-    unreadCount.value = 0
-    showToast("Todas as notificações foram marcadas como lidas.", "success")
-  } catch (_e) {}
+  await storeMarkAllAsRead()
 }
 
 function getCategoryIcon(cat: string) {
@@ -134,7 +118,12 @@ onMounted(() => {
   fetchNotifications()
   document.addEventListener("click", handleOutsideClick)
   document.addEventListener("keydown", handleKeydown)
-  pollInterval = setInterval(fetchNotifications, 30000)
+  // Polling suave de fallback apenas se a aba estiver visível (120s)
+  pollInterval = setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      fetchNotifications()
+    }
+  }, 120000)
 })
 
 onBeforeUnmount(() => {

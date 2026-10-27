@@ -106,8 +106,11 @@ app.use(cookieParser())
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
-// Log de requisições em ambiente dev
+// Log de requisições em ambiente dev (suprime ruído de polling contínuo / health-check)
 app.use((req, _res, next) => {
+  if (req.url === "/api/health" || (req.method === "GET" && req.url.startsWith("/api/notifications"))) {
+    return next()
+  }
   console.log(`[API ${req.method}] ${req.url}`)
   next()
 })

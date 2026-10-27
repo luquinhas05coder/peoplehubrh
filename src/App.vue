@@ -11,6 +11,7 @@ import {
   currentUser,
   showToast,
   fetchAllFromBackend,
+  initRealtimeListeners,
 } from "./store"
 import NavRail from "./components/NavRail.vue"
 import HomeWorkspace from "./components/HomeWorkspace.vue"
@@ -39,6 +40,7 @@ function handleOffline() {
 }
 
 onMounted(() => {
+  initRealtimeListeners()
   window.addEventListener("online", handleOnline)
   window.addEventListener("offline", handleOffline)
 })

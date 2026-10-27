@@ -106,11 +106,14 @@ router.post("/", requirePermission("requests.create"), (req: Request, res: Respo
     return
   }
 
-  const id = `REQ-${Math.floor(100 + Math.random() * 900)}`
+  const db = getDB()
+  let id = `REQ-${Date.now().toString().slice(-4)}${Math.floor(100 + Math.random() * 900)}`
+  const check = db.exec(`SELECT id FROM requests WHERE id = ?`, [id])
+  if (check.length && check[0].values.length) {
+    id = `REQ-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`
+  }
   const date = new Date().toISOString().split("T")[0]
   const status = "Em Análise"
-
-  const db = getDB()
   const detailsObj = typeof details === "object" && details !== null ? { ...details } : {}
   if (req.access?.userId) detailsObj.created_by_id = req.access.userId
   if (req.access?.email) detailsObj.created_by_email = req.access.email
