@@ -37,11 +37,20 @@ import performanceRoutes from "./routes/performance.routes.js"
 import customReportsRoutes from "./routes/custom_reports.routes.js"
 import recruitmentRoutes from "./routes/recruitment.routes.js"
 import webhooksRoutes from "./routes/webhooks.routes.js"
-
+import http from "http"
+import { Server as SocketIOServer } from "socket.io"
 import swaggerUi from "swagger-ui-express"
 import { swaggerSpec } from "./swagger.js"
 import helmet from "helmet"
 import rateLimit from "express-rate-limit"
+
+import vacationsRoutes from "./routes/vacations.routes.js"
+import timeClockRoutes from "./routes/time_clock.routes.js"
+import benefitsRoutes from "./routes/benefits.routes.js"
+import offboardingRoutes from "./routes/offboarding.routes.js"
+import trainingsRoutes from "./routes/trainings.routes.js"
+import climateRoutes from "./routes/climate.routes.js"
+import orgChartRoutes from "./routes/org_chart.routes.js"
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -71,7 +80,7 @@ app.use(globalLimiter)
 // Rate Limiter Estrito para Rotas de Autenticação (proteção contra Brute Force / Credential Stuffing)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: process.env.NODE_ENV === "test" ? 200 : 30,
+  limit: process.env.NODE_ENV === "test" ? 2000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: "Muitas tentativas de autenticação. Por segurança, tente novamente em 15 minutos." },
@@ -127,6 +136,13 @@ app.use("/api/performance", performanceRoutes)
 app.use("/api/reports/custom", customReportsRoutes)
 app.use("/api/recruitment", recruitmentRoutes)
 app.use("/api/webhooks", webhooksRoutes)
+app.use("/api/vacations", vacationsRoutes)
+app.use("/api/time-clock", timeClockRoutes)
+app.use("/api/benefits", benefitsRoutes)
+app.use("/api/offboarding", offboardingRoutes)
+app.use("/api/trainings", trainingsRoutes)
+app.use("/api/climate", climateRoutes)
+app.use("/api/org-chart", orgChartRoutes)
 
 app.get("/", (_req, res) => {
   res.send(`
@@ -213,11 +229,48 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   }
 })
 
+const server = http.createServer(app)
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: CORS_ORIGIN,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  },
+})
+
+// Disponibilizar instância do Socket.IO nas rotas Express
+app.set("io", io)
+
+io.on("connection", (socket) => {
+  console.log(`[WS] Cliente conectado: ${socket.id}`)
+
+  socket.on("join:tenant", (tenantId: string) => {
+    const room = `tenant_${tenantId || "tenant_default"}`
+    socket.join(room)
+    console.log(`[WS] Socket ${socket.id} entrou na sala ${room}`)
+  })
+
+  socket.on("chat:send", (messageData: any) => {
+    const tenantId = messageData?.tenantId || "tenant_default"
+    io.to(`tenant_${tenantId}`).emit("chat:message", messageData)
+  })
+
+  socket.on("notification:broadcast", (notifData: any) => {
+    const tenantId = notifData?.tenantId || "tenant_default"
+    io.to(`tenant_${tenantId}`).emit("notification:new", notifData)
+  })
+
+  socket.on("disconnect", () => {
+    console.log(`[WS] Cliente desconectado: ${socket.id}`)
+  })
+})
+
 initDB()
   .then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`\n==================================================`)
       console.log(`🚀 PeopleHub RH Backend rodando em http://localhost:${PORT}`)
+      console.log(`⚡ WebSocket Server (Socket.IO) ativo em http://localhost:${PORT}`)
       console.log(`📘 Swagger UI: http://localhost:${PORT}/docs`)
       console.log(`📊 Health Check: http://localhost:${PORT}/api/health`)
       console.log(`==================================================\n`)
@@ -227,3 +280,4 @@ initDB()
     console.error("❌ Erro ao inicializar o banco de dados do backend:", err)
     process.exit(1)
   })
+

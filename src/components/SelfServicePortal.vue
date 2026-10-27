@@ -25,6 +25,10 @@ import {
   Sparkles,
   AlertCircle,
   X,
+  Clock,
+  HeartHandshake,
+  Navigation,
+  CalendarDays,
 } from "lucide-vue-next"
 import {
   apiFetch,
@@ -108,7 +112,7 @@ interface RequestComment {
 }
 
 /* ─── State Principal ─── */
-const activeTab = ref<"dados" | "solicitacoes" | "aprovacoes" | "documentos">("dados")
+const activeTab = ref<"dados" | "solicitacoes" | "aprovacoes" | "documentos" | "ponto" | "ferias" | "beneficios">("dados")
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
@@ -121,6 +125,39 @@ const vacationInfo = ref({
   proximoPeriodo: "Período Aquisitivo Vigente",
   temFeriasPendentes: false,
 })
+
+/* ─── MÓDULO: PONTO ELETRÔNICO & BANCO DE HORAS ─── */
+const liveClock = ref(new Date().toLocaleTimeString('pt-BR'))
+const todayPunches = ref<any[]>([])
+const timeSheet = ref<any>(null)
+const timeBalance = ref("+00:00")
+const isPunching = ref(false)
+const showAdjustmentModal = ref(false)
+const adjustmentForm = ref({
+  recordDate: new Date().toISOString().split("T")[0],
+  originalTime: "09:00",
+  adjustedTime: "08:30",
+  punchType: "entrada_1",
+  justification: "Ajuste devido a reunião externa com cliente",
+})
+
+/* ─── MÓDULO: GESTÃO DE FÉRIAS CLT ─── */
+const vacationBalance = ref<any>(null)
+const isRequestingVacation = ref(false)
+const showVacationModal = ref(false)
+const vacationForm = ref({
+  dataInicio: "",
+  dataFim: "",
+  dias: 15,
+  abonoPecuniario: 0,
+  adiantamento13: 0,
+  observacoes: "",
+})
+
+/* ─── MÓDULO: GESTÃO DE BENEFÍCIOS ─── */
+const myBenefits = ref<any[]>([])
+const benefitsCatalog = ref<any[]>([])
+const isBenefitsLoading = ref(false)
 
 // Aba de Aprovações (para RH / Gestores / Admin)
 const hrRequests = ref<RequestRecord[]>([])
@@ -289,7 +326,207 @@ async function loadHrApprovals() {
 
 onMounted(() => {
   loadPortalData()
+
+  // Sincronizar relógio digital a cada segundo
+  setInterval(() => {
+    liveClock.value = new Date().toLocaleTimeString('pt-BR')
+  }, 1000)
+
+  // Suporte a atalhos do PWA via query param ?tab=
+  const urlParams = new URLSearchParams(window.location.search)
+  const tabParam = urlParams.get("tab")
+  if (tabParam && ["dados", "solicitacoes", "aprovacoes", "documentos", "ponto", "ferias", "beneficios"].includes(tabParam)) {
+    activeTab.value = tabParam as any
+  }
+
+  loadTimeClockData()
+  loadVacationModuleData()
+  loadBenefitsModuleData()
 })
+
+/* ─── Funções: Ponto Eletrônico & Banco de Horas ─── */
+async function loadTimeClockData() {
+  try {
+    const [todayRes, sheetRes] = await Promise.all([
+      apiFetch("/api/time-clock/today"),
+      apiFetch(`/api/time-clock/sheet?monthYear=${new Date().toISOString().substring(0, 7)}`),
+    ])
+    if (todayRes.ok) {
+      const data = await todayRes.json()
+      todayPunches.value = data.punches || []
+    }
+    if (sheetRes.ok) {
+      const sData = await sheetRes.json()
+      timeSheet.value = sData
+      if (sData.totals) {
+        timeBalance.value = `${sData.totals.saldoGeralMinutos >= 0 ? '+' : ''}${sData.totals.saldoHorasFormatado || '00:00'}`
+      }
+    }
+  } catch (_e) {}
+}
+
+async function handlePunchClock() {
+  isPunching.value = true
+  let lat: number | undefined
+  let lng: number | undefined
+
+  if ("geolocation" in navigator) {
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3500 })
+      })
+      lat = pos.coords.latitude
+      lng = pos.coords.longitude
+    } catch (_e) {}
+  }
+
+  try {
+    const res = await apiFetch("/api/time-clock/punch", {
+      method: "POST",
+      body: JSON.stringify({
+        locationName: lat ? "Geolocalização Verificada (GPS)" : "Sede Corporativa SP / Home Office",
+        latitude: lat,
+        longitude: lng,
+        source: "pwa",
+      }),
+    })
+    const data = await res.json()
+    if (res.ok && data.ok) {
+      showToast(`Ponto registrado com sucesso! (${data.punchType.replace('_', ' ')} às ${data.punchTime})`, "success")
+      await loadTimeClockData()
+    } else {
+      showToast(data.error || "Erro ao registrar ponto.", "error")
+    }
+  } catch (_e) {
+    showToast("Falha na comunicação ao registrar ponto.", "error")
+  } finally {
+    isPunching.value = false
+  }
+}
+
+async function submitTimeAdjustment() {
+  try {
+    const res = await apiFetch("/api/time-clock/adjustment", {
+      method: "POST",
+      body: JSON.stringify(adjustmentForm.value),
+    })
+    const data = await res.json()
+    if (res.ok && data.ok) {
+      showToast("Solicitação de ajuste de ponto enviada para análise do RH!", "success")
+      showAdjustmentModal.value = false
+      await loadTimeClockData()
+    } else {
+      showToast(data.error || "Erro ao solicitar ajuste.", "error")
+    }
+  } catch (_e) {
+    showToast("Falha ao enviar ajuste.", "error")
+  }
+}
+
+/* ─── Funções: Gestão de Férias CLT ─── */
+async function loadVacationModuleData() {
+  try {
+    const res = await apiFetch("/api/vacations/balance")
+    if (res.ok) {
+      const data = await res.json()
+      vacationBalance.value = data
+      if (data.summary) {
+        vacationInfo.value.diasDisponiveis = data.summary.diasSaldo
+      }
+    }
+  } catch (_e) {}
+}
+
+async function submitVacationRequest() {
+  if (!vacationForm.value.dataInicio || !vacationForm.value.dataFim || vacationForm.value.dias < 5) {
+    showToast("Informe as datas e no mínimo 5 dias de férias conforme a CLT.", "warning")
+    return
+  }
+  isRequestingVacation.value = true
+  try {
+    const res = await apiFetch("/api/vacations/requests", {
+      method: "POST",
+      body: JSON.stringify({
+        ...vacationForm.value,
+        dias: Number(vacationForm.value.dias),
+        abonoPecuniario: Number(vacationForm.value.abonoPecuniario),
+        adiantamento13: Number(vacationForm.value.adiantamento13),
+      }),
+    })
+    const data = await res.json()
+    if (res.ok && data.ok) {
+      showToast("Solicitação de férias enviada com sucesso para aprovação!", "success")
+      showVacationModal.value = false
+      await loadVacationModuleData()
+    } else {
+      showToast(data.error || "Erro ao solicitar férias.", "error")
+    }
+  } catch (_e) {
+    showToast("Falha ao comunicar com servidor de férias.", "error")
+  } finally {
+    isRequestingVacation.value = false
+  }
+}
+
+/* ─── Funções: Gestão de Benefícios ─── */
+async function loadBenefitsModuleData() {
+  isBenefitsLoading.value = true
+  try {
+    const [myRes, catRes] = await Promise.all([
+      apiFetch("/api/benefits/my"),
+      apiFetch("/api/benefits/catalog"),
+    ])
+    if (myRes.ok) {
+      const mData = await myRes.json()
+      myBenefits.value = mData.benefits || []
+    }
+    if (catRes.ok) {
+      const cData = await catRes.json()
+      benefitsCatalog.value = cData.catalog || []
+    }
+  } catch (_e) {}
+  isBenefitsLoading.value = false
+}
+
+async function handleEnrollBenefit(benefitId: string) {
+  try {
+    const res = await apiFetch("/api/benefits/enroll", {
+      method: "POST",
+      body: JSON.stringify({ benefitId, dependentsCount: 0 }),
+    })
+    const data = await res.json()
+    if (res.ok && data.ok) {
+      showToast(data.message || "Adesão ao benefício confirmada!", "success")
+      await loadBenefitsModuleData()
+    } else {
+      showToast(data.error || "Erro ao aderir ao benefício.", "error")
+    }
+  } catch (_e) {
+    showToast("Falha ao processar adesão.", "error")
+  }
+}
+
+async function handleCancelBenefit(employeeBenefitId: string) {
+  if (!confirm("Deseja realmente cancelar a adesão a este benefício?")) return
+  try {
+    const res = await apiFetch("/api/benefits/cancel", {
+      method: "POST",
+      body: JSON.stringify({
+        employeeBenefitId,
+        cancellationReason: "Solicitado pelo colaborador via portal de autoatendimento",
+      }),
+    })
+    const data = await res.json()
+    if (res.ok && data.ok) {
+      showToast("Cancelamento do benefício processado.", "info")
+      await loadBenefitsModuleData()
+    } else {
+      showToast(data.error || "Erro ao cancelar benefício.", "error")
+    }
+  } catch (_e) {
+    showToast("Falha ao comunicar cancelamento.", "error")
+  }
+}
 
 /* ─── Fluxo de Alteração Cadastral ─── */
 function openCadastralModal() {
@@ -841,6 +1078,45 @@ function getStatusBadge(status: string) {
           Meus Documentos
         </button>
 
+        <button
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
+          :class="activeTab === 'ponto'
+            ? 'border-teal-600 text-teal-600 dark:text-teal-400 font-bold'
+            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
+          @click="activeTab = 'ponto'"
+        >
+          <Clock :size="16" />
+          Ponto Eletrônico
+        </button>
+
+        <button
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
+          :class="activeTab === 'ferias'
+            ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 font-bold'
+            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
+          @click="activeTab = 'ferias'"
+        >
+          <Sparkles :size="16" />
+          Minhas Férias
+          <span
+            v-if="vacationBalance?.summary?.isExpiringSoon"
+            class="ml-1 rounded-full bg-amber-500 text-white px-1.5 py-0.2 text-[9px] font-bold"
+          >
+            Alerta CLT
+          </span>
+        </button>
+
+        <button
+          class="flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors cursor-pointer shrink-0"
+          :class="activeTab === 'beneficios'
+            ? 'border-purple-600 text-purple-600 dark:text-purple-400 font-bold'
+            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'"
+          @click="activeTab = 'beneficios'"
+        >
+          <HeartHandshake :size="16" />
+          Benefícios
+        </button>
+
         <!-- Aba de Aprovações para Perfis com Governança (RH / Gestor / Admin) -->
         <button
           v-if="isHrOrManager"
@@ -1385,6 +1661,494 @@ function getStatusBadge(status: string) {
             <p class="text-sm text-muted-foreground mt-1">Todas as solicitações de colaboradores foram analisadas.</p>
           </div>
         </section>
+
+        <!-- ======================================================== -->
+        <!-- ABA: PONTO ELETRÔNICO & BANCO DE HORAS                   -->
+        <!-- ======================================================== -->
+        <section v-if="activeTab === 'ponto'" class="space-y-6">
+          <!-- Card de Registro com Relógio Digital -->
+          <div class="p-6 rounded-2xl border bg-gradient-to-br from-card to-card/60 shadow-xs flex flex-col md:flex-row items-center justify-between gap-6">
+            <div class="space-y-2 text-center md:text-left">
+              <span class="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400 flex items-center justify-center md:justify-start gap-1.5">
+                <Clock :size="14" /> Ponto Digital Certificado (Portaria 671 MTE)
+              </span>
+              <div class="text-4xl sm:text-5xl font-black tracking-tight text-foreground font-mono">
+                {{ liveClock }}
+              </div>
+              <p class="text-xs text-muted-foreground flex items-center justify-center md:justify-start gap-1">
+                <Navigation :size="12" class="text-teal-500" />
+                Localização: Sede Corporativa SP / Home Office (GPS ativo)
+              </p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                @click="handlePunchClock"
+                :disabled="isPunching"
+                class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <RefreshCw v-if="isPunching" :size="16" class="animate-spin" />
+                <Clock v-else :size="16" />
+                Bater Ponto Agora
+              </button>
+
+              <button
+                type="button"
+                @click="showAdjustmentModal = true"
+                class="w-full sm:w-auto px-4 py-3 rounded-xl border bg-background hover:bg-muted text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Solicitar Ajuste
+              </button>
+            </div>
+          </div>
+
+          <!-- Batidas de Hoje e Saldo de Banco -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Batidas Registradas Hoje -->
+            <div class="md:col-span-2 p-5 rounded-2xl border bg-card space-y-3">
+              <div class="flex items-center justify-between border-b pb-2">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Clock :size="13" class="text-teal-500" /> Batidas Registradas Hoje
+                </h4>
+                <span class="text-xs font-semibold text-teal-600">{{ todayPunches.length }} registros</span>
+              </div>
+
+              <div v-if="todayPunches.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+                Nenhuma marcação realizada hoje. Clique em "Bater Ponto Agora" para registrar.
+              </div>
+
+              <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div
+                  v-for="p in todayPunches"
+                  :key="p.id"
+                  class="p-3 rounded-xl border bg-background/80 space-y-1"
+                >
+                  <span class="text-[10px] uppercase font-bold text-muted-foreground block">
+                    {{ p.punch_type.replace('_', ' ') }}
+                  </span>
+                  <strong class="text-base font-black text-foreground font-mono block">
+                    {{ p.punch_time }}
+                  </strong>
+                  <span class="text-[10px] text-muted-foreground truncate block">
+                    {{ p.source }} · {{ p.location_name || 'GPS' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Saldo de Banco de Horas -->
+            <div class="p-5 rounded-2xl border bg-card flex flex-col justify-between space-y-3">
+              <div>
+                <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  Saldo do Banco de Horas
+                </span>
+                <div
+                  class="text-3xl font-black font-mono"
+                  :class="timeBalance.startsWith('+') ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'"
+                >
+                  {{ timeBalance }}
+                </div>
+                <p class="text-[11px] text-muted-foreground mt-1">
+                  Acumulado de horas extras e compensações do período vigente.
+                </p>
+              </div>
+
+              <div class="pt-2 border-t text-[11px] text-muted-foreground flex items-center justify-between">
+                <span>Fechamento Mensal:</span>
+                <strong class="text-foreground">25 do mês corrente</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Espelho de Ponto do Mês -->
+          <div class="p-5 rounded-2xl border bg-card space-y-3">
+            <div class="flex items-center justify-between border-b pb-3">
+              <h4 class="text-sm font-bold text-foreground flex items-center gap-2">
+                <CalendarDays :size="15" class="text-teal-500" />
+                Espelho de Ponto — Competência Atual
+              </h4>
+              <button
+                type="button"
+                @click="loadTimeClockData"
+                class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw :size="12" /> Atualizar
+              </button>
+            </div>
+
+            <div v-if="timeSheet?.records?.length" class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-muted/40 text-muted-foreground uppercase text-[10px]">
+                  <tr>
+                    <th class="p-2.5">Data</th>
+                    <th class="p-2.5">Entrada 1</th>
+                    <th class="p-2.5">Saída 1</th>
+                    <th class="p-2.5">Entrada 2</th>
+                    <th class="p-2.5">Saída 2</th>
+                    <th class="p-2.5">Total Dia</th>
+                    <th class="p-2.5">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  <tr v-for="r in timeSheet.records.slice(-10)" :key="r.date">
+                    <td class="p-2.5 font-bold font-mono">{{ r.date }}</td>
+                    <td class="p-2.5 font-mono">{{ r.entrada_1 || '—' }}</td>
+                    <td class="p-2.5 font-mono">{{ r.saida_1 || '—' }}</td>
+                    <td class="p-2.5 font-mono">{{ r.entrada_2 || '—' }}</td>
+                    <td class="p-2.5 font-mono">{{ r.saida_2 || '—' }}</td>
+                    <td class="p-2.5 font-bold">{{ r.totalTrabalhado }}</td>
+                    <td class="p-2.5 font-bold" :class="r.saldoMinutos >= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                      {{ r.saldoFormatado }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-else class="text-center py-8 text-xs text-muted-foreground">
+              Nenhuma movimentação de ponto consolidada no espelho deste mês.
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================================================== -->
+        <!-- ABA: MINHAS FÉRIAS CLT                                  -->
+        <!-- ======================================================== -->
+        <section v-if="activeTab === 'ferias'" class="space-y-6">
+          <!-- Alerta CLT de Vencimento -->
+          <div
+            v-if="vacationBalance?.summary?.isExpiringSoon || vacationBalance?.summary?.isExpired"
+            class="p-4 rounded-2xl border flex items-center justify-between text-xs"
+            :class="vacationBalance?.summary?.isExpired ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300' : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300'"
+          >
+            <div class="flex items-center gap-2.5">
+              <AlertTriangle :size="18" class="shrink-0" />
+              <div>
+                <strong class="font-bold block">{{ vacationBalance.summary.isExpired ? 'Período Concessivo Vencido!' : 'Aviso Legal de Férias Vencendo' }}</strong>
+                <span>{{ vacationBalance.summary.alertaCLT }}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              @click="showVacationModal = true"
+              class="px-3 py-1.5 rounded-lg bg-background text-foreground font-bold shadow-xs hover:bg-muted transition-colors cursor-pointer shrink-0"
+            >
+              Programar Férias
+            </button>
+          </div>
+
+          <!-- Cards de Saldo e Período CLT -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="p-5 rounded-2xl border bg-card space-y-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Saldo Restante</span>
+              <div class="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+                {{ vacationBalance?.summary?.diasSaldo ?? vacationInfo.diasDisponiveis }} dias
+              </div>
+              <p class="text-[11px] text-muted-foreground">Disponíveis para fruição ou abono.</p>
+            </div>
+
+            <div class="p-5 rounded-2xl border bg-card space-y-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Dias de Direito Adquiridos</span>
+              <div class="text-3xl font-black text-foreground">
+                {{ vacationBalance?.period?.dias_direito ?? 30 }} dias
+              </div>
+              <p class="text-[11px] text-muted-foreground">Base Art. 130 da CLT.</p>
+            </div>
+
+            <div class="p-5 rounded-2xl border bg-card space-y-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Abono Pecuniário Máx.</span>
+              <div class="text-3xl font-black text-indigo-600 dark:text-indigo-400">
+                {{ vacationBalance?.summary?.diasAbonoDisponivel ?? 10 }} dias
+              </div>
+              <p class="text-[11px] text-muted-foreground">Conversão de 1/3 do saldo em remuneração.</p>
+            </div>
+          </div>
+
+          <!-- Informações de Período Aquisitivo e Concessivo -->
+          <div class="p-5 rounded-2xl border bg-card space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+              <div>
+                <h4 class="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Calendar :size="15" class="text-teal-500" />
+                  Ciclos Legais de Férias CLT
+                </h4>
+                <p class="text-xs text-muted-foreground">
+                  Período Aquisitivo (trabalhado) e Período Concessivo (limite para gozo)
+                </p>
+              </div>
+
+              <button
+                type="button"
+                @click="showVacationModal = true"
+                class="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow transition-colors cursor-pointer flex items-center gap-1.5 self-start sm:self-center"
+              >
+                <Plus :size="14" />
+                Nova Solicitação de Férias
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div class="p-3.5 rounded-xl border bg-background space-y-1">
+                <span class="text-[11px] font-bold text-muted-foreground uppercase">Período Aquisitivo:</span>
+                <strong class="text-sm font-bold text-foreground block">
+                  {{ vacationBalance?.period?.aquisitivo_inicio }} até {{ vacationBalance?.period?.aquisitivo_fim }}
+                </strong>
+                <p class="text-[11px] text-muted-foreground">12 meses de contrato necessários para adquirir o direito.</p>
+              </div>
+
+              <div class="p-3.5 rounded-xl border bg-background space-y-1">
+                <span class="text-[11px] font-bold text-muted-foreground uppercase">Período Concessivo Limite:</span>
+                <strong class="text-sm font-bold text-foreground block">
+                  {{ vacationBalance?.period?.concessivo_inicio }} até {{ vacationBalance?.period?.concessivo_fim }}
+                </strong>
+                <p class="text-[11px] text-muted-foreground">Prazo legal máximo para o empregador conceder o descanso.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Histórico de Solicitações de Férias -->
+          <div class="p-5 rounded-2xl border bg-card space-y-3">
+            <h4 class="text-sm font-bold text-foreground">Solicitações de Férias Recentes</h4>
+            <div v-if="vacationBalance?.requests?.length" class="divide-y divide-border text-xs">
+              <div
+                v-for="vr in vacationBalance.requests"
+                :key="vr.id"
+                class="py-3 flex items-center justify-between gap-3"
+              >
+                <div>
+                  <strong class="text-foreground block">
+                    {{ vr.dias }} dias de férias ({{ vr.data_inicio }} a {{ vr.data_fim }})
+                  </strong>
+                  <span class="text-[11px] text-muted-foreground">
+                    Abono Pecuniário: {{ vr.abono_pecuniario ? 'Sim (10 dias)' : 'Não' }} · Adiantamento 13º: {{ vr.adiantamento_13 ? 'Sim' : 'Não' }}
+                  </span>
+                </div>
+                <span
+                  class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                  :class="vr.status === 'aprovado' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'"
+                >
+                  {{ vr.status }}
+                </span>
+              </div>
+            </div>
+            <div v-else class="text-center py-6 text-xs text-muted-foreground">
+              Nenhuma solicitação de férias no histórico.
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================================================== -->
+        <!-- ABA: MEUS BENEFÍCIOS                                    -->
+        <!-- ======================================================== -->
+        <section v-if="activeTab === 'beneficios'" class="space-y-6">
+          <!-- Benefícios Ativos -->
+          <div class="p-5 rounded-2xl border bg-card space-y-4">
+            <div class="flex items-center justify-between border-b pb-3">
+              <div>
+                <h4 class="text-sm font-bold text-foreground flex items-center gap-2">
+                  <HeartHandshake :size="16" class="text-purple-500" />
+                  Benefícios Corporativos Ativos
+                </h4>
+                <p class="text-xs text-muted-foreground">Seu pacote de saúde, bem-estar e alimentação contratado</p>
+              </div>
+              <button
+                type="button"
+                @click="loadBenefitsModuleData"
+                class="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw :size="12" /> Atualizar
+              </button>
+            </div>
+
+            <div v-if="myBenefits.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+              Nenhum benefício ativo cadastrado para este colaborador.
+            </div>
+
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <div
+                v-for="b in myBenefits"
+                :key="b.id"
+                class="p-4 rounded-xl border bg-background flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                      {{ b.category }}
+                    </span>
+                    <span class="text-[10px] text-emerald-600 font-bold uppercase">Ativo</span>
+                  </div>
+                  <h5 class="font-bold text-foreground mt-2 text-sm">{{ b.benefit_name }}</h5>
+                  <p class="text-muted-foreground text-[11px] mt-0.5">{{ b.provider }}</p>
+                </div>
+
+                <div class="pt-2 border-t flex items-center justify-between text-[11px]">
+                  <span class="text-muted-foreground">Empresa: <strong>R$ {{ b.company_cost?.toFixed(2) }}</strong></span>
+                  <button
+                    type="button"
+                    @click="handleCancelBenefit(b.id)"
+                    class="text-rose-600 hover:underline cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Catálogo Geral de Benefícios -->
+          <div class="p-5 rounded-2xl border bg-card space-y-4">
+            <h4 class="text-sm font-bold text-foreground">Catálogo de Benefícios Disponíveis para Adesão</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <div
+                v-for="cat in benefitsCatalog"
+                :key="cat.id"
+                class="p-4 rounded-xl border bg-background hover:border-purple-500/40 transition-all flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-muted text-muted-foreground">
+                    {{ cat.category }}
+                  </span>
+                  <h5 class="font-bold text-foreground mt-2 text-sm">{{ cat.name }}</h5>
+                  <p class="text-muted-foreground text-[11px] mt-1">{{ cat.description }}</p>
+                </div>
+
+                <div class="pt-2 border-t flex items-center justify-between">
+                  <div>
+                    <span class="text-[10px] text-muted-foreground block">Desconto em Folha:</span>
+                    <strong class="text-xs text-foreground">R$ {{ cat.employee_cost?.toFixed(2) }}/mês</strong>
+                  </div>
+                  <button
+                    type="button"
+                    @click="handleEnrollBenefit(cat.id)"
+                    class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                  >
+                    Aderir
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL: AJUSTE DE PONTO ELETRÔNICO                        -->
+    <!-- ======================================================== -->
+    <div
+      v-if="showAdjustmentModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    >
+      <div class="w-full max-w-md rounded-2xl border bg-card p-6 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between border-b pb-3">
+          <h3 class="text-sm font-bold text-foreground flex items-center gap-2">
+            <Clock :size="16" class="text-teal-500" />
+            Solicitar Ajuste / Inclusão de Ponto
+          </h3>
+          <button type="button" @click="showAdjustmentModal = false" class="text-muted-foreground hover:text-foreground text-xs cursor-pointer">
+            <X :size="18" />
+          </button>
+        </div>
+
+        <form @submit.prevent="submitTimeAdjustment" class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold text-muted-foreground mb-1">Data da Batida:</label>
+            <input v-model="adjustmentForm.recordDate" type="date" required class="w-full px-3 py-2 rounded-xl border bg-background" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-muted-foreground mb-1">Tipo de Marcação:</label>
+              <select v-model="adjustmentForm.punchType" class="w-full px-3 py-2 rounded-xl border bg-background">
+                <option value="entrada_1">Entrada 1 (Início)</option>
+                <option value="saida_1">Saída 1 (Almoço)</option>
+                <option value="entrada_2">Entrada 2 (Retorno)</option>
+                <option value="saida_2">Saída 2 (Fim)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-semibold text-muted-foreground mb-1">Horário Correto:</label>
+              <input v-model="adjustmentForm.adjustedTime" type="time" required class="w-full px-3 py-2 rounded-xl border bg-background font-bold text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-muted-foreground mb-1">Motivo / Justificativa Legal:</label>
+            <textarea v-model="adjustmentForm.justification" rows="3" required placeholder="Ex: Esquecimento, trabalho externo, consulta..." class="w-full px-3 py-2 rounded-xl border bg-background"></textarea>
+          </div>
+
+          <button
+            type="submit"
+            class="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow transition-colors cursor-pointer"
+          >
+            Submeter Ajuste ao RH
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL: SOLICITAR FÉRIAS CLT                              -->
+    <!-- ======================================================== -->
+    <div
+      v-if="showVacationModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    >
+      <div class="w-full max-w-lg rounded-2xl border bg-card p-6 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between border-b pb-3">
+          <h3 class="text-sm font-bold text-foreground flex items-center gap-2">
+            <Sparkles :size="16" class="text-emerald-500" />
+            Programação e Solicitação de Férias CLT
+          </h3>
+          <button type="button" @click="showVacationModal = false" class="text-muted-foreground hover:text-foreground text-xs cursor-pointer">
+            <X :size="18" />
+          </button>
+        </div>
+
+        <form @submit.prevent="submitVacationRequest" class="space-y-3 text-xs">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-muted-foreground mb-1">Data de Início:</label>
+              <input v-model="vacationForm.dataInicio" type="date" required class="w-full px-3 py-2 rounded-xl border bg-background" />
+            </div>
+            <div>
+              <label class="block font-semibold text-muted-foreground mb-1">Data de Término:</label>
+              <input v-model="vacationForm.dataFim" type="date" required class="w-full px-3 py-2 rounded-xl border bg-background" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-muted-foreground mb-1">Total de Dias (Mínimo 5 dias pela CLT):</label>
+            <input v-model="vacationForm.dias" type="number" min="5" max="30" required class="w-full px-3 py-2 rounded-xl border bg-background font-bold text-sm" />
+          </div>
+
+          <div class="space-y-2 pt-2 border-t">
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input v-model="vacationForm.abonoPecuniario" type="checkbox" :true-value="1" :false-value="0" class="rounded text-teal-600" />
+              <span>Optar por Abono Pecuniário (Venda de 1/3 das férias - 10 dias)</span>
+            </label>
+
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input v-model="vacationForm.adiantamento13" type="checkbox" :true-value="1" :false-value="0" class="rounded text-teal-600" />
+              <span>Solicitar adiantamento da 1ª parcela do 13º Salário</span>
+            </label>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-muted-foreground mb-1">Observações:</label>
+            <textarea v-model="vacationForm.observacoes" rows="2" placeholder="Informações complementares para a liderança..." class="w-full px-3 py-2 rounded-xl border bg-background"></textarea>
+          </div>
+
+          <button
+            type="submit"
+            :disabled="isRequestingVacation"
+            class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <RefreshCw v-if="isRequestingVacation" :size="14" class="animate-spin" />
+            Enviar Pedido de Férias CLT
+          </button>
+        </form>
       </div>
     </div>
 

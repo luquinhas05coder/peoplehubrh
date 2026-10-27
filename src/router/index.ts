@@ -163,6 +163,34 @@ const routes: RouteRecordRaw[] = [
     redirect: "/vagas-publicas",
   },
   {
+    path: "/organograma",
+    name: "Organograma",
+    component: () => import("../components/OrgChartModule.vue"),
+    meta: { tab: "organograma", permission: "org_chart.view" },
+  },
+  {
+    path: "/offboarding",
+    name: "Offboarding",
+    component: () => import("../components/OffboardingModule.vue"),
+    meta: {
+      tab: "offboarding",
+      requiresRoles: ["ADMIN", "RH", "DP", "GESTOR"] as UserRole[],
+      permission: "offboarding.view",
+    },
+  },
+  {
+    path: "/treinamentos",
+    name: "Treinamentos",
+    component: () => import("../components/TrainingsModule.vue"),
+    meta: { tab: "treinamentos", permission: "trainings.view" },
+  },
+  {
+    path: "/clima",
+    name: "Clima",
+    component: () => import("../components/ClimateSurveyModule.vue"),
+    meta: { tab: "clima", permission: "climate.view" },
+  },
+  {
     path: "/:pathMatch(.*)*",
     redirect: "/home",
   },

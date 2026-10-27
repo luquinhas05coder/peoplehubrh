@@ -920,6 +920,256 @@ function runMigrations(): void {
     db.run(`CREATE INDEX IF NOT EXISTS idx_user_perms ON user_permissions(user_id);`)
   } catch (_e) {}
 
+  // 8. MÓDULO: Gestão de Férias (Períodos Aquisitivos, Concessivos & Solicitações)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vacation_periods (
+      id                TEXT PRIMARY KEY,
+      tenant_id         TEXT NOT NULL,
+      employee_id       TEXT NOT NULL,
+      employee_name     TEXT NOT NULL,
+      aquisitivo_inicio TEXT NOT NULL,
+      aquisitivo_fim    TEXT NOT NULL,
+      concessivo_inicio TEXT NOT NULL,
+      concessivo_fim    TEXT NOT NULL,
+      dias_direito      INTEGER DEFAULT 30,
+      dias_gozados      INTEGER DEFAULT 0,
+      dias_saldo        INTEGER DEFAULT 30,
+      status            TEXT NOT NULL DEFAULT 'adquirido',
+      created_at        TEXT DEFAULT (datetime('now'))
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_vacation_periods_emp ON vacation_periods(tenant_id, employee_id);`)
+  } catch (_e) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vacation_requests (
+      id               TEXT PRIMARY KEY,
+      tenant_id        TEXT NOT NULL,
+      period_id        TEXT NOT NULL,
+      employee_id      TEXT NOT NULL,
+      employee_name    TEXT NOT NULL,
+      data_inicio      TEXT NOT NULL,
+      data_fim         TEXT NOT NULL,
+      dias             INTEGER NOT NULL,
+      abono_pecuniario INTEGER DEFAULT 0,
+      adiantamento_13  INTEGER DEFAULT 0,
+      status           TEXT NOT NULL DEFAULT 'pendente',
+      observacoes      TEXT,
+      solicitada_em    TEXT DEFAULT (datetime('now')),
+      aprovada_por     TEXT,
+      aprovada_em      TEXT,
+      motivo_rejeicao  TEXT,
+      FOREIGN KEY (period_id) REFERENCES vacation_periods(id) ON DELETE CASCADE
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_vacation_req_emp ON vacation_requests(tenant_id, employee_id, status);`)
+  } catch (_e) {}
+
+  // 9. MÓDULO: Ponto Eletrônico & Banco de Horas
+  db.run(`
+    CREATE TABLE IF NOT EXISTS time_records (
+      id            TEXT PRIMARY KEY,
+      tenant_id     TEXT NOT NULL,
+      employee_id   TEXT NOT NULL,
+      employee_name TEXT NOT NULL,
+      date          TEXT NOT NULL,
+      punch_type    TEXT NOT NULL,
+      punch_time    TEXT NOT NULL,
+      timestamp     TEXT NOT NULL,
+      latitude      REAL,
+      longitude     REAL,
+      location_name TEXT,
+      ip_address    TEXT,
+      source        TEXT DEFAULT 'web',
+      status        TEXT DEFAULT 'regular',
+      justification TEXT,
+      approved_by   TEXT,
+      approved_at   TEXT,
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_time_records_emp_date ON time_records(tenant_id, employee_id, date);`)
+  } catch (_e) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS time_adjustments (
+      id                TEXT PRIMARY KEY,
+      tenant_id         TEXT NOT NULL,
+      employee_id       TEXT NOT NULL,
+      employee_name     TEXT NOT NULL,
+      date              TEXT NOT NULL,
+      punch_type        TEXT NOT NULL,
+      requested_time    TEXT NOT NULL,
+      reason            TEXT NOT NULL,
+      attachment_url    TEXT,
+      status            TEXT DEFAULT 'pendente',
+      reviewed_by       TEXT,
+      reviewed_at       TEXT,
+      reviewer_comments TEXT,
+      created_at        TEXT DEFAULT (datetime('now'))
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_time_adj_emp ON time_adjustments(tenant_id, employee_id, status);`)
+  } catch (_e) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS time_bank_balances (
+      id                      TEXT PRIMARY KEY,
+      tenant_id               TEXT NOT NULL,
+      employee_id             TEXT NOT NULL,
+      month_year              TEXT NOT NULL,
+      expected_minutes        INTEGER DEFAULT 0,
+      worked_minutes          INTEGER DEFAULT 0,
+      month_balance_minutes   INTEGER DEFAULT 0,
+      accumulated_balance_min INTEGER DEFAULT 0,
+      updated_at              TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, employee_id, month_year)
+    );
+  `)
+
+  // 10. MÓDULO: Gestão de Benefícios
+  db.run(`
+    CREATE TABLE IF NOT EXISTS benefits_catalog (
+      id               TEXT PRIMARY KEY,
+      tenant_id        TEXT NOT NULL,
+      code             TEXT NOT NULL,
+      name             TEXT NOT NULL,
+      category         TEXT NOT NULL,
+      provider         TEXT NOT NULL,
+      description      TEXT,
+      company_cost     REAL DEFAULT 0,
+      employee_cost    REAL DEFAULT 0,
+      copay_percentage REAL DEFAULT 0,
+      is_active        INTEGER DEFAULT 1,
+      created_at       TEXT DEFAULT (datetime('now'))
+    );
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS employee_benefits (
+      id                TEXT PRIMARY KEY,
+      tenant_id         TEXT NOT NULL,
+      employee_id       TEXT NOT NULL,
+      employee_name     TEXT NOT NULL,
+      benefit_id        TEXT NOT NULL,
+      status            TEXT DEFAULT 'ativo',
+      enrollment_date   TEXT,
+      cancellation_date TEXT,
+      custom_coverage   TEXT,
+      dependents_count  INTEGER DEFAULT 0,
+      created_at        TEXT DEFAULT (datetime('now')),
+      updated_at        TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (benefit_id) REFERENCES benefits_catalog(id) ON DELETE CASCADE
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_emp_benefits ON employee_benefits(tenant_id, employee_id, status);`)
+  } catch (_e) {}
+
+  // 11. MÓDULO: Desligamento & Offboarding
+  db.run(`
+    CREATE TABLE IF NOT EXISTS offboardings (
+      id                    TEXT PRIMARY KEY,
+      tenant_id             TEXT NOT NULL,
+      employee_id           TEXT NOT NULL,
+      employee_name         TEXT NOT NULL,
+      role                  TEXT NOT NULL,
+      department            TEXT NOT NULL,
+      hire_date             TEXT NOT NULL,
+      termination_date      TEXT NOT NULL,
+      resignation_type      TEXT NOT NULL,
+      notice_period         TEXT NOT NULL,
+      status                TEXT NOT NULL DEFAULT 'em_andamento',
+      checklist_json        TEXT DEFAULT '[]',
+      equipment_status_json TEXT DEFAULT '[]',
+      severance_calc_json   TEXT DEFAULT '{}',
+      exit_interview_json   TEXT DEFAULT '{}',
+      created_by_name       TEXT,
+      created_at            TEXT DEFAULT (datetime('now')),
+      updated_at            TEXT DEFAULT (datetime('now'))
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_offboardings_tenant ON offboardings(tenant_id, status);`)
+  } catch (_e) {}
+
+  // 12. MÓDULO: Treinamentos & Normas Regulamentadoras (NRs)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS trainings (
+      id                TEXT PRIMARY KEY,
+      tenant_id         TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      description       TEXT,
+      category          TEXT NOT NULL,
+      nr_code           TEXT,
+      workload_hours    INTEGER DEFAULT 8,
+      validity_months   INTEGER DEFAULT 12,
+      is_mandatory      INTEGER DEFAULT 0,
+      target_roles_json TEXT DEFAULT '[]',
+      created_at        TEXT DEFAULT (datetime('now'))
+    );
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS employee_trainings (
+      id               TEXT PRIMARY KEY,
+      tenant_id        TEXT NOT NULL,
+      employee_id      TEXT NOT NULL,
+      employee_name    TEXT NOT NULL,
+      training_id      TEXT NOT NULL,
+      status           TEXT DEFAULT 'inscrito',
+      started_at       TEXT,
+      completed_at     TEXT,
+      expiry_date      TEXT,
+      score            REAL,
+      certificate_code TEXT,
+      created_at       TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (training_id) REFERENCES trainings(id) ON DELETE CASCADE
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_emp_trainings ON employee_trainings(tenant_id, employee_id, status);`)
+  } catch (_e) {}
+
+  // 13. MÓDULO: Pesquisa de Clima Organizacional & eNPS
+  db.run(`
+    CREATE TABLE IF NOT EXISTS climate_surveys (
+      id                TEXT PRIMARY KEY,
+      tenant_id         TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      description       TEXT,
+      start_date        TEXT NOT NULL,
+      end_date          TEXT NOT NULL,
+      status            TEXT DEFAULT 'aberta',
+      is_anonymous      INTEGER DEFAULT 1,
+      target_department TEXT DEFAULT 'Todos',
+      created_by_name   TEXT,
+      created_at        TEXT DEFAULT (datetime('now'))
+    );
+  `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id              TEXT PRIMARY KEY,
+      survey_id       TEXT NOT NULL,
+      tenant_id       TEXT NOT NULL,
+      nps_score       INTEGER NOT NULL,
+      comment         TEXT,
+      ratings_json    TEXT DEFAULT '{}',
+      respondent_hash TEXT NOT NULL,
+      submitted_at    TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (survey_id) REFERENCES climate_surveys(id) ON DELETE CASCADE,
+      UNIQUE(survey_id, respondent_hash)
+    );
+  `)
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_survey_resp ON survey_responses(survey_id);`)
+  } catch (_e) {}
+
   console.log("[DB] Tabelas e índices criados/verificados com sucesso.")
 }
 
@@ -1243,6 +1493,144 @@ function seedInitialData(): void {
           ('int_01', 'tenant_default', 'app_01', 'Lucas Martins Oliveira', 'Desenvolvedor(a) Full Stack Sênior', 'Mariana Alcantara & Tech Lead', datetime('now', '+1 day', 'start of day', '+14 hours'), 60, 'https://meet.google.com/ph-tech-int', 'agendada', 4, 5, 5, 'forte_sim', 'Candidato demonstrou ótima desenvoltura e clareza de raciocínio lógico.'),
           ('int_02', 'tenant_default', 'app_04', 'Camila Duarte Rocha', 'Especialista em Atração & Seleção (DHO)', 'Mariana Alcantara', datetime('now', '-2 days'), 45, 'https://meet.google.com/ph-rh-int', 'realizada', 5, 5, 5, 'forte_sim', 'Perfil excelente, ampla experiência com hunting tech e gestão por competências.');
       `)
+    }
+  } catch (_e) {}
+
+  // 6. Seed de Gestão de Férias
+  try {
+    const vacCheck = db.exec(`SELECT count(*) FROM vacation_periods WHERE tenant_id = 'tenant_default'`)
+    if (vacCheck.length && vacCheck[0].values[0][0] === 0) {
+      db.run(`
+        INSERT INTO vacation_periods (id, tenant_id, employee_id, employee_name, aquisitivo_inicio, aquisitivo_fim, concessivo_inicio, concessivo_fim, dias_direito, dias_gozados, dias_saldo, status)
+        VALUES
+          ('vac_per_colab_01', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', '2025-03-15', '2026-03-14', '2026-03-15', '2027-03-14', 30, 10, 20, 'adquirido'),
+          ('vac_per_mariana_01', 'tenant_default', 'emp_02', 'Mariana Alcantara', '2024-11-01', '2025-10-31', '2025-11-01', '2026-10-31', 30, 15, 15, 'vencendo');
+      `)
+
+      db.run(`
+        INSERT INTO vacation_requests (id, tenant_id, period_id, employee_id, employee_name, data_inicio, data_fim, dias, abono_pecuniario, adiantamento_13, status, observacoes, solicitada_em, aprovada_por, aprovada_em)
+        VALUES
+          ('vac_req_01', 'tenant_default', 'vac_per_colab_01', 'emp_colab_01', 'Gabriel Santos', '2026-11-10', '2026-11-19', 10, 0, 0, 'aprovada', 'Primeira parcela das férias anuais', datetime('now', '-10 days'), 'Mariana Alcantara', datetime('now', '-8 days')),
+          ('vac_req_02', 'tenant_default', 'vac_per_colab_01', 'emp_colab_01', 'Gabriel Santos', '2026-12-20', '2026-12-29', 10, 0, 1, 'pendente', 'Segunda fração de férias de final de ano', datetime('now', '-2 days'), NULL, NULL);
+      `)
+    }
+  } catch (_e) {}
+
+  // 7. Seed de Ponto Eletrônico & Banco de Horas
+  try {
+    const timeCheck = db.exec(`SELECT count(*) FROM time_records WHERE tenant_id = 'tenant_default'`)
+    if (timeCheck.length && timeCheck[0].values[0][0] === 0) {
+      const today = new Date().toISOString().split("T")[0]
+      db.run(`
+        INSERT INTO time_records (id, tenant_id, employee_id, employee_name, date, punch_type, punch_time, timestamp, location_name, source, status)
+        VALUES
+          ('time_01', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', ?, 'entrada_1', '08:03', ? || 'T08:03:00.000Z', 'Escritório Sede SP', 'web', 'regular'),
+          ('time_02', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', ?, 'saida_1', '12:05', ? || 'T12:05:00.000Z', 'Escritório Sede SP', 'web', 'regular'),
+          ('time_03', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', ?, 'entrada_2', '13:08', ? || 'T13:08:00.000Z', 'Escritório Sede SP', 'web', 'regular');
+      `, [today, today, today, today, today, today])
+
+      db.run(`
+        INSERT INTO time_bank_balances (id, tenant_id, employee_id, month_year, expected_minutes, worked_minutes, month_balance_minutes, accumulated_balance_min)
+        VALUES ('tb_colab_01', 'tenant_default', 'emp_colab_01', '2026-10', 10560, 10830, 270, 750);
+      `)
+    }
+  } catch (_e) {}
+
+  // 8. Seed de Catálogo de Benefícios & Adesões
+  try {
+    const benCheck = db.exec(`SELECT count(*) FROM benefits_catalog WHERE tenant_id = 'tenant_default'`)
+    if (benCheck.length && benCheck[0].values[0][0] === 0) {
+      db.run(`
+        INSERT INTO benefits_catalog (id, tenant_id, code, name, category, provider, description, company_cost, employee_cost, copay_percentage, is_active)
+        VALUES
+          ('ben_vr', 'tenant_default', 'BEN-VR-01', 'Vale Refeição Flexível', 'refeicao', 'Flash Benefícios', 'Crédito diário de R$ 42,00 para refeição em restaurantes e aplicativos.', 924.00, 0.00, 0, 1),
+          ('ben_va', 'tenant_default', 'BEN-VA-01', 'Vale Alimentação Supermercado', 'alimentacao', 'Flash Benefícios', 'Crédito mensal de R$ 550,00 para supermercados e padarias.', 550.00, 0.00, 0, 1),
+          ('ben_saude', 'tenant_default', 'BEN-SAUDE-TOP', 'Plano de Saúde Nacional Top', 'saude', 'Bradesco Saúde', 'Assistência médica completa nacional em quarto individual (Apartamento) e coparticipação 15%.', 780.00, 117.00, 15, 1),
+          ('ben_odonto', 'tenant_default', 'BEN-ODONTO', 'Plano Odontológico Integral', 'odonto', 'OdontoPrev', 'Cobertura odontológica integral com próteses, ortodontia e urgências.', 48.00, 12.00, 0, 1),
+          ('ben_vt', 'tenant_default', 'BEN-VT', 'Vale Transporte SPTrans / EMTU', 'transporte', 'SPTrans / CPTM', 'Passe transporte público com desconto legal CLT de até 6% do salário base.', 320.00, 0.00, 6, 1),
+          ('ben_gym', 'tenant_default', 'BEN-GYM', 'TotalPass & Academias', 'gympass', 'TotalPass', 'Acesso ilimitado a redes BioRitmo, SmartFit e estúdios esportivos.', 120.00, 39.90, 0, 1),
+          ('ben_vida', 'tenant_default', 'BEN-VIDA', 'Seguro de Vida em Grupo', 'vida', 'MetLife Brasil', 'Apólice coletiva com indenização integral e assistência funeral familiar.', 35.00, 0.00, 0, 1);
+      `)
+
+      db.run(`
+        INSERT INTO employee_benefits (id, tenant_id, employee_id, employee_name, benefit_id, status, enrollment_date, custom_coverage, dependents_count)
+        VALUES
+          ('eb_01', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', 'ben_vr', 'ativo', '2023-03-15', 'Cartão Flash Mastercard', 0),
+          ('eb_02', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', 'ben_saude', 'ativo', '2023-03-15', 'Titular - Quarto Individual', 1),
+          ('eb_03', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', 'ben_gym', 'ativo', '2024-01-10', 'Plano TP3 TotalPass', 0);
+      `)
+    }
+  } catch (_e) {}
+
+  // 9. Seed de Desligamento / Offboarding
+  try {
+    const offCheck = db.exec(`SELECT count(*) FROM offboardings WHERE tenant_id = 'tenant_default'`)
+    if (offCheck.length && offCheck[0].values[0][0] === 0) {
+      db.run(`
+        INSERT INTO offboardings (id, tenant_id, employee_id, employee_name, role, department, hire_date, termination_date, resignation_type, notice_period, status, checklist_json, equipment_status_json, severance_calc_json, exit_interview_json, created_by_name)
+        VALUES (
+          'off_01',
+          'tenant_default',
+          'emp_legacy_09',
+          'Renata Meirelles',
+          'Analista Financeiro Pleno',
+          'Financeiro',
+          '2024-02-01',
+          '2026-09-30',
+          'pedido_demissao',
+          'trabalhado',
+          'concluido',
+          '[{"id":"c1","task":"Revogação de acessos de e-mail e VPN","completed":true,"assignedRole":"TI"},{"id":"c2","task":"Exame Médico Demissional (ASO)","completed":true,"assignedRole":"RH"},{"id":"c3","task":"Homologação e Assinatura do TRCT","completed":true,"assignedRole":"DP"},{"id":"c4","task":"Baixa na Carteira de Trabalho Digital (eSocial)","completed":true,"assignedRole":"DP"}]',
+          '[{"item":"Notebook Dell Latitude 5420","serial":"BR-5420-991","returned":true},{"item":"Crachá Corporativo","serial":"CR-4019","returned":true}]',
+          '{"saldoSalario":3800,"decimoTerceiroProp":2533.33,"feriasProp":1900,"tercoConstitucional":633.33,"totalBruto":8866.66,"totalLiquido":7645.12}',
+          '{"motivoPrincipal":"Proposta profissional com desafio internacional","ambienteAvaliacao":9,"liderancaAvaliacao":9,"recomendariaEmpresa":true,"feedback":"Excelente cultura e acolhimento dos líderes."}',
+          'Mariana Alcantara'
+        );
+      `)
+    }
+  } catch (_e) {}
+
+  // 10. Seed de Treinamentos & NRs
+  try {
+    const trCheck = db.exec(`SELECT count(*) FROM trainings WHERE tenant_id = 'tenant_default'`)
+    if (trCheck.length && trCheck[0].values[0][0] === 0) {
+      db.run(`
+        INSERT INTO trainings (id, tenant_id, title, description, category, nr_code, workload_hours, validity_months, is_mandatory, target_roles_json)
+        VALUES
+          ('tr_01', 'tenant_default', 'NR-06 — Uso, Guarda e Conservação de EPIs', 'Diretrizes legais e práticas seguras para manuseio e proteção individual.', 'norma_regulamentadora', 'NR-06', 4, 12, 1, '["Operador de Logística", "Técnico de Manutenção", "Engenheiro"]'),
+          ('tr_02', 'tenant_default', 'LGPD & Segurança da Informação no Ambiente Corporativo', 'Práticas de tratamento de dados sensíveis e conformidade legal com a Lei Geral de Proteção de Dados.', 'compliance', NULL, 6, 24, 1, '["Todos"]'),
+          ('tr_03', 'tenant_default', 'NR-10 — Segurança em Instalações e Serviços em Eletricidade', 'Curso regulamentar de prevenção de riscos elétricos e primeiros socorros.', 'norma_regulamentadora', 'NR-10', 40, 24, 1, '["Eletricista", "Técnico de Manutenção"]'),
+          ('tr_04', 'tenant_default', 'Liderança Humanizada, Feedback & Comunicação Não-Violenta', 'Desenvolvimento de competências para gestores e líderes de equipes no PeopleHub.', 'lideranca', NULL, 16, 36, 0, '["Gestor TI", "Coordenador de Operações", "Líder de Equipe"]');
+      `)
+
+      db.run(`
+        INSERT INTO employee_trainings (id, tenant_id, employee_id, employee_name, training_id, status, started_at, completed_at, expiry_date, score, certificate_code)
+        VALUES
+          ('et_01', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', 'tr_02', 'concluido', '2025-04-01', '2025-04-05', '2027-04-05', 9.8, 'CERT-LGPD-2025-GS99'),
+          ('et_02', 'tenant_default', 'emp_colab_01', 'Gabriel Santos', 'tr_04', 'em_andamento', '2026-10-15', NULL, NULL, NULL, NULL);
+      `)
+    }
+  } catch (_e) {}
+
+  // 11. Seed de Pesquisa de Clima Organizacional & eNPS
+  try {
+    const survCheck = db.exec(`SELECT count(*) FROM climate_surveys WHERE tenant_id = 'tenant_default'`)
+    if (survCheck.length && survCheck[0].values[0][0] === 0) {
+      const survId = "surv_2026_q3"
+      db.run(`
+        INSERT INTO climate_surveys (id, tenant_id, title, description, start_date, end_date, status, is_anonymous, target_department, created_by_name)
+        VALUES (?, 'tenant_default', 'Pesquisa de Clima Organizacional & Pulso de eNPS — 2º Semestre/2026', 'Avaliação confidencial de satisfação, cultura, liderança e benefícios para aprimoramento contínuo.', '2026-09-01', '2026-11-30', 'aberta', 1, 'Todos', 'Mariana Alcantara');
+      `, [survId])
+
+      db.run(`
+        INSERT INTO survey_responses (id, survey_id, tenant_id, nps_score, comment, ratings_json, respondent_hash)
+        VALUES
+          ('sr_01', ?, 'tenant_default', 10, 'A empresa oferece excelente equilíbrio entre vida pessoal e profissional. Time muito unido.', '{"lideranca":5,"ambiente":5,"beneficios":4,"oportunidades":5}', 'hash_anon_1111'),
+          ('sr_02', ?, 'tenant_default', 9, 'Ótima infraestrutura de trabalho e transparência da diretoria.', '{"lideranca":5,"ambiente":4,"beneficios":4,"oportunidades":4}', 'hash_anon_2222'),
+          ('sr_03', ?, 'tenant_default', 8, 'Gosto muito de trabalhar aqui. Seria ótimo aumentar o auxílio creche.', '{"lideranca":4,"ambiente":4,"beneficios":3,"oportunidades":4}', 'hash_anon_3333'),
+          ('sr_04', ?, 'tenant_default', 9, 'Processos de feedback claros e oportunidades reais de crescimento.', '{"lideranca":5,"ambiente":5,"beneficios":5,"oportunidades":4}', 'hash_anon_4444'),
+          ('sr_05', ?, 'tenant_default', 6, 'A comunicação entre áreas operacionais e administrativas precisa melhorar um pouco.', '{"lideranca":3,"ambiente":4,"beneficios":3,"oportunidades":3}', 'hash_anon_5555');
+      `, [survId, survId, survId, survId, survId])
     }
   } catch (_e) {}
 

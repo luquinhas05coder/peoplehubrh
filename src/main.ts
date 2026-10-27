@@ -25,6 +25,20 @@ window.addEventListener("unhandledrejection", (event) => {
   }
 })
 
+// Registro de Service Worker para suporte a PWA e Offline
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        console.log('📱 [PWA] Service Worker registrado com sucesso:', reg.scope)
+      })
+      .catch((err) => {
+        console.warn('📱 [PWA] Falha ao registrar Service Worker:', err)
+      })
+  })
+}
+
 app.use(pinia)
 app.use(router)
 app.mount("#app")

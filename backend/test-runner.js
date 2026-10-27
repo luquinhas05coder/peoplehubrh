@@ -36,7 +36,7 @@ async function runCommand(command, args, cwd) {
       cwd,
       stdio: "inherit",
       shell: isWindows,
-      env: { ...process.env, PORT: String(PORT), TEST_BASE_URL: BASE_URL },
+      env: { ...process.env, NODE_ENV: "test", PORT: String(PORT), TEST_BASE_URL: BASE_URL },
     })
 
     child.on("close", (code) => {
@@ -68,7 +68,7 @@ async function main() {
       cwd: __dirname,
       stdio: "pipe",
       shell: isWindows,
-      env: { ...process.env, PORT: String(PORT) },
+      env: { ...process.env, NODE_ENV: "test", PORT: String(PORT) },
     })
     isManagedServer = true
 
@@ -100,6 +100,7 @@ async function main() {
       "test-recruitment.js",
       "test-self-service.js",
       "test-integrations-webhooks.js",
+      "test-advanced-modules.js",
     ]
   } else if (mode === "all") {
     testFiles = [
@@ -111,6 +112,7 @@ async function main() {
       "test-recruitment.js",
       "test-self-service.js",
       "test-integrations-webhooks.js",
+      "test-advanced-modules.js",
     ]
   } else {
     testFiles = [mode]

@@ -58,6 +58,17 @@ const saveToDigitalFolder = ref(true)
 const loadedContracheques = ref<ContraChequeSnapshot[]>([])
 const isLoadingData = ref(true)
 
+const vacationData = ref<{ period?: any; requests?: any[]; summary?: any } | null>(null)
+
+function formatDateBR(dateStr?: string): string {
+  if (!dateStr) return "-"
+  const parts = dateStr.split("T")[0].split("-")
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`
+  }
+  return dateStr
+}
+
 onMounted(async () => {
   isLoadingData.value = true
   try {
@@ -66,6 +77,14 @@ onMounted(async () => {
       loadedContracheques.value = list
     }
   } catch (_e) {}
+
+  try {
+    const vacRes = await fetch(`/api/vacations/balance?employeeId=${props.folder.id}`)
+    if (vacRes.ok) {
+      vacationData.value = await vacRes.json()
+    }
+  } catch (_e) {}
+
   isLoadingData.value = false
 })
 
@@ -132,16 +151,55 @@ const folhaPonto = computed(() => {
   return snap
 })
 
-// Prontuário de Férias calculado
+// Prontuário de Férias calculado dinamicamente conforme legislação CLT
 const feriasInfo = computed(() => {
+  if (vacationData.value?.period) {
+    const p = vacationData.value.period
+    const reqs = vacationData.value.requests || []
+    const nextReq = reqs.find((r: any) => r.status === "aprovado" || r.status === "pendente")
+    const proxStr = nextReq
+      ? `${nextReq.status === "aprovado" ? "Programadas" : "Solicitadas"} para ${formatDateBR(nextReq.data_inicio)} a ${formatDateBR(nextReq.data_fim)} (${nextReq.dias} dias)`
+      : "Nenhuma fruição programada no período"
+
+    return {
+      periodoAquisitivo: `${formatDateBR(p.aquisitivo_inicio)} a ${formatDateBR(p.aquisitivo_fim)}`,
+      periodoConcessivo: `${formatDateBR(p.concessivo_inicio)} a ${formatDateBR(p.concessivo_fim)}`,
+      diasDireito: p.dias_direito ?? 30,
+      diasGozados: p.dias_gozados ?? 0,
+      diasSaldo: p.dias_saldo ?? 30,
+      status: p.status === "concedido" ? "Em Fruição de Férias" : p.status === "agendado" ? "Férias Agendadas" : "Período Adquirido Regular",
+      proximasFerias: proxStr,
+    }
+  }
+
+  // Cálculo dinâmico CLT a partir da admissão do colaborador (sem dados hardcoded estáticos)
+  const hireStr = props.folder.admissionDate || props.folder.hireDate || "2023-03-15"
+  const hire = new Date(hireStr)
+  const now = new Date()
+  const aqInicio = new Date(hire)
+  while (new Date(aqInicio.getFullYear() + 1, aqInicio.getMonth(), aqInicio.getDate()) <= now) {
+    aqInicio.setFullYear(aqInicio.getFullYear() + 1)
+  }
+  const aqFim = new Date(aqInicio)
+  aqFim.setFullYear(aqFim.getFullYear() + 1)
+  aqFim.setDate(aqFim.getDate() - 1)
+
+  const concInicio = new Date(aqFim)
+  concInicio.setDate(concInicio.getDate() + 1)
+  const concFim = new Date(concInicio)
+  concFim.setFullYear(concFim.getFullYear() + 1)
+  concFim.setDate(concFim.getDate() - 1)
+
+  const isFruicao = props.folder.status === "ferias"
+
   return {
-    periodoAquisitivo: "01/02/2025 a 31/01/2026",
-    periodoConcessivo: "01/02/2026 a 31/01/2027",
+    periodoAquisitivo: `${formatDateBR(aqInicio.toISOString())} a ${formatDateBR(aqFim.toISOString())}`,
+    periodoConcessivo: `${formatDateBR(concInicio.toISOString())} a ${formatDateBR(concFim.toISOString())}`,
     diasDireito: 30,
-    diasGozados: props.folder.status === "ferias" ? 15 : 0,
-    diasSaldo: props.folder.status === "ferias" ? 15 : 30,
-    status: props.folder.status === "ferias" ? "Em Fruição de Férias" : "Período Adquirido Regular",
-    proximasFerias: "Programadas para 01/10/2026 a 15/10/2026 (15 dias)",
+    diasGozados: isFruicao ? 15 : 0,
+    diasSaldo: isFruicao ? 15 : 30,
+    status: isFruicao ? "Em Fruição de Férias" : "Período Adquirido Regular",
+    proximasFerias: isFruicao ? "Em fruição no ciclo atual" : "Sem agendamentos futuros pendentes",
   }
 })
 
@@ -150,7 +208,7 @@ const pendenciasList = computed(() => {
   const empName = props.folder.name.toLowerCase()
   const pendingRequests = requests.value.filter(
     (r) =>
-      (r.employeeName.toLowerCase().includes(empName) || (r as any).requester?.toLowerCase()?.includes(empName)) &&
+      (r.employeeName.toLowerCase().includes(empName) || r.requester?.toLowerCase()?.includes(empName)) &&
       (r.status === "pendente" || r.status === "em_analise")
   )
 

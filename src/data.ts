@@ -471,6 +471,7 @@ export interface EmployeeFolder {
   tenure: string
   manager: string
   admissionDate: string
+  hireDate?: string
   status: "ativo" | "ferias" | "afastado" | "desligado"
   documents: EmployeeDocument[]
   notes?: string
@@ -599,6 +600,7 @@ export interface RequestItem {
   createdAt: string
   reviewedBy?: string
   reviewNote?: string
+  requester?: string
 }
 
 export const requestTypeLabels: Record<RequestType, string> = {

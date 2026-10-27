@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from "vue"
-import { MessagesSquare, Home, Users, BarChart3, CalendarCheck, FileText, GraduationCap, Settings, LifeBuoy, LogOut, LayoutDashboard, Shield, Sparkles, ShieldAlert, GitMerge, Calendar, Award, Briefcase, UserCheck, Menu, X } from "lucide-vue-next"
+import { MessagesSquare, Home, Users, BarChart3, CalendarCheck, FileText, GraduationCap, Settings, LifeBuoy, LogOut, LayoutDashboard, Shield, Sparkles, ShieldAlert, GitMerge, Calendar, Award, Briefcase, UserCheck, Menu, X, Network, Smile, UserMinus, BookOpen } from "lucide-vue-next"
 import { totalUnread, activeTab, logoutUser, currentUser, userPermissions, activeUserRole, hasPermission } from "../store"
 import UserAvatar from "./UserAvatar.vue"
 import SettingsModal from "./SettingsModal.vue"
@@ -53,14 +53,18 @@ const items = computed(() => {
       path: currentRole === "COLABORADOR" ? "/autoatendimento" : "/colaboradores",
       allowed: hasPermission("employees.view_all") || hasPermission("employees.view_team") || currentRole === "COLABORADOR",
     },
+    { key: "organograma", icon: Network, label: "Organograma", path: "/organograma", allowed: true },
     { key: "recrutamento", icon: Briefcase, label: "Recrutamento & Seleção", path: "/recrutamento", allowed: hasPermission("recruitment.view") },
     { key: "requests", icon: CalendarCheck, label: "Solicitações", path: "/solicitacoes", allowed: hasPermission("requests.view") },
     { key: "workflows", icon: GitMerge, label: "Workflows RH", path: "/workflows", allowed: hasPermission("workflows.view") && currentRole !== "COLABORADOR" },
     { key: "calendario", icon: Calendar, label: "Calendário", path: "/calendario", allowed: hasPermission("calendar.view") },
     { key: "desempenho", icon: Award, label: "Desempenho & Metas", path: "/desempenho", allowed: hasPermission("performance.view") },
+    { key: "treinamentos", icon: BookOpen, label: "Treinamentos & NRs", path: "/treinamentos", allowed: true },
+    { key: "clima", icon: Smile, label: "Pesquisa de Clima", path: "/clima", allowed: true },
     { key: "docs", icon: FileText, label: "Documentos", path: "/documentos", allowed: hasPermission("documents.view") && currentRole !== "COLABORADOR" },
     { key: "reports", icon: BarChart3, label: "Relatórios", path: "/relatorios", allowed: hasPermission("reports.view") },
     { key: "onboarding", icon: GraduationCap, label: "Onboarding", path: "/onboarding", allowed: ["ADMIN", "RH", "GESTOR"].includes(currentRole) },
+    { key: "offboarding", icon: UserMinus, label: "Desligamento", path: "/offboarding", allowed: ["ADMIN", "RH", "DP", "GESTOR"].includes(currentRole) },
     { key: "feed", icon: Sparkles, label: "Feed Corporativo", path: "/feed", allowed: true },
     { key: "adverse_events", icon: ShieldAlert, label: "Ouvidoria & Incidentes", path: "/eventos-adversos", allowed: true },
     { key: "users", icon: Shield, label: "Usuários & RBAC", path: "/usuarios", allowed: hasPermission("users.view") },
@@ -73,14 +77,18 @@ function isItemActive(itemKey: string): boolean {
   if (itemKey === "autoatendimento" && activeTab.value === "autoatendimento") return true
   if (itemKey === "dashboard" && activeTab.value === "dashboard") return true
   if (itemKey === "people" && (activeTab.value === "colaboradores" || activeTab.value === "perfil_funcionario")) return true
+  if (itemKey === "organograma" && activeTab.value === "organograma") return true
   if (itemKey === "recrutamento" && (activeTab.value === "recrutamento" || activeTab.value === "recruitment")) return true
   if (itemKey === "requests" && activeTab.value === "solicitacoes") return true
   if (itemKey === "workflows" && activeTab.value === "workflows") return true
   if (itemKey === "calendario" && activeTab.value === "calendario") return true
   if (itemKey === "desempenho" && activeTab.value === "desempenho") return true
+  if (itemKey === "treinamentos" && activeTab.value === "treinamentos") return true
+  if (itemKey === "clima" && activeTab.value === "clima") return true
   if (itemKey === "docs" && activeTab.value === "documentos") return true
   if (itemKey === "reports" && activeTab.value === "relatorios") return true
   if (itemKey === "onboarding" && activeTab.value === "onboarding") return true
+  if (itemKey === "offboarding" && activeTab.value === "offboarding") return true
   if (itemKey === "feed" && activeTab.value === "feed") return true
   if (itemKey === "adverse_events" && (activeTab.value === "adverse_events" || activeTab.value === "eventos-adversos")) return true
   if (itemKey === "users" && (activeTab.value === "users" || activeTab.value === "usuarios")) return true

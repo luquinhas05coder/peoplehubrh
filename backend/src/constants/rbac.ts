@@ -81,6 +81,27 @@ export type Permission =
   | "recruitment.manage"
   | "recruitment.evaluate"
   | "recruitment.delete"
+  // Ponto Eletrônico & Banco de Horas
+  | "timeclock.view"
+  | "timeclock.punch"
+  | "timeclock.manage"
+  // Benefícios
+  | "benefits.view"
+  | "benefits.enroll"
+  | "benefits.manage"
+  // Desligamento / Offboarding
+  | "offboarding.view"
+  | "offboarding.manage"
+  // Treinamentos & NRs
+  | "trainings.view"
+  | "trainings.enroll"
+  | "trainings.manage"
+  // Pesquisa de Clima & eNPS
+  | "climate.view"
+  | "climate.respond"
+  | "climate.manage"
+  // Organograma
+  | "orgchart.view"
   // Auditoria
   | "audit.view"
   // Configurações
@@ -141,6 +162,21 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   "recruitment.manage",
   "recruitment.evaluate",
   "recruitment.delete",
+  "timeclock.view",
+  "timeclock.punch",
+  "timeclock.manage",
+  "benefits.view",
+  "benefits.enroll",
+  "benefits.manage",
+  "offboarding.view",
+  "offboarding.manage",
+  "trainings.view",
+  "trainings.enroll",
+  "trainings.manage",
+  "climate.view",
+  "climate.respond",
+  "climate.manage",
+  "orgchart.view",
   "audit.view",
   "settings.view",
   "settings.update",
@@ -212,6 +248,57 @@ export const PERMISSION_GROUPS: ModulePermissionGroup[] = [
       { actionKey: "create", actionLabel: "Criar e Publicar Vagas", permission: "recruitment.manage" },
       { actionKey: "edit", actionLabel: "Avaliar & Conduzir Etapas", permission: "recruitment.evaluate" },
       { actionKey: "delete", actionLabel: "Excluir Vagas/Candidatos", permission: "recruitment.delete" },
+    ],
+  },
+  {
+    moduleKey: "timeclock",
+    moduleTitle: "Ponto Eletrônico & Banco de Horas",
+    actions: [
+      { actionKey: "view", actionLabel: "Visualizar Espelho de Ponto", permission: "timeclock.view" },
+      { actionKey: "create", actionLabel: "Registrar Marcação / Bater Ponto", permission: "timeclock.punch" },
+      { actionKey: "admin", actionLabel: "Gerenciar Ajustes e Banco de Horas", permission: "timeclock.manage" },
+    ],
+  },
+  {
+    moduleKey: "benefits",
+    moduleTitle: "Gestão de Benefícios",
+    actions: [
+      { actionKey: "view", actionLabel: "Visualizar Benefícios Disponíveis", permission: "benefits.view" },
+      { actionKey: "create", actionLabel: "Aderir / Solicitar Benefício", permission: "benefits.enroll" },
+      { actionKey: "admin", actionLabel: "Gerenciar Catálogo de Benefícios", permission: "benefits.manage" },
+    ],
+  },
+  {
+    moduleKey: "offboarding",
+    moduleTitle: "Desligamento & Rescisões",
+    actions: [
+      { actionKey: "view", actionLabel: "Visualizar Processos de Desligamento", permission: "offboarding.view" },
+      { actionKey: "admin", actionLabel: "Iniciar & Conduzir Desligamentos", permission: "offboarding.manage" },
+    ],
+  },
+  {
+    moduleKey: "trainings",
+    moduleTitle: "Treinamentos & Normas Regulamentadoras",
+    actions: [
+      { actionKey: "view", actionLabel: "Visualizar Treinamentos e NRs", permission: "trainings.view" },
+      { actionKey: "create", actionLabel: "Inscrever-se em Cursos", permission: "trainings.enroll" },
+      { actionKey: "admin", actionLabel: "Gerenciar Treinamentos & Certificados", permission: "trainings.manage" },
+    ],
+  },
+  {
+    moduleKey: "climate",
+    moduleTitle: "Pesquisa de Clima & eNPS",
+    actions: [
+      { actionKey: "view", actionLabel: "Visualizar Resultados e eNPS", permission: "climate.view" },
+      { actionKey: "create", actionLabel: "Responder Pesquisa Confidencial", permission: "climate.respond" },
+      { actionKey: "admin", actionLabel: "Criar e Gerenciar Pesquisas", permission: "climate.manage" },
+    ],
+  },
+  {
+    moduleKey: "orgchart",
+    moduleTitle: "Organograma Corporativo",
+    actions: [
+      { actionKey: "view", actionLabel: "Visualizar Árvore Hierárquica", permission: "orgchart.view" },
     ],
   },
   {
@@ -327,6 +414,21 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "recruitment.manage",
     "recruitment.evaluate",
     "recruitment.delete",
+    "timeclock.view",
+    "timeclock.punch",
+    "timeclock.manage",
+    "benefits.view",
+    "benefits.enroll",
+    "benefits.manage",
+    "offboarding.view",
+    "offboarding.manage",
+    "trainings.view",
+    "trainings.enroll",
+    "trainings.manage",
+    "climate.view",
+    "climate.respond",
+    "climate.manage",
+    "orgchart.view",
     "audit.view",
     "settings.view",
     "settings.update",
@@ -378,6 +480,21 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "recruitment.manage",
     "recruitment.evaluate",
     "recruitment.delete",
+    "timeclock.view",
+    "timeclock.punch",
+    "timeclock.manage",
+    "benefits.view",
+    "benefits.enroll",
+    "benefits.manage",
+    "offboarding.view",
+    "offboarding.manage",
+    "trainings.view",
+    "trainings.enroll",
+    "trainings.manage",
+    "climate.view",
+    "climate.respond",
+    "climate.manage",
+    "orgchart.view",
     "audit.view",
     "settings.view",
   ],
@@ -423,6 +540,16 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     // 9. Comunicações e Calendário
     "notifications.view",
     "calendar.view",
+    "timeclock.view",
+    "timeclock.punch",
+    "timeclock.manage",
+    "benefits.view",
+    "benefits.enroll",
+    "benefits.manage",
+    "offboarding.view",
+    "offboarding.manage",
+    "trainings.view",
+    "orgchart.view",
   ],
   GESTOR: [
     "dashboard.view",
@@ -450,6 +577,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "performance.manage_goals",
     "recruitment.view",
     "recruitment.evaluate",
+    "timeclock.view",
+    "timeclock.manage",
+    "benefits.view",
+    "trainings.view",
+    "trainings.enroll",
+    "climate.view",
+    "climate.respond",
+    "orgchart.view",
   ],
   RECRUTADOR: [
     "recruitment.view",
@@ -468,6 +603,13 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "calendar.view",
     "notifications.view",
     "performance.view",
+    "timeclock.view",
+    "timeclock.punch",
+    "benefits.view",
+    "trainings.view",
+    "trainings.enroll",
+    "climate.respond",
+    "orgchart.view",
   ],
   AUDITOR: [
     "dashboard.view",
@@ -490,6 +632,12 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "calendar.view",
     "performance.view",
     "recruitment.view",
+    "timeclock.view",
+    "benefits.view",
+    "offboarding.view",
+    "trainings.view",
+    "climate.view",
+    "orgchart.view",
     "audit.view",
     "settings.view",
   ],
@@ -508,6 +656,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "calendar.view",
     "performance.view",
     "performance.evaluate",
+    "timeclock.view",
+    "timeclock.punch",
+    "benefits.view",
+    "benefits.enroll",
+    "trainings.view",
+    "trainings.enroll",
+    "climate.respond",
+    "orgchart.view",
   ],
 }
 

@@ -1,0 +1,46 @@
+{
+  "name": "PeopleHub — Gestão de RH & Autoatendimento",
+  "short_name": "PeopleHub",
+  "description": "Plataforma Omnichannel & Sistema Completo de Gestão de Recursos Humanos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#0f766e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Bater Ponto",
+      "url": "/autoatendimento?tab=ponto",
+      "description": "Registrar marcação de ponto digital com GPS"
+    },
+    {
+      "name": "Minhas Férias",
+      "url": "/autoatendimento?tab=ferias",
+      "description": "Consultar saldo e solicitar férias CLT"
+    },
+    {
+      "name": "Holerites & Dossiê",
+      "url": "/autoatendimento?tab=dossie",
+      "description": "Visualizar comprovantes e extratos"
+    }
+  ]
+}
